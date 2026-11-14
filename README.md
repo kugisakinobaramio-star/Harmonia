@@ -26,9 +26,37 @@ npm run build
 
 ## Production deployment
 
-Harmonia is a **full-stack Node application**, not a static-only website. The Express server provides the `/api/music/*` endpoints used for discovery, stream resolution, artwork, lyrics and playback. Build the frontend with `npm run build`, then run `npm start` on a Node host that can keep the Express process running.
+Harmonia is a **full-stack Node application**, not a static-only website. The Express server provides the `/api/music/*` endpoints used for discovery, stream resolution, artwork, lyrics and playback. The frontend and API should be deployed together behind the same origin.
 
-GitHub Pages alone cannot run `server.ts` or provide these API routes. To use a static host, first deploy the backend separately and configure a same-origin reverse proxy for `/api/*`; do not expose private API credentials in browser code.
+### Deploy to Google Cloud Run
+
+The repository includes `.github/workflows/deploy-cloud-run.yml`. It uses Google Cloud Buildpacks to build the Node.js app from source and deploy the Express service to Cloud Run. The Node.js buildpack runs the `build` script when present and starts the app using `npm start`.
+
+Before enabling the workflow, configure these GitHub repository variables:
+
+- `GCP_CLOUD_RUN_DEPLOY_ENABLED`: set to `true` only after the remaining configuration is complete
+- `GCP_PROJECT_ID`: Google Cloud project ID
+- `GCP_REGION`: Cloud Run region, for example `asia-south1`
+- `GCP_CLOUD_RUN_SERVICE`: optional service name; defaults to `harmonia`
+
+Configure these GitHub repository secrets:
+
+- `GCP_WIF_PROVIDER`: full Workload Identity Federation provider resource name
+- `GCP_WIF_SERVICE_ACCOUNT`: Google service account email permitted to deploy
+
+Use Workload Identity Federation rather than storing a long-lived service-account JSON key in GitHub. The deployer identity needs the permissions required to deploy Cloud Run and act as the Cloud Run service identity. The Cloud Build build identity also needs the Cloud Run Builder role to build and deploy from source. Enable the Cloud Run, Cloud Build and Artifact Registry APIs in the Google Cloud project.
+
+The workflow runs on pushes to `main` and can also be started manually. It is deliberately gated: until `GCP_CLOUD_RUN_DEPLOY_ENABLED=true`, the deploy job is skipped. Once configured, it deploys a public service because Harmonia is intended to be a public music web app. Review the service's access policy before enabling deployment.
+
+GitHub Pages cannot run `server.ts` or provide the Express API routes. The old Pages workflow has been removed so it cannot publish the repository source as though that were a working application deployment.
+
+For a manual deployment from a configured Google Cloud environment, run:
+
+```bash
+gcloud run deploy harmonia --source . --region REGION --project PROJECT_ID --allow-unauthenticated
+```
+
+Cloud Run supplies the `PORT` environment variable; the Express server listens on it and serves the production Vite build from `dist`.
 
 ## Listener privacy
 
