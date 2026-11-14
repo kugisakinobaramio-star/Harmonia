@@ -34,7 +34,7 @@ GitHub Pages alone cannot run `server.ts` or provide these API routes. To use a 
 
 Likes, playlists, preferences and listening history are stored in the browser's localStorage. They are not written to a shared server-side JSON file. Clearing browser site data will clear this local library. Multi-device sync should only be added alongside real user authentication and per-account storage.
 
-The server-side media proxy accepts public HTTPS URLs only, checks DNS-resolved addresses, and revalidates redirects to reduce server-side request forgery risk. Keep the server updated and review proxy host requirements when adding a new provider.
+The server-side media proxy accepts public HTTPS URLs only, checks DNS-resolved addresses against conservative IPv4/IPv6 special-use ranges, and revalidates redirects to reduce server-side request forgery risk. Image responses are restricted to common raster formats and capped at 8 MB; the in-memory image cache is capped at 32 MB. Media proxy endpoints are rate-limited per client IP. Keep the server updated and review proxy host requirements when adding a new provider.
 
 ## Environment variables
 
