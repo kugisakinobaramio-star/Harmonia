@@ -154,7 +154,7 @@ function isPublicAddress(address: string): boolean {
   if (isIP(address) === 6) {
     const normalized = address.toLowerCase();
     // Permit only globally-routable 2000::/3 IPv6 addresses; reject mapped/private/local ranges.
-    return /^2[0-9a-f]{3}:/.test(normalized) && !normalized.startsWith('2001:db8:');
+    return /^[23][0-9a-f]{3}:/.test(normalized) && !normalized.startsWith('2001:db8:');
   }
   return false;
 }
