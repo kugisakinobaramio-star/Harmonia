@@ -101,6 +101,28 @@ async function fetchWithTimeout(url: string, timeoutMs = 5000, headers: Record<s
   }
 }
 
+async function readResponseBodyWithLimit(response: Response, maxBytes: number): Promise<Buffer> {
+  if (!response.body) throw new Error('Remote response has no body');
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      totalBytes += value.byteLength;
+      if (totalBytes > maxBytes) {
+        await reader.cancel('Response exceeded size limit').catch(() => {});
+        throw new Error('Remote response exceeded size limit');
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  return Buffer.concat(chunks, totalBytes);
+}
+
 // Simple LRU image buffer cache so album covers load instantaneously and never break
 const imageCache = new Map<string, { buf: Buffer; contentType: string }>();
 const MAX_IMAGE_CACHE_ENTRIES = 200;
@@ -702,9 +724,7 @@ async function startServer() {
         if (!allowedImageTypes.has(ct)) return false;
         const declaredLength = Number(upstream.headers.get('content-length') || 0);
         if (declaredLength > MAX_REMOTE_IMAGE_BYTES) return false;
-        const arr = await upstream.arrayBuffer();
-        if (arr.byteLength > MAX_REMOTE_IMAGE_BYTES) return false;
-        const buf = Buffer.from(arr);
+        const buf = await readResponseBodyWithLimit(upstream, MAX_REMOTE_IMAGE_BYTES);
 
         cacheImage(targetUrl, buf, ct);
 
