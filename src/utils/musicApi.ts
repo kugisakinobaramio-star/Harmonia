@@ -577,42 +577,22 @@ export interface BackendUserState {
   playCounts: Record<string, number>;
 }
 
+// Listener preferences and playlists remain in localStorage until authenticated
+// multi-user storage is implemented. Never send personal state to a shared JSON file.
 export async function fetchBackendUserState(): Promise<BackendUserState | null> {
-  try {
-    const res = await fetch('/api/user/state');
-    if (res.ok) {
-      const json = (await res.json()) as { ok?: boolean; state?: BackendUserState };
-      if (json.ok && json.state) return json.state;
-    }
-  } catch {
-    // Fallback
-  }
   return null;
 }
 
-export async function sendUserEvent(payload: {
+export async function sendUserEvent(_payload: {
   type: 'play' | 'like' | 'unlike' | 'region' | 'languages';
   track?: Track;
   region?: MusicRegion;
   languages?: MusicLanguage[];
 }): Promise<BackendUserState | null> {
-  try {
-    const res = await fetch('/api/user/event', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    if (res.ok) {
-      const json = (await res.json()) as { ok?: boolean; state?: BackendUserState };
-      if (json.ok && json.state) return json.state;
-    }
-  } catch {
-    // Offline fallback
-  }
   return null;
 }
 
-export async function sendPersonalisation(payload: {
+export async function sendPersonalisation(_payload: {
   resetTaste?: boolean;
   displayName?: string;
   region?: MusicRegion;
@@ -621,32 +601,11 @@ export async function sendPersonalisation(payload: {
   preferredMoods?: string[];
   prioritizeLyrics?: boolean;
 }): Promise<BackendUserState | null> {
-  try {
-    const res = await fetch('/api/user/personalise', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    if (res.ok) {
-      const json = (await res.json()) as { ok?: boolean; state?: BackendUserState };
-      if (json.ok && json.state) return json.state;
-    }
-  } catch {
-    // Offline fallback
-  }
   return null;
 }
 
-export async function syncBackendPlaylists(playlists: CuratedPlaylist[]): Promise<void> {
-  try {
-    await fetch('/api/user/playlists', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ playlists }),
-    });
-  } catch {
-    // Ignore
-  }
+export async function syncBackendPlaylists(_playlists: CuratedPlaylist[]): Promise<void> {
+  // Local snapshot persistence in App.tsx is the single source of truth.
 }
 
 export function buildTasteProfile(state: {
