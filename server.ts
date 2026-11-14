@@ -4,6 +4,7 @@ import path from 'node:path';
 import { Readable } from 'node:stream';
 import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
+import { isPublicAddress } from './src/utils/networkSecurity.ts';
 import { fileURLToPath } from 'node:url';
 import {
   isRemixOrKnockoff,
@@ -41,29 +42,6 @@ interface StoredTrack {
 
 // Only public HTTPS destinations may be fetched through user-controlled proxy URLs.
 // Every redirect is revalidated to prevent redirect-based SSRF.
-function isPublicAddress(address: string): boolean {
-  if (isIP(address) === 4) {
-    const p = address.split('.').map(Number);
-    const [a, b] = p;
-    if (a === 0 || a === 10 || a === 127 || a >= 224) return false;
-    if (a === 100 && b >= 64 && b <= 127) return false;
-    if (a === 169 && b === 254) return false;
-    if (a === 172 && b >= 16 && b <= 31) return false;
-    if (a === 192 && b === 168) return false;
-    if (a === 192 && b === 0) return false;
-    if (a === 192 && b === 0 && p[2] === 2) return false;
-    if (a === 198 && (b === 18 || b === 19 || b === 51)) return false;
-    if (a === 203 && b === 0 && p[2] === 113) return false;
-    return true;
-  }
-  if (isIP(address) === 6) {
-    const normalized = address.toLowerCase();
-    // Permit only globally-routable 2000::/3 IPv6 addresses; reject mapped/private/local ranges.
-    return /^[23][0-9a-f]{3}:/.test(normalized) && !normalized.startsWith('2001:db8:');
-  }
-  return false;
-}
-
 async function validatePublicHttpsUrl(input: string): Promise<URL> {
   const url = new URL(input);
   if (url.protocol !== 'https:' || url.username || url.password) {
@@ -124,8 +102,55 @@ async function fetchWithTimeout(url: string, timeoutMs = 5000, headers: Record<s
   }
 }
 
+async function readResponseBodyWithLimit(response: Response, maxBytes: number): Promise<Buffer> {
+  if (!response.body) throw new Error('Remote response has no body');
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      totalBytes += value.byteLength;
+      if (totalBytes > maxBytes) {
+        await reader.cancel('Response exceeded size limit').catch(() => {});
+        throw new Error('Remote response exceeded size limit');
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  return Buffer.concat(chunks, totalBytes);
+}
+
 // Simple LRU image buffer cache so album covers load instantaneously and never break
 const imageCache = new Map<string, { buf: Buffer; contentType: string }>();
+const MAX_IMAGE_CACHE_ENTRIES = 200;
+const MAX_IMAGE_CACHE_BYTES = 32 * 1024 * 1024;
+const MAX_REMOTE_IMAGE_BYTES = 8 * 1024 * 1024;
+let imageCacheBytes = 0;
+
+function cacheImage(key: string, buf: Buffer, contentType: string): void {
+  const previous = imageCache.get(key);
+  if (previous) {
+    imageCacheBytes -= previous.buf.length;
+    imageCache.delete(key);
+  }
+  while (
+    imageCache.size >= MAX_IMAGE_CACHE_ENTRIES ||
+    imageCacheBytes + buf.length > MAX_IMAGE_CACHE_BYTES
+  ) {
+    const oldestKey = imageCache.keys().next().value;
+    if (!oldestKey) break;
+    const oldest = imageCache.get(oldestKey);
+    if (oldest) imageCacheBytes -= oldest.buf.length;
+    imageCache.delete(oldestKey);
+  }
+  if (buf.length > MAX_IMAGE_CACHE_BYTES) return;
+  imageCache.set(key, { buf, contentType });
+  imageCacheBytes += buf.length;
+}
 const FALLBACK_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400" viewBox="0 0 400 400">
   <rect width="400" height="400" fill="#141416"/>
   <circle cx="200" cy="200" r="145" fill="#1c1c20" stroke="#2c2c32" stroke-width="2"/>
@@ -638,7 +663,39 @@ async function fetchSpotifyEmbedEntity(
 
 async function startServer() {
   const app = express();
+  app.disable('x-powered-by');
+  app.use((_req, res, next) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    next();
+  });
   app.use(express.json({ limit: '1mb' }));
+
+  // Bound expensive user-controlled media proxy requests per client IP.
+  // Keep the map bounded so spoofed clients cannot grow it indefinitely.
+  const proxyRateLimits = new Map<string, { count: number; resetAt: number }>();
+  app.use(['/api/music/image', '/api/music/audio', '/api/music/download'], (req, res, next) => {
+    const now = Date.now();
+    const key = req.ip || req.socket.remoteAddress || 'unknown';
+    let bucket = proxyRateLimits.get(key);
+    if (!bucket || bucket.resetAt <= now) {
+      bucket = { count: 0, resetAt: now + 60_000 };
+      proxyRateLimits.set(key, bucket);
+    }
+    bucket.count += 1;
+    if (bucket.count > 90) {
+      res.setHeader('Retry-After', String(Math.max(1, Math.ceil((bucket.resetAt - now) / 1000))));
+      res.status(429).json({ ok: false, error: 'Too many media requests. Please retry shortly.' });
+      return;
+    }
+    if (proxyRateLimits.size > 10_000) {
+      for (const [client, limit] of proxyRateLimits) {
+        if (limit.resetAt <= now) proxyRateLimits.delete(client);
+        if (proxyRateLimits.size <= 8_000) break;
+      }
+    }
+    next();
+  });
 
   app.get('/api/music/health', (_req, res) => {
     res.json({ ok: true, service: 'harmonia-backend' });
@@ -663,16 +720,14 @@ async function startServer() {
           Accept: 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8',
         });
         if (!upstream.ok) return false;
-        const ct = upstream.headers.get('content-type') || 'image/jpeg';
-        if (!ct.startsWith('image/')) return false;
-        const arr = await upstream.arrayBuffer();
-        const buf = Buffer.from(arr);
+        const ct = (upstream.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
+        const allowedImageTypes = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/avif', 'image/gif']);
+        if (!allowedImageTypes.has(ct)) return false;
+        const declaredLength = Number(upstream.headers.get('content-length') || 0);
+        if (declaredLength > MAX_REMOTE_IMAGE_BYTES) return false;
+        const buf = await readResponseBodyWithLimit(upstream, MAX_REMOTE_IMAGE_BYTES);
 
-        if (imageCache.size >= 200) {
-          const firstKey = imageCache.keys().next().value;
-          if (firstKey) imageCache.delete(firstKey);
-        }
-        imageCache.set(targetUrl, { buf, contentType: ct });
+        cacheImage(targetUrl, buf, ct);
 
         res.setHeader('Content-Type', ct);
         res.setHeader('Cache-Control', 'public, max-age=86400');
