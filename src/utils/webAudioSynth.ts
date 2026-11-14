@@ -47,10 +47,10 @@ class HarmoniaAudioEngine {
       this.analyser.smoothingTimeConstant = 0.78;
 
       this.masterGain = this.ctx.createGain();
-      this.masterGain.gain.value = this.volume;
+      this.masterGain.gain.value = 1;
 
       this.synthBus = this.ctx.createGain();
-      this.synthBus.gain.value = 0.24;
+      this.synthBus.gain.value = 0.24 * this.volume;
 
       this.synthBus.connect(this.lowShelf);
       this.lowShelf.connect(this.midPeak);
@@ -82,8 +82,8 @@ class HarmoniaAudioEngine {
 
   public setVolume(vol01: number): void {
     this.volume = Math.max(0, Math.min(1, vol01));
-    if (this.masterGain && this.ctx) {
-      this.masterGain.gain.setTargetAtTime(this.volume, this.ctx.currentTime, 0.03);
+    if (this.synthBus && this.ctx) {
+      this.synthBus.gain.setTargetAtTime(0.24 * this.volume, this.ctx.currentTime, 0.03);
     }
   }
 
