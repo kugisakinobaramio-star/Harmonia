@@ -700,10 +700,12 @@ export default function App() {
   }, [currentTrack?.id, currentIndex, quality]);
 
   useEffect(() => {
-    if (audioRef.current) {
-      audioRef.current.volume = volume / 100;
-      audioRef.current.muted = volume === 0;
-    }
+    [audioRef.current, audioRef2.current].forEach((audio) => {
+      if (audio) {
+        audio.volume = volume / 100;
+        audio.muted = volume === 0;
+      }
+    });
     if (ytPlayerRef.current) {
       try {
         ytPlayerRef.current.setVolume?.(volume);
@@ -943,50 +945,62 @@ export default function App() {
   );
   advanceTrackRef.current = advanceTrack;
 
-  // Sync HTMLAudioElement timeupdate / ended / error cascade
+  // Attach both crossfade audio slots to the shared EQ/analyser graph.
   useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
+    if (audioRef.current) audioEngine.attachMediaElement(audioRef.current);
+    if (audioRef2.current) audioEngine.attachMediaElement(audioRef2.current);
+  }, []);
 
-    const onTime = () => {
-      if (activeEngineRef.current !== 'audio') return;
-      if (audio.src === SILENT_WAV_DATA_URI) return;
-      if (Number.isFinite(audio.currentTime)) {
-        setCurrentTime(audio.currentTime);
-        if (Number.isFinite(audio.duration) && audio.duration > 0) {
-          setDuration(audio.duration);
+  // Listen to both crossfade slots, but only the currently active slot may
+  // update playback state or advance the queue.
+  useEffect(() => {
+    const audios = [audioRef.current, audioRef2.current].filter(
+      (audio): audio is HTMLAudioElement => Boolean(audio)
+    );
+    if (!audios.length) return;
+
+    const isActiveAudio = (audio: HTMLAudioElement) =>
+      activeAudioSlotRef.current === (audio === audioRef.current ? 1 : 2);
+
+    const cleanups = audios.map((audio) => {
+      const onTime = () => {
+        if (activeEngineRef.current !== 'audio' || !isActiveAudio(audio)) return;
+        if (audio.src === SILENT_WAV_DATA_URI) return;
+        if (Number.isFinite(audio.currentTime)) {
+          setCurrentTime(audio.currentTime);
+          if (Number.isFinite(audio.duration) && audio.duration > 0) setDuration(audio.duration);
         }
-      }
-    };
-    const onEnded = () => {
-      if (activeEngineRef.current !== 'audio') return;
-      if (audio.src === SILENT_WAV_DATA_URI) return;
-      advanceTrack(1, true);
-    };
-    const onError = () => {
-      if (activeEngineRef.current !== 'audio') return;
-      if (!isPlayingRef.current || audio.src === SILENT_WAV_DATA_URI) return;
-      const nextIdx = candidateIdxRef.current + 1;
-      loadAndPlayCandidate(nextIdx, playbackSeqRef.current, () => {
-        setIsPlaying(false);
-        showToast('Stream unavailable — skipping to next track');
+      };
+      const onEnded = () => {
+        if (activeEngineRef.current !== 'audio' || !isActiveAudio(audio)) return;
+        if (audio.src === SILENT_WAV_DATA_URI) return;
         advanceTrack(1, true);
-      });
-    };
-
-    audio.addEventListener('timeupdate', onTime);
-    audio.addEventListener('ended', onEnded);
-    audio.addEventListener('error', onError);
-    return () => {
-      audio.removeEventListener('timeupdate', onTime);
-      audio.removeEventListener('ended', onEnded);
-      audio.removeEventListener('error', onError);
-    };
+      };
+      const onError = () => {
+        if (activeEngineRef.current !== 'audio' || !isActiveAudio(audio)) return;
+        if (!isPlayingRef.current || audio.src === SILENT_WAV_DATA_URI) return;
+        const nextIdx = candidateIdxRef.current + 1;
+        loadAndPlayCandidate(nextIdx, playbackSeqRef.current, () => {
+          setIsPlaying(false);
+          showToast('Stream unavailable — skipping to next track');
+          advanceTrack(1, true);
+        });
+      };
+      audio.addEventListener('timeupdate', onTime);
+      audio.addEventListener('ended', onEnded);
+      audio.addEventListener('error', onError);
+      return () => {
+        audio.removeEventListener('timeupdate', onTime);
+        audio.removeEventListener('ended', onEnded);
+        audio.removeEventListener('error', onError);
+      };
+    });
+    return () => cleanups.forEach((cleanup) => cleanup());
   }, [advanceTrack, loadAndPlayCandidate, showToast]);
 
   const handleTogglePlay = useCallback(() => {
     if (!currentTrack) return;
-    const audio = audioRef.current;
+    const audio = activeAudioSlotRef.current === 1 ? audioRef.current : audioRef2.current;
     if (isPlaying) {
       setIsPlaying(false);
       if (activeEngineRef.current === 'yt') {
