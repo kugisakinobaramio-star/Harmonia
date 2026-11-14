@@ -13,7 +13,7 @@ class HarmoniaAudioEngine {
   private highShelf: BiquadFilterNode | null = null;
   private masterGain: GainNode | null = null;
   private synthBus: GainNode | null = null;
-  private mediaSourceConnected = false;
+  private mediaSources = new WeakMap<HTMLAudioElement, MediaElementAudioSourceNode>();
   private synthTimer: number | null = null;
   private synthStep = 0;
   private volume = 0.85;
@@ -47,10 +47,10 @@ class HarmoniaAudioEngine {
       this.analyser.smoothingTimeConstant = 0.78;
 
       this.masterGain = this.ctx.createGain();
-      this.masterGain.gain.value = this.volume;
+      this.masterGain.gain.value = 1;
 
       this.synthBus = this.ctx.createGain();
-      this.synthBus.gain.value = 0.24;
+      this.synthBus.gain.value = 0.24 * this.volume;
 
       this.synthBus.connect(this.lowShelf);
       this.lowShelf.connect(this.midPeak);
@@ -70,20 +70,20 @@ class HarmoniaAudioEngine {
 
   public attachMediaElement(audioEl: HTMLAudioElement): void {
     const ctx = this.ensureContext();
-    if (!ctx || !this.lowShelf || this.mediaSourceConnected) return;
+    if (!ctx || !this.lowShelf || this.mediaSources.has(audioEl)) return;
     try {
       const source = ctx.createMediaElementSource(audioEl);
       source.connect(this.lowShelf);
-      this.mediaSourceConnected = true;
+      this.mediaSources.set(audioEl, source);
     } catch {
-      // Already attached
+      // The browser allows one MediaElementAudioSourceNode per media element.
     }
   }
 
   public setVolume(vol01: number): void {
     this.volume = Math.max(0, Math.min(1, vol01));
-    if (this.masterGain && this.ctx) {
-      this.masterGain.gain.setTargetAtTime(this.volume, this.ctx.currentTime, 0.03);
+    if (this.synthBus && this.ctx) {
+      this.synthBus.gain.setTargetAtTime(0.24 * this.volume, this.ctx.currentTime, 0.03);
     }
   }
 
