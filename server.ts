@@ -3,6 +3,8 @@ import express from 'express';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { Readable } from 'node:stream';
+import { lookup } from 'node:dns/promises';
+import { isIP } from 'node:net';
 import { fileURLToPath } from 'node:url';
 import {
   isRemixOrKnockoff,
@@ -128,6 +130,75 @@ async function saveDb(next: UserDatabaseState): Promise<void> {
     await fs.writeFile(DB_FILE, JSON.stringify(next, null, 2), 'utf8');
   } catch {
     // Non-fatal in read-only environments
+  }
+}
+
+
+// Only public HTTPS destinations may be fetched through user-controlled proxy URLs.
+// Every redirect is revalidated to prevent redirect-based SSRF.
+function isPublicAddress(address: string): boolean {
+  if (isIP(address) === 4) {
+    const p = address.split('.').map(Number);
+    const [a, b] = p;
+    if (a === 0 || a === 10 || a === 127 || a >= 224) return false;
+    if (a === 100 && b >= 64 && b <= 127) return false;
+    if (a === 169 && b === 254) return false;
+    if (a === 172 && b >= 16 && b <= 31) return false;
+    if (a === 192 && b === 168) return false;
+    if (a === 192 && b === 0) return false;
+    if (a === 192 && b === 0 && p[2] === 2) return false;
+    if (a === 198 && (b === 18 || b === 19 || b === 51)) return false;
+    if (a === 203 && b === 0 && p[2] === 113) return false;
+    return true;
+  }
+  if (isIP(address) === 6) {
+    const normalized = address.toLowerCase();
+    // Permit only globally-routable 2000::/3 IPv6 addresses; reject mapped/private/local ranges.
+    return /^2[0-9a-f]{3}:/.test(normalized) && !normalized.startsWith('2001:db8:');
+  }
+  return false;
+}
+
+async function validatePublicHttpsUrl(input: string): Promise<URL> {
+  const url = new URL(input);
+  if (url.protocol !== 'https:' || url.username || url.password) {
+    throw new Error('Only public HTTPS URLs are allowed');
+  }
+  const host = url.hostname.replace(/^\[|\]$/g, '').toLowerCase();
+  if (!host || host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local')) {
+    throw new Error('Local destinations are not allowed');
+  }
+  const addresses = isIP(host) ? [{ address: host }] : await lookup(host, { all: true, verbatim: true });
+  if (!addresses.length || addresses.some((entry) => !isPublicAddress(entry.address))) {
+    throw new Error('Non-public network destinations are not allowed');
+  }
+  return url;
+}
+
+async function fetchPublicHttpsUrl(
+  input: string,
+  timeoutMs = 8000,
+  headers: Record<string, string> = {}
+): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    let target = input;
+    for (let redirects = 0; redirects <= 4; redirects += 1) {
+      const url = await validatePublicHttpsUrl(target);
+      const response = await fetch(url, {
+        signal: controller.signal,
+        headers,
+        redirect: 'manual',
+      });
+      if (response.status < 300 || response.status >= 400) return response;
+      const location = response.headers.get('location');
+      if (!location) throw new Error('Redirect without a location');
+      target = new URL(location, url).toString();
+    }
+    throw new Error('Too many redirects');
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -683,7 +754,7 @@ async function startServer() {
         return true;
       }
       try {
-        const upstream = await fetchWithTimeout(targetUrl, 2500, {
+        const upstream = await fetchPublicHttpsUrl(targetUrl, 2500, {
           Accept: 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8',
         });
         if (!upstream.ok) return false;
@@ -731,7 +802,7 @@ async function startServer() {
     try {
       const headers: Record<string, string> = {};
       if (req.headers.range) headers.Range = String(req.headers.range);
-      const upstream = await fetchWithTimeout(rawUrl, 12000, headers);
+      const upstream = await fetchPublicHttpsUrl(rawUrl, 12000, headers);
       res.status(upstream.status);
       const ct = upstream.headers.get('content-type');
       const cl = upstream.headers.get('content-length');
@@ -771,7 +842,7 @@ async function startServer() {
       return;
     }
     try {
-      const upstream = await fetchWithTimeout(rawUrl, 15000);
+      const upstream = await fetchPublicHttpsUrl(rawUrl, 15000);
       if (!upstream.ok || !upstream.body) {
         res.status(502).send('Failed to fetch stream for download');
         return;
@@ -1716,126 +1787,19 @@ async function startServer() {
     }
   });
 
-  // Full User State, Preferences, Location & Recommendations Backend
-  app.get('/api/user/state', async (_req, res) => {
-    const db = await loadDb();
-    res.json({ ok: true, state: db });
+  // User data is intentionally kept in browser localStorage. A shared server-side
+  // JSON database would expose every listener's likes, playlists and preferences.
+  app.get('/api/user/state', (_req, res) => {
+    res.status(410).json({ ok: false, error: 'User data is stored locally in this browser.' });
   });
-
-  app.post('/api/user/event', async (req, res) => {
-    const db = await loadDb();
-    const body = (req.body || {}) as {
-      type?: 'play' | 'like' | 'unlike' | 'region' | 'languages';
-      track?: StoredTrack;
-      region?: UserDatabaseState['region'];
-      languages?: string[];
-    };
-
-    if (body.type === 'region' && body.region) {
-      db.region = body.region;
-    } else if (body.type === 'languages' && Array.isArray(body.languages)) {
-      db.preferredLanguages = body.languages.slice(0, 5);
-    } else if (body.type === 'play' && body.track) {
-      const t = body.track;
-      db.playCounts[t.id] = (db.playCounts[t.id] || 0) + 1;
-      db.recentlyPlayed = [t, ...db.recentlyPlayed.filter((x) => x.id !== t.id)].slice(0, 20);
-      const primaryArtist = t.artist.split(',')[0]?.trim();
-      if (primaryArtist) {
-        db.artistAffinity[primaryArtist] = (db.artistAffinity[primaryArtist] || 0) + 1;
-      }
-      if (t.language && t.language !== 'Other') {
-        db.languageAffinity[t.language] = (db.languageAffinity[t.language] || 0) + 1;
-      }
-      if (t.genre) {
-        db.genreAffinity[t.genre] = (db.genreAffinity[t.genre] || 0) + 1;
-      }
-    } else if (body.type === 'like' && body.track) {
-      const t = body.track;
-      db.likedMap[t.id] = t;
-      const primaryArtist = t.artist.split(',')[0]?.trim();
-      if (primaryArtist) {
-        db.artistAffinity[primaryArtist] = (db.artistAffinity[primaryArtist] || 0) + 2;
-      }
-      if (t.language && t.language !== 'Other') {
-        db.languageAffinity[t.language] = (db.languageAffinity[t.language] || 0) + 2;
-      }
-    } else if (body.type === 'unlike' && body.track) {
-      delete db.likedMap[body.track.id];
-    }
-
-    await saveDb(db);
-    res.json({ ok: true, state: db });
+  app.post('/api/user/event', (_req, res) => {
+    res.status(410).json({ ok: false, error: 'User data is stored locally in this browser.' });
   });
-
-  app.post('/api/user/playlists', async (req, res) => {
-    const db = await loadDb();
-    const body = (req.body || {}) as { playlists?: StoredPlaylist[] };
-    if (Array.isArray(body.playlists)) {
-      db.playlists = body.playlists;
-      await saveDb(db);
-    }
-    res.json({ ok: true, playlists: db.playlists });
+  app.post('/api/user/playlists', (_req, res) => {
+    res.status(410).json({ ok: false, error: 'User data is stored locally in this browser.' });
   });
-
-  app.post('/api/user/personalise', async (req, res) => {
-    const db = await loadDb();
-    const body = (req.body || {}) as {
-      resetTaste?: boolean;
-      displayName?: string;
-      region?: UserDatabaseState['region'];
-      preferredLanguages?: string[];
-      favoriteArtists?: string[];
-      preferredMoods?: string[];
-      prioritizeLyrics?: boolean;
-    };
-
-    if (body.resetTaste) {
-      db.displayName = DEFAULT_DB.displayName;
-      db.region = DEFAULT_DB.region;
-      db.preferredLanguages = [...DEFAULT_DB.preferredLanguages];
-      db.favoriteArtists = [...DEFAULT_DB.favoriteArtists];
-      db.preferredMoods = [...DEFAULT_DB.preferredMoods];
-      db.prioritizeLyrics = true;
-      db.artistAffinity = { ...DEFAULT_DB.artistAffinity };
-      db.languageAffinity = { ...DEFAULT_DB.languageAffinity };
-      db.genreAffinity = {};
-      db.playCounts = {};
-      await saveDb(db);
-      res.json({ ok: true, state: db });
-      return;
-    }
-
-    if (typeof body.displayName === 'string') {
-      const cleaned = body.displayName.trim().slice(0, 32);
-      if (cleaned) db.displayName = cleaned;
-    }
-    if (body.region) {
-      db.region = body.region;
-    }
-    if (Array.isArray(body.preferredLanguages) && body.preferredLanguages.length > 0) {
-      db.preferredLanguages = body.preferredLanguages.slice(0, 5);
-      for (const lang of db.preferredLanguages) {
-        db.languageAffinity[lang] = Math.max(db.languageAffinity[lang] || 0, 5);
-      }
-    }
-    if (Array.isArray(body.favoriteArtists)) {
-      db.favoriteArtists = body.favoriteArtists.slice(0, 12);
-      for (const art of db.favoriteArtists) {
-        db.artistAffinity[art] = Math.max(db.artistAffinity[art] || 0, 5);
-      }
-    }
-    if (Array.isArray(body.preferredMoods)) {
-      db.preferredMoods = body.preferredMoods.slice(0, 8);
-      for (const mood of db.preferredMoods) {
-        db.genreAffinity[mood] = Math.max(db.genreAffinity[mood] || 0, 3);
-      }
-    }
-    if (typeof body.prioritizeLyrics === 'boolean') {
-      db.prioritizeLyrics = body.prioritizeLyrics;
-    }
-
-    await saveDb(db);
-    res.json({ ok: true, state: db });
+  app.post('/api/user/personalise', (_req, res) => {
+    res.status(410).json({ ok: false, error: 'User data is stored locally in this browser.' });
   });
 
   if (process.env.NODE_ENV !== 'production') {
