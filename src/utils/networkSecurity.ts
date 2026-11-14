@@ -38,7 +38,7 @@ export function isPublicAddress(address: string): boolean {
     return (
       /^[23][0-9a-f]{3}:/.test(normalized) &&
       !normalized.startsWith('2001:db8:') &&
-      !normalized.startsWith('2001:0000:')
+      !/^2001:0{1,4}:/i.test(normalized)
     );
   }
 
