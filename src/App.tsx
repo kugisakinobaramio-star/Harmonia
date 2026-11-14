@@ -109,8 +109,8 @@ function buildStreamCandidates(
     if (raw.startsWith('/') || raw.startsWith('data:') || raw.startsWith('blob:')) {
       pushUnique(raw);
     } else if (/^https?:\/\//i.test(raw)) {
-      if (raw.startsWith('https://')) pushUnique(raw);
       pushUnique(`/api/music/audio?url=${encodeURIComponent(raw)}`);
+      if (raw.startsWith('https://')) pushUnique(raw);
     }
   }
   return out;
@@ -540,6 +540,7 @@ export default function App() {
       const incoming = activeAudioSlotRef.current === 1 ? a2 : a1;
       activeAudioSlotRef.current = activeAudioSlotRef.current === 1 ? 2 : 1;
 
+      incoming.crossOrigin = 'anonymous';
       incoming.src = url;
       incoming.volume = 0;
       incoming.muted = volume === 0;
@@ -726,6 +727,7 @@ export default function App() {
     if (sleepMinutesLeft <= 0) {
       setIsPlaying(false);
       audioRef.current?.pause();
+      audioRef2.current?.pause();
       try {
         ytPlayerRef.current?.pauseVideo?.();
       } catch {}
@@ -931,6 +933,7 @@ export default function App() {
       if (nextIdx === null) {
         setIsPlaying(false);
         audioRef.current?.pause();
+        audioRef2.current?.pause();
         try {
           ytPlayerRef.current?.pauseVideo?.();
         } catch {}
