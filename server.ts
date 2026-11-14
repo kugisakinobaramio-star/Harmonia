@@ -1,6 +1,5 @@
 import 'dotenv/config';
 import express from 'express';
-import fs from 'node:fs/promises';
 import path from 'node:path';
 import { Readable } from 'node:stream';
 import { lookup } from 'node:dns/promises';
@@ -16,8 +15,6 @@ const __dirname = path.dirname(__filename);
 
 const PORT = Number(process.env.PORT || 3000);
 const SAAVN_BASE = 'https://saavn.sumit.co';
-const DATA_DIR = path.join(__dirname, '.data');
-const DB_FILE = path.join(DATA_DIR, 'harmonia-db.json');
 
 interface StoredLyricLine {
   time: number;
@@ -41,98 +38,6 @@ interface StoredTrack {
   streamUrls?: Record<string, string>;
   lyrics?: StoredLyricLine[];
 }
-
-interface StoredPlaylist {
-  id: string;
-  name: string;
-  description: string;
-  image: string;
-  tracks: StoredTrack[];
-  isUserCreated?: boolean;
-}
-
-interface UserDatabaseState {
-  displayName: string;
-  region: 'IN' | 'JP' | 'US' | 'GB' | 'GLOBAL';
-  preferredLanguages: string[];
-  favoriteArtists: string[];
-  preferredMoods: string[];
-  prioritizeLyrics: boolean;
-  likedMap: Record<string, StoredTrack>;
-  playlists: StoredPlaylist[];
-  recentlyPlayed: StoredTrack[];
-  artistAffinity: Record<string, number>;
-  languageAffinity: Record<string, number>;
-  genreAffinity: Record<string, number>;
-  playCounts: Record<string, number>;
-}
-
-const DEFAULT_DB: UserDatabaseState = {
-  displayName: 'Listener',
-  region: 'IN',
-  preferredLanguages: ['Hindi', 'English', 'J-Pop'],
-  favoriteArtists: ['Arijit Singh', 'YOASOBI', 'The Weeknd'],
-  preferredMoods: ['Late Night Dark', 'Bollywood Romantic', 'Anime & J-Pop'],
-  prioritizeLyrics: true,
-  likedMap: {},
-  playlists: [],
-  recentlyPlayed: [],
-  artistAffinity: {
-    'Arijit Singh': 3,
-    YOASOBI: 3,
-    'The Weeknd': 2,
-  },
-  languageAffinity: {
-    Hindi: 4,
-    'J-Pop': 4,
-    English: 3,
-  },
-  genreAffinity: {},
-  playCounts: {},
-};
-
-let dbCache: UserDatabaseState | null = null;
-
-async function loadDb(): Promise<UserDatabaseState> {
-  if (dbCache) return dbCache;
-  try {
-    const raw = await fs.readFile(DB_FILE, 'utf8');
-    const parsed = JSON.parse(raw) as Partial<UserDatabaseState>;
-    dbCache = {
-      ...DEFAULT_DB,
-      ...parsed,
-      displayName: parsed.displayName || DEFAULT_DB.displayName,
-      preferredLanguages: Array.isArray(parsed.preferredLanguages) && parsed.preferredLanguages.length
-        ? parsed.preferredLanguages
-        : DEFAULT_DB.preferredLanguages,
-      favoriteArtists: Array.isArray(parsed.favoriteArtists)
-        ? parsed.favoriteArtists
-        : DEFAULT_DB.favoriteArtists,
-      preferredMoods: Array.isArray(parsed.preferredMoods)
-        ? parsed.preferredMoods
-        : DEFAULT_DB.preferredMoods,
-      prioritizeLyrics: typeof parsed.prioritizeLyrics === 'boolean'
-        ? parsed.prioritizeLyrics
-        : DEFAULT_DB.prioritizeLyrics,
-      artistAffinity: { ...DEFAULT_DB.artistAffinity, ...(parsed.artistAffinity || {}) },
-      languageAffinity: { ...DEFAULT_DB.languageAffinity, ...(parsed.languageAffinity || {}) },
-    };
-  } catch {
-    dbCache = structuredClone(DEFAULT_DB);
-  }
-  return dbCache;
-}
-
-async function saveDb(next: UserDatabaseState): Promise<void> {
-  dbCache = next;
-  try {
-    await fs.mkdir(DATA_DIR, { recursive: true });
-    await fs.writeFile(DB_FILE, JSON.stringify(next, null, 2), 'utf8');
-  } catch {
-    // Non-fatal in read-only environments
-  }
-}
-
 
 // Only public HTTPS destinations may be fetched through user-controlled proxy URLs.
 // Every redirect is revalidated to prevent redirect-based SSRF.
