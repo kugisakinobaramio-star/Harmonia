@@ -646,13 +646,15 @@ const resolvedTrackCache = new Map<
 >();
 
 export async function resolveTrackStreams(
-  track: Track
+  track: Track,
+  options: { forceRefresh?: boolean } = {}
 ): Promise<Track & { alternates?: string[] }> {
   const cached = resolvedTrackCache.get(track.id);
-  if (hasFullAudioStream(track)) {
+  if (!options.forceRefresh && hasFullAudioStream(track)) {
     return { ...track, alternates: cached?.alternates, youtubeId: cached?.youtubeId || track.youtubeId };
   }
   if (
+    !options.forceRefresh &&
     cached &&
     ((cached.streamUrls && Object.keys(cached.streamUrls).length > 0) ||
       cached.previewUrl ||

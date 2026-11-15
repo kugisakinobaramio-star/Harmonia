@@ -256,6 +256,7 @@ export default function App() {
   const activeAudioSlotRef = useRef<1 | 2>(1);
   const candidateUrlsRef = useRef<string[]>([]);
   const candidateIdxRef = useRef<number>(0);
+  const candidateFailureRef = useRef<() => void>(() => {});
   const usingSynthRef = useRef<boolean>(false);
   const synthTimeRef = useRef<number>(0);
   const playbackSeqRef = useRef<number>(0);
@@ -801,6 +802,7 @@ export default function App() {
       setDuration(track.duration || 200);
       setIsPlaying(true);
 
+      let didForceRefresh = false;
       const playNativeAudioCandidates = (urls: string[]) => {
         if (playSeq !== playbackSeqRef.current || !audio) return;
         activeEngineRef.current = 'audio';
@@ -815,12 +817,51 @@ export default function App() {
           return;
         }
         usingSynthRef.current = false;
-        loadAndPlayCandidate(0, playSeq, () => {
-          if (playSeq === playbackSeqRef.current) {
+        const onCandidatesExhausted = () => {
+          if (playSeq !== playbackSeqRef.current) return;
+          if (didForceRefresh) {
             setIsPlaying(false);
-            showToast('Click Play once more to start audio');
+            showToast('No playable audio source found for this track');
+            return;
           }
-        });
+          didForceRefresh = true;
+          const failedUrls = new Set(urls);
+          resolveTrackStreams(track, { forceRefresh: true }).then((refreshed) => {
+            if (playSeq !== playbackSeqRef.current) return;
+            setQueue((prev) =>
+              prev.map((item) =>
+                item.id === track.id
+                  ? {
+                      ...item,
+                      streamUrls: refreshed.streamUrls || item.streamUrls,
+                      previewUrl: refreshed.previewUrl || item.previewUrl,
+                      youtubeId: refreshed.youtubeId || item.youtubeId,
+                    }
+                  : item
+              )
+            );
+            const freshCandidates = buildStreamCandidates(
+              refreshed,
+              quality,
+              refreshed.alternates || []
+            ).filter((url) => !failedUrls.has(url));
+            if (freshCandidates.length) {
+              playNativeAudioCandidates(freshCandidates);
+            } else if (refreshed.youtubeId) {
+              playYouTubeAudio(refreshed.youtubeId);
+            } else {
+              setIsPlaying(false);
+              showToast('No playable audio source found for this track');
+            }
+          }).catch(() => {
+            if (playSeq === playbackSeqRef.current) {
+              setIsPlaying(false);
+              showToast('No playable audio source found for this track');
+            }
+          });
+        };
+        candidateFailureRef.current = onCandidatesExhausted;
+        loadAndPlayCandidate(0, playSeq, onCandidatesExhausted);
       };
 
       const playYouTubeAudio = (youtubeId: string) => {
@@ -983,11 +1024,7 @@ export default function App() {
         if (activeEngineRef.current !== 'audio' || !isActiveAudio(audio)) return;
         if (!isPlayingRef.current || audio.src === SILENT_WAV_DATA_URI) return;
         const nextIdx = candidateIdxRef.current + 1;
-        loadAndPlayCandidate(nextIdx, playbackSeqRef.current, () => {
-          setIsPlaying(false);
-          showToast('Stream unavailable — skipping to next track');
-          advanceTrack(1, true);
-        });
+        loadAndPlayCandidate(nextIdx, playbackSeqRef.current, candidateFailureRef.current);
       };
       audio.addEventListener('timeupdate', onTime);
       audio.addEventListener('ended', onEnded);
