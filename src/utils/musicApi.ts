@@ -84,7 +84,6 @@ function mapMusicBrainzRecording(raw: MusicBrainzRecordingRaw): Track {
     metadataOnly: true,
     sourceProvider: 'MusicBrainz',
     sourceAvailability: 'metadata',
-    offlineAvailable: false,
   };
 }
 
@@ -886,6 +885,13 @@ export async function resolveTrackStreams(
       alternates: cached.alternates,
       youtubeId: cached.youtubeId || track.youtubeId,
       youtubeAlternates: cached.youtubeAlternates || track.youtubeAlternates,
+      sourceProvider: cached.sourceProvider || track.sourceProvider,
+      sourceAvailability: cached.sourceAvailability || track.sourceAvailability,
+      sourcePageUrl: cached.sourcePageUrl || track.sourcePageUrl,
+      sourceLicense: cached.sourceLicense || track.sourceLicense,
+      offlineAvailable: typeof cached.offlineAvailable === 'boolean'
+        ? cached.offlineAvailable
+        : track.offlineAvailable,
     };
   }
 
