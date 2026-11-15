@@ -45,25 +45,44 @@ function buildVariedList(tracks: Track[], recentlyPlayed: Track[], rotation: num
     const key = `${track.name.toLowerCase()}::${primaryArtist(track)}`;
     if (!recent.has(track.id) && !unique.has(key)) unique.set(key, track);
   }
-  const pool = [...unique.values()].sort((a, b) => score(b) - score(a));
+  const pool = [...unique.values()].sort((a, b) => {
+    const difference = score(b) - score(a);
+    if (Math.abs(difference) > 0.25) return difference;
+    // Deterministic tie-breaking changes after refresh without allowing
+    // source order alone to dominate the discovery feed.
+    const hash = (track: Track) => {
+      const value = track.name + '::' + primaryArtist(track) + '::' + rotation;
+      let result = 0;
+      for (let index = 0; index < value.length; index += 1) result = (result * 31 + value.charCodeAt(index)) >>> 0;
+      return result;
+    };
+    return hash(a) - hash(b);
+  });
   if (!pool.length) return [];
 
-  // Rotate the source order on refresh, then spread artists before allowing repeats.
+  // Rotate the source order, then prioritise a mix of artists and genres.
   const offset = rotation % pool.length;
   const rotated = [...pool.slice(offset), ...pool.slice(0, offset)];
-  const used = new Set<string>();
+  const usedArtists = new Set<string>();
+  const usedGenres = new Set<string>();
   const firstPass: Track[] = [];
   const secondPass: Track[] = [];
+  const thirdPass: Track[] = [];
   for (const track of rotated) {
     const artist = primaryArtist(track);
-    if (!used.has(artist)) {
-      used.add(artist);
+    const genre = (track.genre || '').trim().toLowerCase();
+    if (!usedArtists.has(artist) && (!genre || !usedGenres.has(genre))) {
+      usedArtists.add(artist);
+      if (genre) usedGenres.add(genre);
       firstPass.push(track);
-    } else {
+    } else if (!usedArtists.has(artist)) {
+      usedArtists.add(artist);
       secondPass.push(track);
+    } else {
+      thirdPass.push(track);
     }
   }
-  return [...firstPass, ...secondPass];
+  return [...firstPass, ...secondPass, ...thirdPass];
 }
 
 export function DiscoverView({ tracks, recentlyPlayed, onPlayTrackList, onRefresh, likedTracks, playCounts, artistAffinity, genreAffinity, preferredLanguages, favoriteArtists, preferredMoods }: DiscoverViewProps) {
