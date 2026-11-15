@@ -152,12 +152,19 @@ async function fetchAudioBlob(url: string, filename: string): Promise<Blob | nul
 
   for (const target of attempts) {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 35_000);
+    let connectTimer: ReturnType<typeof setTimeout> | undefined;
+    let bodyTimer: ReturnType<typeof setTimeout> | undefined;
     try {
+      // Fail over quickly when a provider never responds, but give a valid
+      // stream enough time to finish downloading on a slower mobile connection.
+      connectTimer = setTimeout(() => controller.abort(), 10_000);
       const response = await fetch(target, { signal: controller.signal });
+      clearTimeout(connectTimer);
+      connectTimer = undefined;
       if (!response.ok) continue;
       const contentType = (response.headers.get('content-type') || '').toLowerCase();
       if (contentType.includes('text/html') || contentType.includes('application/json')) continue;
+      bodyTimer = setTimeout(() => controller.abort(), 120_000);
       const blob = await response.blob();
       if (blob.size >= 1024 && !blob.type.includes('text/html') && !blob.type.includes('json')) {
         return blob;
@@ -165,7 +172,8 @@ async function fetchAudioBlob(url: string, filename: string): Promise<Blob | nul
     } catch {
       // Try next fallback
     } finally {
-      clearTimeout(timer);
+      if (connectTimer) clearTimeout(connectTimer);
+      if (bodyTimer) clearTimeout(bodyTimer);
     }
   }
   return null;
