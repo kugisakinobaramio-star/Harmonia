@@ -939,7 +939,7 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
         try {
           const parsed = new URL(rawUrl, 'https://www.youtube.com');
           rawId = parsed.searchParams.get('v') || '';
-          if (!rawId && /^\\/[a-zA-Z0-9_-]{11}$/.test(parsed.pathname)) {
+          if (!rawId && /^\/[a-zA-Z0-9_-]{11}$/.test(parsed.pathname)) {
             rawId = parsed.pathname.slice(1);
           }
         } catch {
