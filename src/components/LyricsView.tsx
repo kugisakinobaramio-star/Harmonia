@@ -25,7 +25,7 @@ export function LyricsView({
 
   const { activeIndex } = track
     ? resolveActiveLyricPair(lyrics, currentTime, duration)
-    : { activeIndex: -1, current: '', next: '' };
+    : { activeIndex: -1 };
 
   // Keep hooks unconditional: the player can move between an empty queue and
   // an active track without changing the number/order of hooks in this component.
