@@ -30,7 +30,7 @@ export function CoverImage({
       decoding="async"
       referrerPolicy="no-referrer"
       onError={() => {
-        if (src && /^https?:\/\//i.test(src) && imgSrc === src) {
+        if (src && /^https?:\/\//i.test(src) && !src.includes('/api/music/image?') && imgSrc === src) {
           setImgSrc(
             apiUrl(`/api/music/image?url=${encodeURIComponent(src)}${alt ? `&title=${encodeURIComponent(alt)}` : ''}`)
           );
