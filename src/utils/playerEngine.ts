@@ -217,6 +217,19 @@ export function resolveNextTrackIndex(params: {
   return Math.max(0, Math.min(queueLength - 1, next));
 }
 
+export function isAllowedJamendoNonCommercialLicense(value: string): boolean {
+  try {
+    const url = new URL(value);
+    if (
+      !['http:', 'https:'].includes(url.protocol) ||
+      url.hostname.toLowerCase() !== 'creativecommons.org'
+    ) return false;
+    return /^\\/licenses\\/by-nc(?:-sa|-nd)?\\/[0-9.]+\\/?$/i.test(url.pathname);
+  } catch {
+    return false;
+  }
+}
+
 export function getSearchFallbackQueries(query: string): string[] {
   const trimmed = query.trim();
   if (!trimmed) return [];
