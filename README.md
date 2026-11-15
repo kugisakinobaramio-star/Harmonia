@@ -43,3 +43,33 @@ Copy `.env.example` to `.env` only if you need its configured integrations. Keep
 ## Music provider availability
 
 Harmonia relies on third-party music catalogues and stream providers. Their APIs, availability, regional catalogues and terms can change independently of this project, so a successful build does not guarantee every external stream will remain available.
+
+
+## Cloudflare Workers deployment (free-plan target)
+
+Harmonia can run as one full-stack Cloudflare Worker: Express handles the existing `/api/*` routes, while Workers Static Assets serves the Vite React build. The Worker uses Cloudflare's Node.js HTTP server adapter and Node.js compatibility runtime.
+
+### Local development
+
+```bash
+npm install
+npm run dev
+```
+
+### Cloudflare local preview
+
+```bash
+npm run dev:cloudflare
+```
+
+### Deploy
+
+```bash
+npm run deploy:cloudflare
+```
+
+The deployment configuration intentionally uses no paid Cloudflare bindings, databases, AI services, or storage products. Keep the account on the Workers Free plan; do not enable a paid plan or paid add-ons. Free-plan quotas and product terms can change, so check the Cloudflare dashboard before increasing usage. Audio proxy traffic is subject to Worker request/subrequest and execution limits.
+
+The media proxy retains HTTPS-only validation, DNS A/AAAA resolution, public-address checks, redirect revalidation, response-size caps, and per-isolate request throttling. Cloudflare Workers does not implement Node's `dns.lookup()`; the Worker adapter uses the supported `dns.resolve4()` and `dns.resolve6()` APIs over DNS-over-HTTPS instead. The local Node server continues using `dns.lookup()`.
+
+Cloudflare deployment is deliberately separate from the existing Google Cloud Run proposal. Do not merge or deploy the Cloud Run branch to use this setup.

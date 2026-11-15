@@ -1,8 +1,6 @@
-import 'dotenv/config';
 import express from 'express';
 import path from 'node:path';
 import { Readable } from 'node:stream';
-import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
 import { isPublicAddress } from './src/utils/networkSecurity.ts';
 import { fileURLToPath } from 'node:url';
@@ -11,10 +9,6 @@ import {
   scoreAuthenticTrackCandidate,
 } from './src/utils/playerEngine.ts';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-const PORT = Number(process.env.PORT || 3000);
 const SAAVN_BASE = 'https://saavn.sumit.co';
 
 interface StoredLyricLine {
@@ -42,6 +36,17 @@ interface StoredTrack {
 
 // Only public HTTPS destinations may be fetched through user-controlled proxy URLs.
 // Every redirect is revalidated to prevent redirect-based SSRF.
+let cloudflareWorkerRuntime = false;
+
+async function resolveWorkerDnsAddresses(host: string): Promise<Array<{ address: string }>> {
+  // Workers does not implement dns.lookup(); resolve4/resolve6 use Cloudflare DNS-over-HTTPS.
+  const dns = await import('node:dns/promises');
+  const results = await Promise.allSettled([dns.resolve4(host), dns.resolve6(host)]);
+  return results.flatMap((result) =>
+    result.status === 'fulfilled' ? result.value.map((address) => ({ address })) : []
+  );
+}
+
 async function validatePublicHttpsUrl(input: string): Promise<URL> {
   const url = new URL(input);
   if (url.protocol !== 'https:' || url.username || url.password) {
@@ -51,7 +56,11 @@ async function validatePublicHttpsUrl(input: string): Promise<URL> {
   if (!host || host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local')) {
     throw new Error('Local destinations are not allowed');
   }
-  const addresses = isIP(host) ? [{ address: host }] : await lookup(host, { all: true, verbatim: true });
+  const addresses = isIP(host)
+    ? [{ address: host }]
+    : cloudflareWorkerRuntime
+      ? await resolveWorkerDnsAddresses(host)
+      : await (await import('node:dns/promises')).lookup(host, { all: true, verbatim: true });
   if (!addresses.length || addresses.some((entry) => !isPublicAddress(entry.address))) {
     throw new Error('Non-public network destinations are not allowed');
   }
@@ -661,7 +670,9 @@ async function fetchSpotifyEmbedEntity(
   }
 }
 
-async function startServer() {
+export async function createApp(options: { mode?: 'node-development' | 'node-production' | 'worker' } = {}) {
+  const mode = options.mode ?? (process.env.NODE_ENV === 'production' ? 'node-production' : 'node-development');
+  cloudflareWorkerRuntime = mode === 'worker';
   const app = express();
   app.disable('x-powered-by');
   app.use((_req, res, next) => {
@@ -669,14 +680,23 @@ async function startServer() {
     res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
     next();
   });
-  app.use(express.json({ limit: '1mb' }));
+  // The current API does not consume JSON request bodies. Avoid Express's body-parser
+  // dependency here because its iconv-lite Node stream shim is incompatible with Workers.
+  app.use((req, res, next) => {
+    const contentLength = Number(req.get('content-length') || 0);
+    if (Number.isFinite(contentLength) && contentLength > 1024 * 1024) {
+      res.status(413).json({ ok: false, error: 'Request body too large.' });
+      return;
+    }
+    next();
+  });
 
   // Bound expensive user-controlled media proxy requests per client IP.
   // Keep the map bounded so spoofed clients cannot grow it indefinitely.
   const proxyRateLimits = new Map<string, { count: number; resetAt: number }>();
   app.use(['/api/music/image', '/api/music/audio', '/api/music/download'], (req, res, next) => {
     const now = Date.now();
-    const key = req.ip || req.socket.remoteAddress || 'unknown';
+    const key = req.get('cf-connecting-ip') || req.ip || req.socket.remoteAddress || 'unknown';
     let bucket = proxyRateLimits.get(key);
     if (!bucket || bucket.resetAt <= now) {
       bucket = { count: 0, resetAt: now + 60_000 };
@@ -1762,14 +1782,8 @@ async function startServer() {
     res.status(410).json({ ok: false, error: 'User data is stored locally in this browser.' });
   });
 
-  if (process.env.NODE_ENV !== 'production') {
-    const { createServer: createViteServer } = await import('vite');
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: 'spa',
-    });
-    app.use(vite.middlewares);
-  } else {
+  if (mode === 'node-production') {
+    const __dirname = path.dirname(fileURLToPath(import.meta.url));
     const distDir = path.join(__dirname, 'dist');
     app.use(express.static(distDir));
     app.get('*', (_req, res) => {
@@ -1777,9 +1791,7 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Harmonia full-stack server running on http://localhost:${PORT}`);
-  });
+  // In Cloudflare mode, Workers Static Assets serves the Vite build output.
+  // The Express app handles only /api/* requests and is adapted by worker/index.ts.
+  return app;
 }
-
-startServer();
