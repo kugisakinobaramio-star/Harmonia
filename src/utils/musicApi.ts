@@ -647,7 +647,7 @@ export function getArtistProfileById(id: string): ArtistProfile | undefined {
 
 const resolvedTrackCache = new Map<
   string,
-  Partial<Pick<Track, 'streamUrls' | 'previewUrl' | 'youtubeId'>> & { alternates?: string[] }
+  Partial<Pick<Track, 'streamUrls' | 'previewUrl' | 'youtubeId' | 'youtubeAlternates'>> & { alternates?: string[] }
 >();
 
 export async function resolveTrackStreams(
@@ -657,7 +657,7 @@ export async function resolveTrackStreams(
   const cached = resolvedTrackCache.get(track.id);
   if (options.forceRefresh) resolvedTrackCache.delete(track.id);
   if (!options.forceRefresh && hasFullAudioStream(track)) {
-    return { ...track, alternates: cached?.alternates, youtubeId: cached?.youtubeId || track.youtubeId };
+    return { ...track, alternates: cached?.alternates, youtubeId: cached?.youtubeId || track.youtubeId, youtubeAlternates: cached?.youtubeAlternates || track.youtubeAlternates };
   }
   if (
     !options.forceRefresh &&
@@ -672,6 +672,7 @@ export async function resolveTrackStreams(
       previewUrl: cached.previewUrl || track.previewUrl,
       alternates: cached.alternates,
       youtubeId: cached.youtubeId || track.youtubeId,
+      youtubeAlternates: cached.youtubeAlternates || track.youtubeAlternates,
     };
   }
   try {
@@ -687,6 +688,7 @@ export async function resolveTrackStreams(
         previewUrl?: string;
         alternates?: string[];
         youtubeId?: string;
+        youtubeAlternates?: string[];
       };
       if (
         json.ok &&
@@ -702,6 +704,7 @@ export async function resolveTrackStreams(
           previewUrl: json.previewUrl || track.previewUrl,
           alternates: json.alternates,
           youtubeId: json.youtubeId || track.youtubeId,
+          youtubeAlternates: json.youtubeAlternates || track.youtubeAlternates,
         };
         resolvedTrackCache.set(track.id, entry);
         return { ...track, ...entry };
@@ -716,6 +719,7 @@ export async function resolveTrackStreams(
       streamUrls: undefined,
       previewUrl: undefined,
       youtubeId: undefined,
+      youtubeAlternates: [],
       alternates: [],
     };
   }

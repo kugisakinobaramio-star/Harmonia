@@ -889,6 +889,7 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
       previewUrl?: string;
       alternates: string[];
       youtubeId?: string;
+      youtubeAlternates?: string[];
     }
   >();
 
@@ -896,7 +897,7 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
     cleanTitle: string,
     primaryArtist: string,
     targetDurationSec = 0
-  ): Promise<string | undefined> {
+  ): Promise<string[]> {
     const query = `${cleanTitle} ${primaryArtist}`.trim();
     // Piped instances are community-operated and can disappear or rate-limit requests.
     // Keep several currently published instances so one outage does not disable fallback.
@@ -963,11 +964,11 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
       .filter((item): item is { id: string; score: number } => item !== null && item.score !== null)
       .sort((a, b) => b.score - a.score);
 
-    if (scored[0]?.id) return scored[0].id;
+    const youtubeIds = [...new Set(scored.map((item) => item.id))].slice(0, 8);
 
     // Never fall back to an unverified result: it could be an unrelated upload,
     // remix, podcast, or long-form mix. The direct YouTube scrape below remains
-    // the final fallback when every Piped instance is unavailable or unhelpful.
+    // a secondary source and is held to the same title/artist match requirement.
 
     // Direct scrape fallback
     try {
@@ -988,14 +989,15 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
             requestedArtist: primaryArtist,
             targetDurationSec,
           });
-          if (score !== null) return item.id;
+          if (score !== null && !youtubeIds.includes(item.id)) youtubeIds.push(item.id);
+          if (youtubeIds.length >= 8) break;
         }
       }
     } catch {
       // Ignore
     }
 
-    return undefined;
+    return youtubeIds;
   }
 
   app.get('/api/music/resolve', async (req, res) => {
@@ -1410,16 +1412,18 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
 
     // Resolve YouTube as a fallback on forced retries too: a nominal 320k URL may be stale,
     // blocked, or otherwise unplayable even though the resolver returned it successfully.
-    let youtubeId: string | undefined;
+    let youtubeAlternates: string[] = [];
     if (!streamUrls['320kbps'] || forceRefresh) {
-      youtubeId = await resolveYouTubeAudioId(cleanTitle, primaryArtist, targetDurationSec);
+      youtubeAlternates = await resolveYouTubeAudioId(cleanTitle, primaryArtist, targetDurationSec);
     }
+    const youtubeId = youtubeAlternates[0];
 
     const payload = {
       streamUrls,
       previewUrl,
       alternates: Array.from(new Set([...fullAlternates, ...previewAlternates])),
       youtubeId,
+      youtubeAlternates: youtubeAlternates.slice(1),
     };
 
     // Safe playback diagnostics: never log search terms, stream URLs, or user data.

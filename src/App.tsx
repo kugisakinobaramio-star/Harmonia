@@ -722,6 +722,33 @@ export default function App() {
                   : currentTrackRef.current;
               if (!cur) return;
 
+              // A verified result can still reject embedding (101/150) or be unavailable.
+              // Try the next independently matched video before refreshing audio providers.
+              const nextYoutubeId = (cur.youtubeAlternates || []).find(
+                (candidate) => Boolean(candidate) && candidate !== cur.youtubeId
+              );
+              if (nextYoutubeId && ytPlayerRef.current) {
+                const remainingYoutubeIds = (cur.youtubeAlternates || []).filter(
+                  (candidate) => candidate !== nextYoutubeId && candidate !== cur.youtubeId
+                );
+                const nextTrack = {
+                  ...cur,
+                  youtubeId: nextYoutubeId,
+                  youtubeAlternates: remainingYoutubeIds,
+                };
+                currentTrackRef.current = nextTrack;
+                resolvedPlaybackTrackRef.current = nextTrack;
+                setQueue((prev) => prev.map((item) => item.id === cur.id ? nextTrack : item));
+                try {
+                  ytPlayerRef.current.loadVideoById(nextYoutubeId);
+                  ytPlayerRef.current.playVideo();
+                  setIsPlaying(true);
+                  return;
+                } catch {
+                  // Continue to independent audio fallback below.
+                }
+              }
+
               const playRefreshedAudio = (failedUrls: Set<string>) => {
                 resolveTrackStreams(cur, { forceRefresh: true })
                   .then((refreshed) => {
@@ -741,6 +768,8 @@ export default function App() {
                               streamUrls: refreshed.streamUrls || item.streamUrls,
                               previewUrl: refreshed.previewUrl || item.previewUrl,
                               alternates: refreshed.alternates || [],
+                              youtubeId: refreshed.youtubeId || item.youtubeId,
+                              youtubeAlternates: refreshed.youtubeAlternates || item.youtubeAlternates,
                             } as Track
                           : item
                       )
@@ -822,6 +851,7 @@ export default function App() {
                     streamUrls: resolved.streamUrls || qItem.streamUrls,
                     previewUrl: resolved.previewUrl || qItem.previewUrl,
                     youtubeId: resolved.youtubeId || qItem.youtubeId,
+                    youtubeAlternates: resolved.youtubeAlternates || qItem.youtubeAlternates,
                   }
                 : qItem
             )
@@ -1451,6 +1481,9 @@ export default function App() {
         subtitle: pl.description,
         image: pl.tracks[0]?.image || pl.image || ARTWORK.englishVinyl,
         tracks: pl.tracks,
+        spotifyEmbedUrl: pl.id.startsWith('spotify-pl-')
+          ? `https://open.spotify.com/embed/playlist/${pl.id.slice('spotify-pl-'.length)}`
+          : undefined,
       });
     },
     [navigateTo]
@@ -1508,14 +1541,16 @@ export default function App() {
           subtitle: res.subtitle || 'Ad-Free Spotify Streaming',
           image: res.image || res.tracks[0].image || ARTWORK.englishVinyl,
           tracks: res.tracks,
+          spotifyEmbedUrl: res.kind && res.id
+            ? `https://open.spotify.com/embed/${res.kind}/${res.id}`
+            : undefined,
         });
-        playTrackList(res.tracks, 0);
-        showToast(`Streaming Spotify: ${res.title || res.tracks[0].name}`);
+        showToast('Spotify player loaded. Use its Play button below to start playback.');
         return { ok: true };
       }
       return { ok: false, error: res.error || 'Could not resolve Spotify link' };
     },
-    [navigateTo, playTrackList, showToast]
+    [navigateTo, showToast]
   );
 
   // Videos
