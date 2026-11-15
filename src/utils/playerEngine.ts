@@ -217,6 +217,55 @@ export function resolveNextTrackIndex(params: {
   return Math.max(0, Math.min(queueLength - 1, next));
 }
 
+export function getSearchFallbackQueries(query: string): string[] {
+  const tokens = query.trim().split(/\s+/).filter(Boolean);
+  if (tokens.length < 3) return [];
+  // Try removing one trailing artist token, then two. This handles both
+  // one-word and two-word artist names without assuming every artist has
+  // the same number of words.
+  return [tokens.slice(0, -1).join(' '), tokens.slice(0, -2).join(' ')]
+    .filter((candidate, index, all) => Boolean(candidate) && all.indexOf(candidate) === index);
+}
+
+export function isMatchingLyricsCandidate(
+  candidate: { trackName?: string; artistName?: string; duration?: number },
+  requestedTitle: string,
+  requestedArtist: string,
+  requestedDurationSec = 0
+): boolean {
+  const normalize = (value: string) =>
+    decodeHtmlEntities(value)
+      .toLowerCase()
+      .normalize('NFKD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/\([^)]*\)|\[[^\]]*\]/g, ' ')
+      .replace(/\b(remaster(ed)?|radio edit|explicit|clean version)\b/g, ' ')
+      .replace(/[^a-z0-9]+/g, ' ')
+      .trim()
+      .replace(/\s+/g, ' ');
+
+  const title = normalize(candidate.trackName || '');
+  const requested = normalize(requestedTitle);
+  const artist = normalize(requestedArtist);
+  if (!title || !requested || !artist || title !== requested) return false;
+
+  const artistNames = (candidate.artistName || '')
+    .split(/,|&|\bfeat\.?\b|\bft\.?\b|\bwith\b/i)
+    .map(normalize)
+    .filter(Boolean);
+  if (!artistNames.includes(artist)) return false;
+
+  const candidateDuration = Number(candidate.duration) || 0;
+  if (
+    requestedDurationSec > 30 &&
+    candidateDuration > 30 &&
+    Math.abs(candidateDuration - requestedDurationSec) > 25
+  ) {
+    return false;
+  }
+  return true;
+}
+
 export function parseLrcLyrics(lrcText: string): LyricLine[] {
   const out: LyricLine[] = [];
   const lines = String(lrcText || '').split('\n');
@@ -523,8 +572,7 @@ export function scoreAuthenticTrackCandidate(params: {
  * Detects instrumental / karaoke / no-lyrics / low-value spam tracks
  * so they are removed or demoted from priority recommendations and search.
  */
-export function isUnnecessaryNoLyricsTrack(track: Track): boolean {
-  if (track.hasLyrics === false) return true;
+export function isInstrumentalOrLowValueTrack(track: Track): boolean {
   const hay = `${track.name} ${track.albumName} ${track.genre || ''}`.toLowerCase();
   const bannedPatterns = [
     'instrumental',
@@ -539,6 +587,10 @@ export function isUnnecessaryNoLyricsTrack(track: Track): boolean {
     'rain sound',
   ];
   return bannedPatterns.some((pat) => hay.includes(pat));
+}
+
+export function isUnnecessaryNoLyricsTrack(track: Track): boolean {
+  return track.hasLyrics === false || isInstrumentalOrLowValueTrack(track);
 }
 
 export function isRelevantTrackTitle(itemTitle: string, query: string): boolean {
@@ -645,13 +697,17 @@ export function mapCoordsToRegion(lat: number, lng: number): MusicRegion {
 }
 
 export function scoreTrackForUser(track: Track, profile: UserTasteProfile): number {
-  if (isUnnecessaryNoLyricsTrack(track)) return -500;
+  if (isInstrumentalOrLowValueTrack(track)) return -500;
   if (isRemixOrKnockoff(track.name, '', track.artist, '')) return -500;
 
   let score = 0;
-  // Lyrics priority boost
-  if (track.hasLyrics || (track.lyrics && track.lyrics.length > 0)) {
-    score += 40;
+  // Lyrics are a preference, not a hard eligibility rule.
+  if (profile.prioritizeLyrics !== false) {
+    if (track.hasLyrics || (track.lyrics && track.lyrics.length > 0)) {
+      score += 40;
+    } else if (track.hasLyrics === false) {
+      score -= 28;
+    }
   }
 
   // Preferred languages are ranked from the listener's own settings and history.
@@ -823,6 +879,25 @@ export function addTrackToPlaylist(
     return { ...pl, tracks: [...pl.tracks, track] };
   });
   return { playlists: next, added };
+}
+
+export function removeQueueItem(
+  queue: Track[],
+  currentIndex: number,
+  removeIndex: number
+): { queue: Track[]; currentIndex: number; removedCurrent: boolean } {
+  if (!Number.isInteger(removeIndex) || removeIndex < 0 || removeIndex >= queue.length) {
+    return { queue, currentIndex, removedCurrent: false };
+  }
+  const next = queue.filter((_, index) => index !== removeIndex);
+  const removedCurrent = removeIndex === currentIndex;
+  if (!next.length) return { queue: next, currentIndex: 0, removedCurrent };
+  const nextIndex = removeIndex < currentIndex
+    ? currentIndex - 1
+    : removedCurrent
+      ? Math.min(removeIndex, next.length - 1)
+      : Math.min(Math.max(0, currentIndex), next.length - 1);
+  return { queue: next, currentIndex: nextIndex, removedCurrent };
 }
 
 export function reorderQueueItem(

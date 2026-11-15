@@ -61,10 +61,11 @@ import {
   hasFullPlaybackSource,
   isShortPreviewUrl,
   isSpotifyLinkOrUri,
-  isUnnecessaryNoLyricsTrack,
+  isInstrumentalOrLowValueTrack,
   mapCoordsToRegion,
   REGION_LABELS,
   reorderQueueItem,
+  removeQueueItem,
   resolveNextTrackIndex,
   scoreTrackForUser,
   selectStreamUrl,
@@ -288,7 +289,7 @@ export default function App() {
   const synthTimeRef = useRef<number>(0);
   const playbackSeqRef = useRef<number>(0);
   const isPlayingRef = useRef<boolean>(false);
-  const currentTrack = queue[currentIndex] || queue[0] || SEED_TRACKS[0] || null;
+  const currentTrack = queue.length ? queue[currentIndex] || queue[0] || null : null;
   const currentTrackRef = useRef<Track | null>(currentTrack);
   // Retain the latest resolved object separately: queue state/effects can briefly
   // expose the pre-resolution track while the YouTube iframe reports an error.
@@ -484,10 +485,8 @@ export default function App() {
     let cancelled = false;
     fetchRegionalDiscovery(region).then((tracks) => {
       if (cancelled) return;
-      const vocalOnly = prioritizeLyrics
-        ? tracks.filter((t) => !isUnnecessaryNoLyricsTrack(t))
-        : tracks;
-      setRegionalTracks(vocalOnly);
+      // Keep tracks with missing lyric metadata discoverable; ranking handles the preference.
+      setRegionalTracks(tracks);
     });
     return () => {
       cancelled = true;
@@ -574,7 +573,7 @@ export default function App() {
       ...recentlyPlayed,
       ...regionalTracks,
     ]) {
-      if (prioritizeLyrics && isUnnecessaryNoLyricsTrack(track)) continue;
+      if (isInstrumentalOrLowValueTrack(track)) continue;
       const key = `${track.name.toLowerCase()}::${track.artist.split(',')[0]?.trim().toLowerCase()}`;
       if (!seenKeys.has(key)) {
         seenKeys.add(key);
@@ -983,7 +982,11 @@ export default function App() {
 
   // Fetch synced lyrics whenever current track changes
   useEffect(() => {
-    if (!currentTrack) return;
+    if (!currentTrack) {
+      setLyrics([]);
+      setLyricsSynced(false);
+      return;
+    }
     if (currentTrack.lyrics?.length) {
       setLyrics(currentTrack.lyrics);
       setLyricsSynced(true);
@@ -1992,16 +1995,44 @@ export default function App() {
             }
           }}
           onRemoveIndex={(idx) => {
-            setQueue((prev) => {
-              const next = prev.filter((_, i) => i !== idx);
-              if (idx < currentIndex) setCurrentIndex((c) => Math.max(0, c - 1));
-              else if (idx === currentIndex && next.length) {
-                const nextIdx = Math.min(idx, next.length - 1);
-                setCurrentIndex(nextIdx);
-                startTrackPlayback(next[nextIdx]);
-              }
-              return next;
+            const result = removeQueueItem(queue, currentIndex, idx);
+            if (result.queue === queue) return;
+            setQueue(result.queue);
+            setCurrentIndex(result.currentIndex);
+            if (!result.removedCurrent) return;
+
+            const nextTrack = result.queue[result.currentIndex] || null;
+            if (nextTrack) {
+              startTrackPlayback(nextTrack);
+              return;
+            }
+
+            // Invalidate pending resolver/playback callbacks and stop every engine
+            // when the final queued track is removed.
+            playbackSeqRef.current += 1;
+            currentTrackRef.current = null;
+            resolvedPlaybackTrackRef.current = null;
+            pendingYtVideoIdRef.current = null;
+            candidateUrlsRef.current = [];
+            candidateIdxRef.current = 0;
+            candidateFailureRef.current = () => {};
+            activeEngineRef.current = 'audio';
+            activeAudioSlotRef.current = 1;
+            [audioRef.current, audioRef2.current].forEach((audio) => {
+              if (!audio) return;
+              audio.pause();
+              audio.removeAttribute('src');
+              audio.load();
             });
+            try {
+              ytPlayerRef.current?.pauseVideo?.();
+              ytPlayerRef.current?.stopVideo?.();
+            } catch {}
+            audioEngine.stopSynthLoop();
+            usingSynthRef.current = false;
+            setIsPlaying(false);
+            setCurrentTime(0);
+            setDuration(0);
           }}
           onMoveItem={(fromIdx, toIdx) => {
             const res = reorderQueueItem(queue, currentIndex, fromIdx, toIdx);

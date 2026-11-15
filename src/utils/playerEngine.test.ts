@@ -11,15 +11,19 @@ import {
   getGreetingForHour,
   hasFullAudioStream,
   isRemixOrKnockoff,
+  isMatchingLyricsCandidate,
+  getSearchFallbackQueries,
   isPlausibleSongDuration,
   isRelevantTrackTitle,
   isShortPreviewUrl,
   isSpotifyLinkOrUri,
   isUnnecessaryNoLyricsTrack,
+  isInstrumentalOrLowValueTrack,
   mapCoordsToRegion,
   parseLrcLyrics,
   parsePlainLyricsToLines,
   reorderQueueItem,
+  removeQueueItem,
   rankDiscoverTracks,
   resolveActiveLyricPair,
   resolveNextTrackIndex,
@@ -127,11 +131,13 @@ test('parseLrcLyrics parses synced LRC timestamps accurately', () => {
   assert.equal(parsed[1].time, 64.2);
 });
 
-test('isUnnecessaryNoLyricsTrack filters out instrumental and karaoke tracks', () => {
-  assert.equal(isUnnecessaryNoLyricsTrack(sampleTracks[0]), false);
-  assert.equal(isUnnecessaryNoLyricsTrack(sampleTracks[3]), true);
+test('instrumental detection stays separate from missing lyric metadata', () => {
+  const ordinaryNoLyrics = { ...sampleTracks[1], id: 'no-lyrics', hasLyrics: false };
+  assert.equal(isInstrumentalOrLowValueTrack(ordinaryNoLyrics), false);
+  assert.equal(isUnnecessaryNoLyricsTrack(ordinaryNoLyrics), true);
+  assert.equal(isInstrumentalOrLowValueTrack(sampleTracks[3]), true);
   assert.equal(
-    isUnnecessaryNoLyricsTrack({ ...sampleTracks[1], name: 'Blinding Lights (Karaoke Version)' }),
+    isInstrumentalOrLowValueTrack({ ...sampleTracks[1], name: 'Blinding Lights (Karaoke Version)' }),
     true
   );
 });
@@ -454,4 +460,90 @@ test('selectSaavnArtistForMatch uses primary credits and only an unambiguous exa
     selectSaavnArtistForMatch(undefined, [{ name: 'Arpit Bala' }], 'Arpit'),
     ''
   );
+});
+
+test('recommendations keep ordinary tracks without lyrics when lyrics are not prioritized', () => {
+  const ordinaryNoLyrics: Track = {
+    ...sampleTracks[1],
+    id: 'ordinary-no-lyrics',
+    name: 'A Normal Song',
+    albumName: 'A Normal Album',
+    hasLyrics: false,
+  };
+  const baseProfile: UserTasteProfile = {
+    region: 'US',
+    preferredLanguages: [],
+    artistAffinity: {},
+    languageAffinity: {},
+    genreAffinity: {},
+    playCounts: {},
+    likedIds: [],
+    recentIds: [],
+  };
+  const preferredScore = scoreTrackForUser(ordinaryNoLyrics, { ...baseProfile, prioritizeLyrics: true });
+  const neutralScore = scoreTrackForUser(ordinaryNoLyrics, { ...baseProfile, prioritizeLyrics: false });
+  assert.ok(neutralScore > preferredScore);
+  assert.ok(neutralScore > -500);
+  assert.equal(scoreTrackForUser(sampleTracks[3], { ...baseProfile, prioritizeLyrics: false }), -500);
+});
+
+test('lyrics lookup candidates must match both title and artist, with compatible duration', () => {
+  const requested = { title: 'Maharani', artist: 'Arpit Bala', duration: 182 };
+  assert.equal(
+    isMatchingLyricsCandidate(
+      { trackName: 'Maharani', artistName: 'Arpit Bala', duration: 180 },
+      requested.title, requested.artist, requested.duration
+    ),
+    true
+  );
+  assert.equal(
+    isMatchingLyricsCandidate(
+      { trackName: 'Maharani', artistName: 'Another Artist', duration: 180 },
+      requested.title, requested.artist, requested.duration
+    ),
+    false
+  );
+  assert.equal(
+    isMatchingLyricsCandidate(
+      { trackName: 'Maharani Remix', artistName: 'Arpit Bala', duration: 180 },
+      requested.title, requested.artist, requested.duration
+    ),
+    false
+  );
+  assert.equal(
+    isMatchingLyricsCandidate(
+      { trackName: 'Maharani', artistName: 'Arpit Bala', duration: 250 },
+      requested.title, requested.artist, requested.duration
+    ),
+    false
+  );
+});
+
+test('removeQueueItem preserves the current track index and reports when playback must change', () => {
+  const beforeCurrent = removeQueueItem(sampleTracks, 2, 0);
+  assert.deepEqual(beforeCurrent.queue.map((track) => track.id), ['t2', 't3', 't4']);
+  assert.equal(beforeCurrent.currentIndex, 1);
+  assert.equal(beforeCurrent.removedCurrent, false);
+
+  const current = removeQueueItem(sampleTracks, 1, 1);
+  assert.deepEqual(current.queue.map((track) => track.id), ['t1', 't3', 't4']);
+  assert.equal(current.currentIndex, 1);
+  assert.equal(current.removedCurrent, true);
+
+  const last = removeQueueItem([sampleTracks[0]], 0, 0);
+  assert.deepEqual(last.queue, []);
+  assert.equal(last.currentIndex, 0);
+  assert.equal(last.removedCurrent, true);
+
+  const invalid = removeQueueItem(sampleTracks, 1, 99);
+  assert.strictEqual(invalid.queue, sampleTracks);
+  assert.equal(invalid.removedCurrent, false);
+});
+
+test('search fallback tries title prefixes with one- and two-word artist names', () => {
+  assert.deepEqual(getSearchFallbackQueries('Maharani Arpit Bala'), ['Maharani Arpit', 'Maharani']);
+  assert.deepEqual(getSearchFallbackQueries('lovely Billie Eilish'), ['lovely Billie', 'lovely']);
+  assert.deepEqual(getSearchFallbackQueries('A Sky Full of Stars Coldplay'), ['A Sky Full of Stars', 'A Sky Full of']);
+  assert.deepEqual(getSearchFallbackQueries('Billie Eilish'), []);
+  assert.deepEqual(getSearchFallbackQueries('Maharani'), []);
 });
