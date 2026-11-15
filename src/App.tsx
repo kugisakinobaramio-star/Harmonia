@@ -336,14 +336,21 @@ export default function App() {
 
   useEffect(() => {
     let active = true;
-    listOfflineTracks()
-      .then((items) => {
-        if (active) setDownloadedIds(new Set(items.map((item) => item.id)));
-      })
-      .catch(() => {
-        if (active) showToast('Offline storage is unavailable in this browser.');
-      });
-    return () => { active = false; };
+    const refreshDownloads = () => {
+      listOfflineTracks()
+        .then((items) => {
+          if (active) setDownloadedIds(new Set(items.map((item) => item.id)));
+        })
+        .catch(() => {
+          if (active) showToast('Offline storage is unavailable in this browser.');
+        });
+    };
+    refreshDownloads();
+    window.addEventListener('harmonia-offline-library-change', refreshDownloads);
+    return () => {
+      active = false;
+      window.removeEventListener('harmonia-offline-library-change', refreshDownloads);
+    };
   }, [showToast]);
 
   const handleToggleDownload = useCallback(async (track: Track) => {
