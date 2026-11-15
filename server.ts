@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import {
   isPlausibleSongDuration,
   isRelevantSongSearchCandidate,
+  isAllowedJamendoNonCommercialLicense,
   isMatchingLyricsCandidate,
   isRemixOrKnockoff,
   scoreAuthenticTrackCandidate,
@@ -36,6 +37,9 @@ interface StoredTrack {
   metadataOnly?: boolean;
   sourceProvider?: string;
   sourceAvailability?: 'full' | 'preview' | 'lookup' | 'metadata';
+  sourcePageUrl?: string;
+  sourceLicense?: string;
+  offlineAvailable?: boolean;
   previewUrl?: string;
   streamUrls?: Record<string, string>;
   lyrics?: StoredLyricLine[];
@@ -458,6 +462,9 @@ interface JamendoSearchTrackRaw {
   image?: string;
   album_image?: string;
   audio?: string;
+  shareurl?: string;
+  license_ccurl?: string;
+  audiodownload_allowed?: boolean;
 }
 
 interface FunkwhaleSearchTrackRaw {
