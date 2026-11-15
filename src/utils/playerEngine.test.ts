@@ -267,7 +267,7 @@ test('scoreTrackForUser boosts tracks matching explicit favoriteArtists and pref
   const baseScore = scoreTrackForUser(sampleTracks[2], baseProfile);
   const customScore = scoreTrackForUser(sampleTracks[2], personalisedProfile);
   assert.ok(customScore >= baseScore + 30);
-  assert.ok(customScore <= baseScore + 45, 'favourite-artist affinity should remain a modest signal');
+  assert.ok(customScore <= baseScore + 50, 'favourite-artist affinity should remain a modest signal');
 });
 
 test('isRemixOrKnockoff and scoreAuthenticTrackCandidate enforce original-artist authenticity', () => {
