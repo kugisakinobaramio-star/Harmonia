@@ -953,15 +953,19 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
   });
 
   // Resolve authentic ORIGINAL-ARTIST streams (JioSaavn 320k primary artist + Verified Audius + Deezer/iTunes + YouTube Music full studio tracks)
+  type StreamResolvePayload = {
+    streamUrls: Record<string, string>;
+    previewUrl?: string;
+    alternates: string[];
+    youtubeId?: string;
+    youtubeAlternates?: string[];
+  };
+
+  // Resolved stream URLs can expire or be withdrawn. Keep this cache short-lived
+  // rather than treating a previously successful provider URL as permanent.
   const streamResolveCache = new Map<
     string,
-    {
-      streamUrls: Record<string, string>;
-      previewUrl?: string;
-      alternates: string[];
-      youtubeId?: string;
-      youtubeAlternates?: string[];
-    }
+    { expiresAt: number; payload: StreamResolvePayload }
   >();
 
   async function resolveYouTubeAudioId(
@@ -1083,8 +1087,17 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
     const cacheKey = `${title.toLowerCase()}::${artist.toLowerCase()}::${Math.round(targetDurationSec || 0)}`;
     const forceRefresh = String(req.query.forceRefresh || '') === '1';
     const cached = streamResolveCache.get(cacheKey);
-    if (!forceRefresh && cached && (Object.keys(cached.streamUrls).length > 0 || cached.youtubeId)) {
-      res.json({ ok: true, ...cached });
+    if (cached && cached.expiresAt <= Date.now()) {
+      streamResolveCache.delete(cacheKey);
+    }
+    const freshCached = streamResolveCache.get(cacheKey);
+    if (
+      !forceRefresh &&
+      freshCached &&
+      (Object.keys(freshCached.payload.streamUrls).length > 0 || freshCached.payload.youtubeId)
+    ) {
+      res.setHeader('Cache-Control', 'no-store');
+      res.json({ ok: true, ...freshCached.payload, cache: 'hit' });
       return;
     }
 
@@ -1593,12 +1606,19 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
         const first = streamResolveCache.keys().next().value;
         if (first) streamResolveCache.delete(first);
       }
-      streamResolveCache.set(cacheKey, payload);
+      streamResolveCache.set(cacheKey, {
+        // Provider URLs are volatile; five minutes limits stale-link failures
+        // while still avoiding repeated multi-provider lookups during a session.
+        expiresAt: Date.now() + 5 * 60_000,
+        payload,
+      });
     }
 
+    res.setHeader('Cache-Control', 'no-store');
     res.json({
       ok: Object.keys(streamUrls).length > 0 || Boolean(previewUrl) || Boolean(youtubeId),
       ...payload,
+      cache: 'miss',
       ...(String(req.query.diagnostics || '') === '1' ? { diagnostics } : {}),
     });
   });
