@@ -251,7 +251,7 @@ export function CollectionView({
                       onClick={() => onAddToPlaylist(track)}
                       aria-label={`Add ${track.name} to playlist`}
                       title="Add to playlist"
-                      className="hidden p-1 text-zinc-400 opacity-0 transition-opacity group-hover:opacity-100 hover:text-white sm:inline-flex"
+                      className="inline-flex shrink-0 p-1 text-zinc-400 opacity-100 transition-opacity hover:text-white sm:opacity-0 sm:group-hover:opacity-100"
                     >
                       <Plus className="h-3.5 w-3.5" />
                     </button>
