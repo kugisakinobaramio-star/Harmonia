@@ -1065,26 +1065,6 @@ export default function App() {
         loadAndPlayCandidate(0, playSeq, onCandidatesExhausted);
       };
 
-      const playYouTubeAudio = (youtubeId: string) => {
-        if (playSeq !== playbackSeqRef.current) return;
-        activeEngineRef.current = 'yt';
-        try {
-          audio?.pause();
-        } catch {}
-        if (ytPlayerRef.current && isYtReadyRef.current) {
-          try {
-            ytPlayerRef.current.loadVideoById(youtubeId);
-            ytPlayerRef.current.setVolume(volume);
-            if (volume === 0) ytPlayerRef.current.mute();
-            else ytPlayerRef.current.unMute();
-            ytPlayerRef.current.playVideo();
-            setIsPlaying(true);
-          } catch {}
-        } else {
-          pendingYtVideoIdRef.current = youtubeId;
-          setIsPlaying(true);
-        }
-      };
 
       // 1. Direct full-length audio stream (e.g. JioSaavn 320k or Audius verified)
       if (hasFullAudioStream(track)) {
@@ -1105,8 +1085,7 @@ export default function App() {
         if (playSeq !== playbackSeqRef.current) return;
         if (
           (resolved.streamUrls && Object.keys(resolved.streamUrls).length > 0) ||
-          resolved.previewUrl ||
-          resolved.youtubeId
+          resolved.previewUrl
         ) {
           // Update synchronously before starting YouTube: its iframe may emit onError
           // before the queue state update commits and the ref-sync effect runs.
@@ -1124,7 +1103,6 @@ export default function App() {
                     ...qItem,
                     streamUrls: resolved.streamUrls || qItem.streamUrls,
                     previewUrl: resolved.previewUrl || qItem.previewUrl,
-                    youtubeId: resolved.youtubeId || qItem.youtubeId,
                   }
                 : qItem
             )
