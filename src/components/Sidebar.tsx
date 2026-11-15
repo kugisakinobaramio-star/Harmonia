@@ -1,4 +1,4 @@
-import { Download, Heart, Library, Plus, X } from 'lucide-react';
+import { Compass, Download, Heart, Library, Plus, X } from 'lucide-react';
 import { useState } from 'react';
 import { ARTWORK, SEED_ARTISTS, SEED_PLAYLISTS } from '../data/catalog';
 import type { ArtistProfile, CuratedPlaylist, Track, ViewName } from '../types/music';
@@ -55,6 +55,9 @@ export function Sidebar({
           mobileOpen ? 'translate-x-0' : '-translate-x-[112%]'
         }`}
       >
+        <button type="button" onClick={() => { onSelectView('discover'); onCloseMobile(); }} className={`mb-3 flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-sm font-semibold transition-colors ${activeView === 'discover' ? 'bg-white/10 text-white' : 'text-zinc-300 hover:bg-white/[0.06] hover:text-white'}`}>
+          <Compass className="h-4 w-4" /> Discover
+        </button>
         <div className="flex items-center justify-between px-1 pb-3">
           <button
             type="button"
