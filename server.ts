@@ -1918,7 +1918,8 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
           audiusPromise,
           fetchWithTimeout(
             'https://api.jamendo.com/v3.0/tracks/?client_id=5c361a6b&format=json&limit=' +
-            limit + '&offset=' + offset + '&search=' + encodeURIComponent(query) + '&imagesize=300',
+            limit + '&offset=' + offset + '&search=' + encodeURIComponent(query) +
+            '&imagesize=300&audioformat=mp32&include=licenses&ccnc=true',
             3200
           ).then((r) => r.ok ? r.json() : null),
           Promise.allSettled(
@@ -2005,7 +2006,32 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
           const artist = String(item.artist_name || '').trim();
           const duration = Number(item.duration || 0);
           const audio = String(item.audio || '').trim();
-          if (!title || !artist || !audio || !isPlausibleSongDuration(duration)) return null;
+          const pageUrl = String(item.shareurl || '').trim().replace(/^http:/i, 'https:');
+          const licenseUrl = String(item.license_ccurl || '').trim().replace(/^http:/i, 'https:');
+          let safePageUrl = '';
+          let safeAudioUrl = '';
+          try {
+            const page = new URL(pageUrl);
+            const audioTarget = new URL(audio);
+            if (
+              page.protocol !== 'https:' ||
+              page.hostname !== 'www.jamendo.com' ||
+              !page.pathname.startsWith('/track/') ||
+              audioTarget.protocol !== 'https:' ||
+              !audioTarget.hostname.toLowerCase().endsWith('.jamendo.com')
+            ) return null;
+            safePageUrl = page.toString();
+            safeAudioUrl = audioTarget.toString();
+          } catch {
+            return null;
+          }
+          if (
+            !title ||
+            !artist ||
+            !safeAudioUrl ||
+            !isPlausibleSongDuration(duration) ||
+            !isAllowedJamendoNonCommercialLicense(licenseUrl)
+          ) return null;
           if (
             !isRelevantSongSearchCandidate(title, artist, query) ||
             isRemixOrKnockoff(title, query, artist, query)
@@ -2021,10 +2047,12 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
             language: inferLanguage(title + ' ' + artist, ''),
             region: 'GLOBAL',
             genre: 'Jamendo',
-            hasLyrics: true,
-            streamUrls: { '160kbps': audio },
+            streamUrls: { '160kbps': safeAudioUrl },
             sourceProvider: 'Jamendo',
             sourceAvailability: 'full',
+            sourcePageUrl: safePageUrl,
+            sourceLicense: licenseUrl,
+            offlineAvailable: false,
           };
         })
         .filter((track): track is StoredTrack => track !== null);
