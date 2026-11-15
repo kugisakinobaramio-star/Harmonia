@@ -958,13 +958,6 @@ export default function App() {
                       ? resolved.offlineAvailable
                       : qItem.offlineAvailable,
                     youtubeAlternates: resolved.youtubeAlternates || qItem.youtubeAlternates,
-                    sourceProvider: resolved.sourceProvider || qItem.sourceProvider,
-                    sourceAvailability: resolved.sourceAvailability || qItem.sourceAvailability,
-                    sourcePageUrl: resolved.sourcePageUrl || qItem.sourcePageUrl,
-                    sourceLicense: resolved.sourceLicense || qItem.sourceLicense,
-                    offlineAvailable: typeof resolved.offlineAvailable === 'boolean'
-                      ? resolved.offlineAvailable
-                      : qItem.offlineAvailable,
                   }
                 : qItem
             )
