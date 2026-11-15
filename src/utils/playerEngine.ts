@@ -104,6 +104,35 @@ export function toProxiedImageUrl(url?: string): string {
   return url;
 }
 
+export type ResolvedTrackSources = Partial<
+  Pick<Track, 'streamUrls' | 'previewUrl' | 'youtubeId'>
+> & { alternates?: string[] };
+
+/**
+ * Apply newly resolved audio sources to a track. A forced refresh deliberately
+ * clears stale values when the resolver does not return replacements.
+ */
+export function mergeResolvedTrackSources(
+  track: Track,
+  sources: ResolvedTrackSources,
+  forceRefresh = false
+): Track & { alternates?: string[] } {
+  const hasFreshStreams = Boolean(
+    sources.streamUrls && Object.keys(sources.streamUrls).length > 0
+  );
+  return {
+    ...track,
+    streamUrls: hasFreshStreams
+      ? sources.streamUrls
+      : forceRefresh
+        ? undefined
+        : track.streamUrls,
+    previewUrl: sources.previewUrl || (forceRefresh ? undefined : track.previewUrl),
+    youtubeId: sources.youtubeId || (forceRefresh ? undefined : track.youtubeId),
+    alternates: sources.alternates,
+  };
+}
+
 export function cycleQuality(current: AudioQuality): AudioQuality {
   const idx = QUALITY_ORDER.indexOf(current);
   if (idx < 0) return '320kbps';
