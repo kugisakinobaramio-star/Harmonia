@@ -53,7 +53,7 @@ Harmonia uses multiple independent providers because no single catalogue offers 
 | Audius / Open Audio Protocol | Search and full-track stream candidates | Open catalogue; availability and rights depend on each upload. Uses the canonical Audius API with a discovery-provider fallback. |
 | Internet Archive | Fallback for openly licensed audio | Used only when no full stream has been found. Harmonia filters to CC0, CC BY and CC BY-SA item licences and checks title, creator and available runtime metadata. The archive is not a substitute for commercial music catalogues. |
 | JioSaavn community API | Search metadata and candidate audio URLs | Third-party integration, not an official JioSaavn developer API. It can change or become unavailable. |
-| Jamendo | Candidate audio from its catalogue | Check each recording's licence and the service's API terms. Do not assume every recording has identical reuse rights. |
+| Jamendo | Candidate audio from its catalogue | API access is free for non-commercial use under the published terms; each recording has its own Creative Commons licence. Commercial use requires a separate agreement, and API access does not guarantee uptime. |
 | Deezer | Search metadata and short previews | Preview access is not full-track streaming access. |
 | Apple iTunes Search | Search metadata and short previews | Preview URLs are not full-length tracks. |
 | YouTube | Official embedded-player fallback | Playback is subject to YouTube availability, embed permissions and regional restrictions. Harmonia does not extract or bypass protected streams. |
