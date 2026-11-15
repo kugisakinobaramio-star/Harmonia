@@ -747,6 +747,32 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
   cloudflareWorkerRuntime = mode === 'worker';
   const app = express();
   app.disable('x-powered-by');
+
+  // Permit the hosted GitHub Pages frontend and the packaged Capacitor app
+  // to call this API. Keep the allowlist explicit rather than reflecting
+  // arbitrary Origin headers.
+  const allowedApiOrigins = new Set([
+    'https://kugisakinobaramio-star.github.io',
+    'https://localhost',
+    'capacitor://localhost',
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+  ]);
+  app.use((req, res, next) => {
+    const origin = req.get('origin');
+    if (origin && allowedApiOrigins.has(origin)) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+      res.setHeader('Vary', 'Origin');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+      res.setHeader('Access-Control-Max-Age', '86400');
+    }
+    if (req.method === 'OPTIONS') {
+      res.status(204).end();
+      return;
+    }
+    next();
+  });
   app.use((_req, res, next) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
