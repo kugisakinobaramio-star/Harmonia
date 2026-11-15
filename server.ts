@@ -5,6 +5,7 @@ import { isIP } from 'node:net';
 import { isPublicAddress } from './src/utils/networkSecurity.ts';
 import { fileURLToPath } from 'node:url';
 import {
+  isPlausibleSongDuration,
   isRemixOrKnockoff,
   scoreAuthenticTrackCandidate,
 } from './src/utils/playerEngine.ts';
@@ -1031,6 +1032,108 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
     duration?: number;
   }
 
+  interface InternetArchiveSearchDoc {
+    identifier?: string;
+    title?: string;
+    creator?: string | string[];
+    licenseurl?: string | string[];
+  }
+
+  interface InternetArchiveFile {
+    name?: string;
+    format?: string;
+    size?: string;
+    private?: string;
+  }
+
+  function hasReusableArchiveLicense(value: string): boolean {
+    return /creativecommons\.org\/(?:publicdomain\/zero|licenses\/by\/|licenses\/by-sa\/)/i.test(value);
+  }
+
+  function parseArchiveRuntime(value: unknown): number | undefined {
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+    if (typeof value !== 'string') return undefined;
+    const parts = value.trim().split(':').map(Number);
+    if (!parts.length || parts.some((part) => !Number.isFinite(part))) return undefined;
+    if (parts.length === 2) return parts[0] * 60 + parts[1];
+    if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+    return undefined;
+  }
+
+  async function resolveInternetArchiveStream(
+    cleanTitle: string,
+    primaryArtist: string,
+    targetDurationSec = 0
+  ): Promise<string | undefined> {
+    try {
+      const safeTerm = (value: string) => value.replace(/["\\]/g, ' ').trim();
+      const query = `mediatype:audio AND title:"${safeTerm(cleanTitle)}" AND creator:"${safeTerm(primaryArtist)}"`;
+      const searchUrl =
+        `https://archive.org/advancedsearch.php?q=${encodeURIComponent(query)}` +
+        `&fl[]=identifier&fl[]=title&fl[]=creator&fl[]=licenseurl&fl[]=runtime&rows=6&page=1&output=json`;
+      const searchResponse = await fetchWithTimeout(searchUrl, 4000);
+      if (!searchResponse.ok) return undefined;
+      const searchJson = (await searchResponse.json()) as {
+        response?: { docs?: InternetArchiveSearchDoc[] };
+      };
+      const docs = searchJson.response?.docs || [];
+
+      for (const doc of docs) {
+        const identifier = String(doc.identifier || '').trim();
+        const creator = Array.isArray(doc.creator) ? doc.creator.join(', ') : String(doc.creator || '');
+        const licenseValues = Array.isArray(doc.licenseurl) ? doc.licenseurl : [doc.licenseurl || ''];
+        if (!identifier || !licenseValues.some(hasReusableArchiveLicense)) continue;
+
+        const score = scoreAuthenticTrackCandidate({
+          itemTitle: String(doc.title || ''),
+          itemArtist: creator,
+          requestedTitle: cleanTitle,
+          requestedArtist: primaryArtist,
+          itemDurationSec: parseArchiveRuntime((doc as { runtime?: unknown }).runtime),
+          targetDurationSec,
+        });
+        if (score === null) continue;
+
+        const metadataResponse = await fetchWithTimeout(
+          `https://archive.org/metadata/${encodeURIComponent(identifier)}`,
+          3500
+        );
+        if (!metadataResponse.ok) continue;
+        const metadataJson = (await metadataResponse.json()) as {
+          metadata?: { licenseurl?: string; runtime?: string | number };
+          files?: InternetArchiveFile[];
+        };
+        const metadataLicense = String(metadataJson.metadata?.licenseurl || '');
+        if (!hasReusableArchiveLicense(metadataLicense)) continue;
+        const runtime = parseArchiveRuntime(metadataJson.metadata?.runtime);
+        if (runtime !== undefined && !isPlausibleSongDuration(runtime)) continue;
+
+        const audioFile = (metadataJson.files || [])
+          .filter((file) => {
+            const name = String(file.name || '');
+            const size = Number(file.size || 0);
+            return (
+              /\.(?:mp3|ogg|opus|m4a|flac)$/i.test(name) &&
+              file.private !== 'true' &&
+              (!size || size <= 150 * 1024 * 1024)
+            );
+          })
+          .sort((a, b) => {
+            const rank = (name: string) =>
+              /\.mp3$/i.test(name) ? 0 : /\.ogg$/i.test(name) ? 1 : /\.opus$/i.test(name) ? 2 : 3;
+            return rank(String(a.name || '')) - rank(String(b.name || ''));
+          })[0];
+        if (!audioFile?.name) continue;
+
+        const encodedPath = audioFile.name.split('/').map(encodeURIComponent).join('/');
+        return `https://archive.org/download/${encodeURIComponent(identifier)}/${encodedPath}`;
+      }
+    } catch {
+      // The archive is an optional, best-effort source; other providers remain available.
+    }
+    return undefined;
+  }
+
   async function resolveJamendoStream(
     cleanTitle: string,
     primaryArtist: string,
@@ -1158,6 +1261,22 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
       }
     }
 
+    let internetArchiveAttempted = false;
+    let internetArchiveSelected = false;
+    if (!fullAlternates.length && !Object.values(streamUrls).some(Boolean)) {
+      internetArchiveAttempted = true;
+      const archiveUrl = await resolveInternetArchiveStream(
+        cleanTitle,
+        primaryArtist,
+        targetDurationSec
+      );
+      if (archiveUrl) {
+        streamUrls['160kbps'] = archiveUrl;
+        fullAlternates.push(archiveUrl);
+        internetArchiveSelected = true;
+      }
+    }
+
     if (deezerSettled.status === 'fulfilled' && deezerSettled.value?.data?.length) {
       const dzList = deezerSettled.value.data as DeezerTrackRaw[];
       const bestDz = dzList
@@ -1254,6 +1373,10 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
         jamendo: {
           request: jamendoSettled.status,
           candidateSelected: Boolean(jamendoSettled.status === 'fulfilled' && jamendoSettled.value),
+        },
+        internetArchive: {
+          attempted: internetArchiveAttempted,
+          selected: internetArchiveSelected,
         },
         youtube: { attempted: !streamUrls['320kbps'] || forceRefresh, matched: Boolean(youtubeId) },
       },
