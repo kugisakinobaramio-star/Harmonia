@@ -12,7 +12,7 @@ import {
   hasFullAudioStream,
   isRemixOrKnockoff,
   isMatchingLyricsCandidate,
-  getTitleOnlySearchFallback,
+  getSearchFallbackQueries,
   isPlausibleSongDuration,
   isRelevantTrackTitle,
   isShortPreviewUrl,
@@ -540,10 +540,10 @@ test('removeQueueItem preserves the current track index and reports when playbac
   assert.equal(invalid.removedCurrent, false);
 });
 
-test('title-only search fallback removes a trailing artist pair without changing short queries', () => {
-  assert.equal(getTitleOnlySearchFallback('Maharani Arpit Bala'), 'Maharani');
-  assert.equal(getTitleOnlySearchFallback('lovely Billie Eilish'), 'lovely');
-  assert.equal(getTitleOnlySearchFallback('A Sky Full of Stars Coldplay'), 'A Sky Full of Stars');
-  assert.equal(getTitleOnlySearchFallback('Billie Eilish'), '');
-  assert.equal(getTitleOnlySearchFallback('Maharani'), '');
+test('search fallback tries title prefixes with one- and two-word artist names', () => {
+  assert.deepEqual(getSearchFallbackQueries('Maharani Arpit Bala'), ['Maharani Arpit', 'Maharani']);
+  assert.deepEqual(getSearchFallbackQueries('lovely Billie Eilish'), ['lovely Billie', 'lovely']);
+  assert.deepEqual(getSearchFallbackQueries('A Sky Full of Stars Coldplay'), ['A Sky Full of Stars', 'A Sky Full of']);
+  assert.deepEqual(getSearchFallbackQueries('Billie Eilish'), []);
+  assert.deepEqual(getSearchFallbackQueries('Maharani'), []);
 });
