@@ -1349,6 +1349,9 @@ export default function App() {
     register('pause', () => {
       if (isPlayingRef.current) handleTogglePlay();
     });
+    register('stop', () => {
+      if (isPlayingRef.current) handleTogglePlay();
+    });
     register('previoustrack', () => advanceTrack(-1, false));
     register('nexttrack', () => advanceTrack(1, false));
     register('seekbackward', (details) => {
@@ -1366,6 +1369,7 @@ export default function App() {
     return () => {
       register('play', null);
       register('pause', null);
+      register('stop', null);
       register('previoustrack', null);
       register('nexttrack', null);
       register('seekbackward', null);
@@ -1377,7 +1381,11 @@ export default function App() {
   useEffect(() => {
     if (typeof navigator === 'undefined' || !('mediaSession' in navigator)) return;
     const session = navigator.mediaSession;
-    session.playbackState = isPlaying ? 'playing' : 'paused';
+    session.playbackState = currentTrack ? (isPlaying ? 'playing' : 'paused') : 'none';
+    if (!currentTrack) {
+      try { session.setPositionState(); } catch {}
+      return;
+    }
     if (duration > 0 && Number.isFinite(duration)) {
       try {
         session.setPositionState({

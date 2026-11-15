@@ -1,6 +1,7 @@
 import { Compass, Play, Shuffle } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { MusicLanguage, Track } from '../types/music';
+import { rankDiscoverTracks } from '../utils/playerEngine';
 import { CoverImage } from './CoverImage';
 
 interface DiscoverViewProps {
@@ -19,74 +20,13 @@ interface DiscoverViewProps {
 
 const LANGUAGES: Array<MusicLanguage | 'All'> = ['All', 'Hindi', 'Punjabi', 'Haryanvi', 'English', 'Japanese', 'J-Pop', 'Korean', 'Tamil', 'Telugu', 'Bengali'];
 
-function primaryArtist(track: Track): string {
-  return track.artist.split(/,|&| feat\.? | ft\.? /i)[0].trim().toLowerCase();
-}
-
-function buildVariedList(tracks: Track[], recentlyPlayed: Track[], rotation: number, taste: { likedTracks: Track[]; playCounts: Record<string, number>; artistAffinity: Record<string, number>; genreAffinity: Record<string, number>; preferredLanguages: MusicLanguage[]; favoriteArtists: string[]; preferredMoods: string[] }): Track[] {
-  const recent = new Set(recentlyPlayed.slice(0, 8).map((track) => track.id));
-  const likedArtists = new Set(taste.likedTracks.map((track) => primaryArtist(track)));
-  const likedGenres = new Set(taste.likedTracks.map((track) => (track.genre || '').toLowerCase()).filter(Boolean));
-  const favoriteArtists = new Set(taste.favoriteArtists.map((artist) => artist.toLowerCase()));
-  const preferredLanguages = new Set(taste.preferredLanguages.map((language) => language.toLowerCase()));
-  const preferredMoods = new Set(taste.preferredMoods.map((mood) => mood.toLowerCase()));
-  const score = (track: Track) => {
-    const artist = primaryArtist(track);
-    const genre = (track.genre || '').toLowerCase();
-    const language = (track.language || '').toLowerCase();
-    const moodText = [track.genre, track.albumName, track.name].join(' ').toLowerCase();
-    const artistTaste = Object.entries(taste.artistAffinity).find(([name]) => name.toLowerCase() === artist)?.[1] || 0;
-    const genreTaste = Object.entries(taste.genreAffinity).find(([name]) => name.toLowerCase() === genre)?.[1] || 0;
-    const plays = taste.playCounts[track.id] || 0;
-    return (likedArtists.has(artist) ? 2 : 0) + (favoriteArtists.has(artist) ? 1.5 : 0) + Math.min(3, artistTaste * 0.35) + (likedGenres.has(genre) ? 1.25 : 0) + Math.min(2, genreTaste * 0.3) + (preferredLanguages.has(language) ? 1.2 : 0) + ([...preferredMoods].some((mood) => moodText.includes(mood)) ? 0.8 : 0) - Math.min(2, plays * 0.5);
-  };
-  const unique = new Map<string, Track>();
-  for (const track of tracks) {
-    const key = `${track.name.toLowerCase()}::${primaryArtist(track)}`;
-    if (!recent.has(track.id) && !unique.has(key)) unique.set(key, track);
-  }
-  const rotationJitter = (track: Track) => {
-    const value = track.name + '::' + primaryArtist(track) + '::' + rotation;
-    let result = 0;
-    for (let index = 0; index < value.length; index += 1) result = (result * 31 + value.charCodeAt(index)) >>> 0;
-    return (result / 0xffffffff) * 0.2;
-  };
-  const pool = [...unique.values()].sort(
-    (a, b) => (score(b) + rotationJitter(b)) - (score(a) + rotationJitter(a))
-  );
-  if (!pool.length) return [];
-
-  // Rotate the source order, then prioritise a mix of artists and genres.
-  const offset = rotation % pool.length;
-  const rotated = [...pool.slice(offset), ...pool.slice(0, offset)];
-  const usedArtists = new Set<string>();
-  const usedGenres = new Set<string>();
-  const firstPass: Track[] = [];
-  const secondPass: Track[] = [];
-  const thirdPass: Track[] = [];
-  for (const track of rotated) {
-    const artist = primaryArtist(track);
-    const genre = (track.genre || '').trim().toLowerCase();
-    if (!usedArtists.has(artist) && (!genre || !usedGenres.has(genre))) {
-      usedArtists.add(artist);
-      if (genre) usedGenres.add(genre);
-      firstPass.push(track);
-    } else if (!usedArtists.has(artist)) {
-      usedArtists.add(artist);
-      secondPass.push(track);
-    } else {
-      thirdPass.push(track);
-    }
-  }
-  return [...firstPass, ...secondPass, ...thirdPass];
-}
 
 export function DiscoverView({ tracks, recentlyPlayed, onPlayTrackList, onRefresh, likedTracks, playCounts, artistAffinity, genreAffinity, preferredLanguages, favoriteArtists, preferredMoods }: DiscoverViewProps) {
   const [language, setLanguage] = useState<MusicLanguage | 'All'>('All');
   const [rotation, setRotation] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const varied = useMemo(
-    () => buildVariedList(tracks, recentlyPlayed, rotation, { likedTracks, playCounts, artistAffinity, genreAffinity, preferredLanguages, favoriteArtists, preferredMoods }),
+    () => rankDiscoverTracks(tracks, recentlyPlayed, { likedTracks, playCounts, artistAffinity, genreAffinity, preferredLanguages, favoriteArtists, preferredMoods }, rotation),
     [tracks, recentlyPlayed, rotation, likedTracks, playCounts, artistAffinity, genreAffinity, preferredLanguages, favoriteArtists, preferredMoods]
   );
   const visible = language === 'All' ? varied : varied.filter((track) => track.language === language);

@@ -20,6 +20,7 @@ import {
   parseLrcLyrics,
   parsePlainLyricsToLines,
   reorderQueueItem,
+  rankDiscoverTracks,
   resolveActiveLyricPair,
   resolveNextTrackIndex,
   scoreAuthenticTrackCandidate,
@@ -375,4 +376,51 @@ test('isRelevantTrackTitle blocks unrelated search results while allowing title-
   assert.equal(isRelevantTrackTitle('Training Season', 'Dua Lipa Training Season'), true);
   assert.equal(isRelevantTrackTitle('Training Season - Dua Lipa', 'Dua Lipa Training Season'), true);
   assert.equal(isRelevantTrackTitle('Sapphire', 'Training Season'), false);
+});
+
+
+test('rankDiscoverTracks uses local taste signals and suppresses recently played tracks', () => {
+  const pool: Track[] = [
+    { ...sampleTracks[0], id: 'fresh-a', name: 'Fresh A', artist: 'Arijit Singh', genre: 'Bollywood' },
+    { ...sampleTracks[0], id: 'fresh-b', name: 'Fresh B', artist: 'Arijit Singh', genre: 'Bollywood' },
+    { ...sampleTracks[1], id: 'fresh-c', name: 'Fresh C', artist: 'The Weeknd', genre: 'Synthpop' },
+    { ...sampleTracks[2], id: 'fresh-d', name: 'Fresh D', artist: 'YOASOBI', genre: 'J-Pop' },
+    { ...sampleTracks[0], id: 'recent-x', name: 'Just Played', artist: 'New Artist', genre: 'Bollywood' },
+  ];
+  const taste = {
+    likedTracks: [sampleTracks[2]],
+    playCounts: {},
+    artistAffinity: { YOASOBI: 8 },
+    genreAffinity: { 'J-Pop': 5 },
+    preferredLanguages: ['J-Pop', 'Hindi'] as ['J-Pop', 'Hindi'],
+    favoriteArtists: ['YOASOBI'],
+    preferredMoods: ['Anime'],
+  };
+  const ranked = rankDiscoverTracks(pool, [pool[4]], taste, 0);
+  assert.equal(ranked.some((track) => track.id === 'recent-x'), false);
+  assert.equal(ranked[0].id, 'fresh-d');
+  assert.deepEqual(new Set(ranked.map((track) => track.id)).size, ranked.length);
+});
+
+test('rankDiscoverTracks diversifies artists, preserves a fallback when everything is recent, and does not mutate inputs', () => {
+  const pool: Track[] = [
+    { ...sampleTracks[0], id: 'artist-a1', name: 'A1', artist: 'Same Artist', genre: 'Pop' },
+    { ...sampleTracks[0], id: 'artist-a2', name: 'A2', artist: 'Same Artist', genre: 'Pop' },
+    { ...sampleTracks[1], id: 'artist-b1', name: 'B1', artist: 'Different Artist', genre: 'Rock' },
+    { ...sampleTracks[2], id: 'artist-c1', name: 'C1', artist: 'Third Artist', genre: 'J-Pop' },
+  ];
+  const originalIds = pool.map((track) => track.id);
+  const taste = {
+    likedTracks: [],
+    playCounts: {},
+    artistAffinity: {},
+    genreAffinity: {},
+    preferredLanguages: [] as [],
+    favoriteArtists: [],
+    preferredMoods: [],
+  };
+  const ranked = rankDiscoverTracks(pool, pool, taste, 1);
+  assert.equal(ranked.length, pool.length);
+  assert.equal(ranked[0].id === 'artist-a1' && ranked[1].id === 'artist-a2', false);
+  assert.deepEqual(pool.map((track) => track.id), originalIds);
 });
