@@ -16,6 +16,7 @@ import {
   isRelevantSongSearchCandidate,
   isAllowedJamendoNonCommercialLicense,
   isPlausibleSongDuration,
+  isSearchableTrackDuration,
   isRelevantTrackTitle,
   isShortPreviewUrl,
   isSpotifyLinkOrUri,
@@ -565,4 +566,13 @@ test('Jamendo candidate licensing accepts only recognized Creative Commons non-c
   assert.equal(isAllowedJamendoNonCommercialLicense('https://creativecommons.org/licenses/by/4.0/'), false);
   assert.equal(isAllowedJamendoNonCommercialLicense('https://example.com/license'), false);
   assert.equal(isAllowedJamendoNonCommercialLicense('javascript:alert(1)'), false);
+});
+
+test('unknown duration is retained only when a catalogue entry or playable source exists', () => {
+  assert.equal(isSearchableTrackDuration({ duration: 0, metadataOnly: true }), true);
+  assert.equal(isSearchableTrackDuration({ duration: 0, previewUrl: 'https://example.com/preview.mp3' }), true);
+  assert.equal(isSearchableTrackDuration({ duration: 0, streamUrls: { '160kbps': 'https://example.com/full.mp3' } }), true);
+  assert.equal(isSearchableTrackDuration({ duration: 0 }), false);
+  assert.equal(isSearchableTrackDuration({ duration: 20 }), false);
+  assert.equal(isSearchableTrackDuration({ duration: 180 }), true);
 });
