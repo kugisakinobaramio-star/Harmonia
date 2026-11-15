@@ -22,6 +22,7 @@ import {
   parseLrcLyrics,
   parsePlainLyricsToLines,
   reorderQueueItem,
+  removeQueueItem,
   rankDiscoverTracks,
   resolveActiveLyricPair,
   resolveNextTrackIndex,
@@ -515,4 +516,25 @@ test('lyrics lookup candidates must match both title and artist, with compatible
     ),
     false
   );
+});
+
+test('removeQueueItem preserves the current track index and reports when playback must change', () => {
+  const beforeCurrent = removeQueueItem(sampleTracks, 2, 0);
+  assert.deepEqual(beforeCurrent.queue.map((track) => track.id), ['t2', 't3', 't4']);
+  assert.equal(beforeCurrent.currentIndex, 1);
+  assert.equal(beforeCurrent.removedCurrent, false);
+
+  const current = removeQueueItem(sampleTracks, 1, 1);
+  assert.deepEqual(current.queue.map((track) => track.id), ['t1', 't3', 't4']);
+  assert.equal(current.currentIndex, 1);
+  assert.equal(current.removedCurrent, true);
+
+  const last = removeQueueItem([sampleTracks[0]], 0, 0);
+  assert.deepEqual(last.queue, []);
+  assert.equal(last.currentIndex, 0);
+  assert.equal(last.removedCurrent, true);
+
+  const invalid = removeQueueItem(sampleTracks, 1, 99);
+  assert.strictEqual(invalid.queue, sampleTracks);
+  assert.equal(invalid.removedCurrent, false);
 });
