@@ -8,6 +8,8 @@ interface DownloadButtonProps {
   size?: 'xs' | 'sm' | 'md';
   variant?: 'circle' | 'pill';
   className?: string;
+  disabled?: boolean;
+  disabledReason?: string;
 }
 
 export function DownloadButton({
@@ -18,6 +20,8 @@ export function DownloadButton({
   size = 'sm',
   variant = 'circle',
   className = '',
+  disabled = false,
+  disabledReason,
 }: DownloadButtonProps) {
   const boxSize =
     size === 'xs'
@@ -32,17 +36,20 @@ export function DownloadButton({
         ? 'h-4 w-4'
         : 'h-3.5 w-3.5';
 
-  const label = downloading
-    ? `Downloading ${trackName}`
-    : downloaded
-      ? `Remove ${trackName} from downloads`
-      : `Download ${trackName} for offline listening`;
+  const isDisabled = downloading || disabled;
+  const label = disabled
+    ? disabledReason || `Offline listening is not available for ${trackName}`
+    : downloading
+      ? `Downloading ${trackName}`
+      : downloaded
+        ? `Remove ${trackName} from downloads`
+        : `Download ${trackName} for offline listening`;
 
   if (variant === 'pill') {
     return (
       <button
         type="button"
-        disabled={downloading}
+        disabled={isDisabled}
         onClick={(e) => {
           e.stopPropagation();
           onClick(e);
@@ -83,7 +90,7 @@ export function DownloadButton({
       aria-label={label}
       aria-pressed={downloaded}
       title={label}
-      className={`grid shrink-0 place-items-center rounded-full transition-transform hover:scale-105 disabled:cursor-wait ${boxSize} ${
+      className={`grid shrink-0 place-items-center rounded-full transition-transform hover:scale-105 disabled:cursor-not-allowed disabled:opacity-50 ${boxSize} ${
         downloaded
           ? 'bg-[#1DB954] text-black shadow-sm'
           : downloading
