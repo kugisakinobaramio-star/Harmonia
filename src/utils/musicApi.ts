@@ -602,28 +602,48 @@ export async function loadCollectionTracks(
   };
 }
 
+function videoSearchTokens(value: string): string[] {
+  const ignored = new Set(['official', 'music', 'video', 'videos', 'audio', 'lyrics', 'hd', '4k', 'full', 'song']);
+  return value.toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ').trim().split(/\s+/)
+    .filter((token) => token.length > 1 && !ignored.has(token));
+}
+
 export async function searchVideos(query: string): Promise<VideoResult[]> {
-  const q = query.trim().toLowerCase();
-  const localVids = SEED_VIDEOS.filter(
-    (v) => !q || v.title.toLowerCase().includes(q) || v.channel.toLowerCase().includes(q)
-  );
+  const trimmed = query.trim();
+  if (!trimmed) return [];
+  const tokens = videoSearchTokens(trimmed);
+  if (!tokens.length) return [];
 
   try {
-    const res = await fetch(`/api/music/videos?query=${encodeURIComponent(query)}&limit=12`);
-    if (res.ok) {
-      const json = (await res.json()) as { ok?: boolean; results?: VideoResult[] };
-      if (json.ok && json.results?.length) {
-        return json.results.map((v) => ({
-          ...v,
-          thumbnail: toProxiedImageUrl(`https://i.ytimg.com/vi/${v.id}/hqdefault.jpg`),
-        }));
-      }
-    }
+    const res = await fetch(`/api/music/videos?query=${encodeURIComponent(trimmed)}&limit=16`);
+    if (!res.ok) return [];
+    const json = (await res.json()) as { ok?: boolean; results?: VideoResult[] };
+    const results = Array.isArray(json.results) ? json.results : [];
+    const ranked = results
+      .filter((video) => video.id && video.title)
+      .map((video) => {
+        const title = videoSearchTokens(video.title);
+        const channel = videoSearchTokens(video.channel || '');
+        const titleHits = tokens.filter((token) => title.some((part) => part.includes(token) || token.includes(part))).length;
+        const channelHits = tokens.filter((token) => channel.some((part) => part.includes(token) || token.includes(part))).length;
+        const phrase = trimmed.toLowerCase().replace(/\s+/g, ' ');
+        const titleText = (video.title || '').toLowerCase();
+        const score = (titleHits / tokens.length) * 100 + (channelHits / tokens.length) * 18
+          + (titleText.includes(phrase) ? 35 : 0);
+        return { video, score };
+      })
+      .filter((item) => item.score >= 32)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 12)
+      .map(({ video }) => ({
+        ...video,
+        thumbnail: toProxiedImageUrl(`https://i.ytimg.com/vi/${video.id}/hqdefault.jpg`),
+      }));
+    return ranked;
   } catch {
-    // Fallback
+    return [];
   }
-
-  return localVids.length ? localVids : SEED_VIDEOS;
 }
 
 export async function fetchTrackLyrics(track: Track): Promise<{ lines: LyricLine[]; synced: boolean }> {
