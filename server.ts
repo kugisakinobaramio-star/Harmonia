@@ -278,6 +278,7 @@ function inferLanguage(text: string, hintLang?: string): 'Hindi' | 'Punjabi' | '
   if (/[\u0d00-\u0d7f]/.test(text)) return 'Malayalam';
   if (/[\u0a80-\u0aff]/.test(text)) return 'Gujarati';
   if (/[\u0600-\u06ff]/.test(text)) return 'Urdu';
+  if (/[\u0900-\u097f]/.test(text)) return 'Hindi';
   if (/[\uac00-\ud7af]/.test(text)) return 'Korean';
   if (/[\u3040-\u30ff]/.test(text)) return 'Japanese';
   if (/[\u4e00-\u9fff]/.test(text)) return 'Chinese';
