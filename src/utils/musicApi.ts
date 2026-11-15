@@ -319,7 +319,7 @@ export async function searchSongs(
             .map(mapMusicBrainzRecording)
             .filter(
               (track) =>
-                isPlausibleSongDuration(track.duration) &&
+                (isPlausibleSongDuration(track.duration) || (track.metadataOnly && track.duration === 0)) &&
                 isRelevantSearchCandidate(track, trimmed)
             )
         : [];
