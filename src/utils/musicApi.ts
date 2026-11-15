@@ -25,7 +25,6 @@ import {
   isRemixOrKnockoff,
   isPlausibleSongDuration,
   isRelevantTrackTitle,
-  isUnnecessaryNoLyricsTrack,
   toProxiedImageUrl,
 } from './playerEngine';
 
@@ -597,7 +596,7 @@ export async function loadCollectionTracks(
       if (json.ok && json.data?.songs?.length) {
         const tracks = json.data.songs
           .map(mapSaavnSong)
-          .filter((t) => !isUnnecessaryNoLyricsTrack(t) && !isRemixOrKnockoff(t.name, '', t.artist, ''));
+          .filter((t) => !isRemixOrKnockoff(t.name, '', t.artist, ''));
         const saavnImages = Array.isArray(json.data.image) ? json.data.image : undefined;
         return {
           title: decodeHtmlEntities(json.data.name || 'Collection'),
