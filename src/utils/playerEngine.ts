@@ -96,7 +96,7 @@ export function toProxiedImageUrl(url?: string): string {
     url.startsWith('/') ||
     url.startsWith('data:') ||
     url.startsWith('blob:') ||
-    url.startsWith('/api/music/image')
+    url.startsWith(apiUrl('/api/music/image'))
   ) {
     return url;
   }
