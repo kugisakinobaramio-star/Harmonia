@@ -22,8 +22,9 @@ Harmonia combines a React interface, a small Express API and a Cloudflare Worker
 
 > **Provider reality check:** music catalogues and playback rights differ. Some services provide full streams, while others provide metadata, previews or an embedded player only. A successful search does not guarantee that a full track can be played.
 
-**Live app:** https://harmonia.kugisakinobaramio.workers.dev  
-**Source:** https://github.com/kugisakinobaramio-star/Harmonia
+**🌐 Live app:** https://harmonia.kugisakinobaramio.workers.dev  
+**💻 Source:** https://github.com/kugisakinobaramio-star/Harmonia  
+**📱 Android build:** [Latest debug APK workflow artifact](https://github.com/kugisakinobaramio-star/Harmonia/actions/runs/43725868017) *(testing build; temporary artifact)*
 
 ---
 
