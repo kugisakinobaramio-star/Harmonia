@@ -968,112 +968,6 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
     { expiresAt: number; payload: StreamResolvePayload }
   >();
 
-  async function resolveYouTubeAudioId(
-    cleanTitle: string,
-    primaryArtist: string,
-    targetDurationSec = 0
-  ): Promise<string[]> {
-    const query = `${cleanTitle} ${primaryArtist}`.trim();
-    // Piped instances are community-operated and can disappear or rate-limit requests.
-    // Keep several currently published instances so one outage does not disable fallback.
-    const pipedBases = [
-      'https://pipedapi.kavin.rocks',
-      'https://api.piped.private.coffee',
-      'https://pipedapi.in.projectsegfau.lt',
-      'https://pipedapi.leptons.xyz',
-      'https://pipedapi.nosebs.ru',
-      'https://piped-api.privacy.com.de',
-      'https://pipedapi.adminforge.de',
-      'https://api.piped.yt',
-      'https://pipedapi.drgns.space',
-      'https://pipedapi.owo.si',
-    ];
-    const pipedResults = await Promise.allSettled(
-      pipedBases.map(async (base) => {
-        const endpoint = `${base}/search?q=${encodeURIComponent(query)}&filter=music_songs`;
-        const response = await fetchWithTimeout(endpoint, 3500);
-        if (!response.ok) return [];
-        const data = (await response.json()) as {
-          items?: Array<{
-            url?: string;
-            title?: string;
-            uploaderName?: string;
-            duration?: number;
-            type?: string;
-          }>;
-        };
-        return Array.isArray(data.items) ? data.items : [];
-      })
-    );
-
-    const candidates = pipedResults.flatMap((result) =>
-      result.status === 'fulfilled' ? result.value : []
-    );
-    const scored = candidates
-      .map((item) => {
-        const rawUrl = String(item.url || '').trim();
-        let rawId = '';
-        try {
-          const parsed = new URL(rawUrl, 'https://www.youtube.com');
-          rawId = parsed.searchParams.get('v') || '';
-          if (!rawId && /^\/[a-zA-Z0-9_-]{11}$/.test(parsed.pathname)) {
-            rawId = parsed.pathname.slice(1);
-          }
-        } catch {
-          return null;
-        }
-        if (!/^[a-zA-Z0-9_-]{11}$/.test(rawId)) return null;
-        const dur = typeof item.duration === 'number' ? item.duration : 0;
-        if (dur > 0 && (dur < 45 || dur > 720)) return null;
-
-        const score = scoreAuthenticTrackCandidate({
-          itemTitle: item.title || '',
-          itemArtist: item.uploaderName || '',
-          requestedTitle: cleanTitle,
-          requestedArtist: primaryArtist,
-          itemDurationSec: dur,
-          targetDurationSec,
-        });
-        return { id: rawId, score };
-      })
-      .filter((item): item is { id: string; score: number } => item !== null && item.score !== null)
-      .sort((a, b) => b.score - a.score);
-
-    const youtubeIds = [...new Set(scored.map((item) => item.id))].slice(0, 8);
-
-    // Never fall back to an unverified result: it could be an unrelated upload,
-    // remix, podcast, or long-form mix. The direct YouTube scrape below remains
-    // a secondary source and is held to the same title/artist match requirement.
-
-    // Direct scrape fallback
-    try {
-      const ytUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(
-        `${query} Official Audio`
-      )}`;
-      const ytRes = await fetchWithTimeout(ytUrl, 4000);
-      if (ytRes.ok) {
-        const html = await ytRes.text();
-        const items = parseYouTubeSearchHtml(html, 6);
-        for (const item of items) {
-          // The HTML scrape has no reliable duration field, but still require
-          // a real title + artist match. Never accept the first generic result.
-          const score = scoreAuthenticTrackCandidate({
-            itemTitle: item.title || '',
-            itemArtist: item.channel || '',
-            requestedTitle: cleanTitle,
-            requestedArtist: primaryArtist,
-            targetDurationSec,
-          });
-          if (score !== null && !youtubeIds.includes(item.id)) youtubeIds.push(item.id);
-          if (youtubeIds.length >= 8) break;
-        }
-      }
-    } catch {
-      // Ignore
-    }
-
-    return youtubeIds;
-  }
 
   app.get('/api/music/resolve', async (req, res) => {
     const title = String(req.query.title || '').trim();
@@ -1526,20 +1420,14 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
       }
     }
 
-    // Resolve YouTube as a fallback on forced retries too: a nominal 320k URL may be stale,
-    // blocked, or otherwise unplayable even though the resolver returned it successfully.
-    let youtubeAlternates: string[] = [];
-    if (!streamUrls['320kbps'] || forceRefresh) {
-      youtubeAlternates = await resolveYouTubeAudioId(cleanTitle, primaryArtist, targetDurationSec);
-    }
-    const youtubeId = youtubeAlternates[0];
+    // YouTube is offered only through the user-initiated video viewer.
+    // Do not resolve YouTube IDs into the hidden audio engine: that would
+    // rely on unofficial search endpoints and could enable background audio.
 
     const payload = {
       streamUrls,
       previewUrl,
       alternates: Array.from(new Set([...fullAlternates, ...previewAlternates])),
-      youtubeId,
-      youtubeAlternates: youtubeAlternates.slice(1),
     };
 
     // Safe playback diagnostics: never log search terms, stream URLs, or user data.
@@ -1587,21 +1475,19 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
           attempted: internetArchiveAttempted,
           selected: internetArchiveSelected,
         },
-        youtube: { attempted: !streamUrls['320kbps'] || forceRefresh, matched: Boolean(youtubeId) },
-      },
+        },
       output: {
         has320kbps: Boolean(streamUrls['320kbps']),
         has160kbps: Boolean(streamUrls['160kbps']),
         has96kbps: Boolean(streamUrls['96kbps']),
         hasPreview: Boolean(previewUrl),
         alternateCount: payload.alternates.length,
-        hasYoutubeId: Boolean(youtubeId),
-        ok: Object.keys(streamUrls).length > 0 || Boolean(previewUrl) || Boolean(youtubeId),
+        ok: Object.keys(streamUrls).length > 0 || Boolean(previewUrl),
       },
       cache: { forceRefresh, bypassed: forceRefresh },
     };
     console.log('[music-resolve-diagnostics]', JSON.stringify(diagnostics));
-    if (Object.keys(streamUrls).length > 0 || youtubeId) {
+    if (Object.keys(streamUrls).length > 0) {
       if (streamResolveCache.size >= 300) {
         const first = streamResolveCache.keys().next().value;
         if (first) streamResolveCache.delete(first);
@@ -1616,7 +1502,7 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
 
     res.setHeader('Cache-Control', 'no-store');
     res.json({
-      ok: Object.keys(streamUrls).length > 0 || Boolean(previewUrl) || Boolean(youtubeId),
+      ok: Object.keys(streamUrls).length > 0 || Boolean(previewUrl),
       ...payload,
       cache: 'miss',
       ...(String(req.query.diagnostics || '') === '1' ? { diagnostics } : {}),
