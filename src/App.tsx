@@ -1299,6 +1299,98 @@ export default function App() {
     [duration]
   );
 
+  const currentTimeRef = useRef(currentTime);
+  const durationRef = useRef(duration);
+  useEffect(() => {
+    currentTimeRef.current = currentTime;
+    durationRef.current = duration;
+  }, [currentTime, duration]);
+
+  // Expose playback to Android's lock screen, notification shade, and headset controls.
+  // Media Session is optional, so unsupported browsers keep the normal in-app player.
+  useEffect(() => {
+    if (typeof navigator === 'undefined' || !('mediaSession' in navigator)) return;
+    const session = navigator.mediaSession;
+    if (typeof MediaMetadata !== 'undefined' && currentTrack) {
+      let artwork: Array<{ src: string; sizes?: string; type?: string }> = [];
+      if (currentTrack.image) {
+        try {
+          artwork = [{ src: new URL(currentTrack.image, window.location.href).href }];
+        } catch {
+          artwork = [];
+        }
+      }
+      session.metadata = new MediaMetadata({
+        title: currentTrack.name,
+        artist: currentTrack.artist,
+        album: currentTrack.albumName,
+        artwork,
+      });
+    } else {
+      session.metadata = null;
+    }
+  }, [currentTrack?.id, currentTrack?.name, currentTrack?.artist, currentTrack?.albumName, currentTrack?.image]);
+
+  useEffect(() => {
+    if (typeof navigator === 'undefined' || !('mediaSession' in navigator)) return;
+    const session = navigator.mediaSession;
+    const register = (
+      action: MediaSessionAction,
+      handler: MediaSessionActionHandler | null
+    ) => {
+      try {
+        session.setActionHandler(action, handler);
+      } catch {
+        // Some browsers expose Media Session but do not support every action.
+      }
+    };
+
+    register('play', handleTogglePlay);
+    register('pause', () => {
+      if (isPlayingRef.current) handleTogglePlay();
+    });
+    register('previoustrack', () => advanceTrack(-1, false));
+    register('nexttrack', () => advanceTrack(1, false));
+    register('seekbackward', (details) => {
+      const offset = details.seekOffset ?? 10;
+      handleSeek(Math.max(0, currentTimeRef.current - offset));
+    });
+    register('seekforward', (details) => {
+      const offset = details.seekOffset ?? 10;
+      handleSeek(Math.min(durationRef.current || 200, currentTimeRef.current + offset));
+    });
+    register('seekto', (details) => {
+      if (typeof details.seekTime === 'number') handleSeek(details.seekTime);
+    });
+
+    return () => {
+      register('play', null);
+      register('pause', null);
+      register('previoustrack', null);
+      register('nexttrack', null);
+      register('seekbackward', null);
+      register('seekforward', null);
+      register('seekto', null);
+    };
+  }, [handleTogglePlay, advanceTrack, handleSeek]);
+
+  useEffect(() => {
+    if (typeof navigator === 'undefined' || !('mediaSession' in navigator)) return;
+    const session = navigator.mediaSession;
+    session.playbackState = isPlaying ? 'playing' : 'paused';
+    if (duration > 0 && Number.isFinite(duration)) {
+      try {
+        session.setPositionState({
+          duration,
+          playbackRate: 1,
+          position: Math.max(0, Math.min(duration, currentTime)),
+        });
+      } catch {
+        // Position state is not implemented consistently across mobile browsers.
+      }
+    }
+  }, [isPlaying, currentTime, duration]);
+
   // Keyboard shortcuts
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
