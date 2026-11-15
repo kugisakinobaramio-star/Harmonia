@@ -691,9 +691,6 @@ export default function App() {
           resolved.previewUrl ||
           resolved.youtubeId
         ) {
-          // Update the ref synchronously before starting the YouTube fallback.
-          // The iframe can emit onError before the queued React state update commits.
-          currentTrackRef.current = { ...track, ...resolved };
           setQueue((prev) =>
             prev.map((qItem) =>
               qItem.id === target.id && !hasFullPlaybackSource(qItem)
@@ -930,6 +927,9 @@ export default function App() {
           resolved.previewUrl ||
           resolved.youtubeId
         ) {
+          // Update synchronously before starting YouTube: its iframe may emit onError
+          // before the queue state update commits and the ref-sync effect runs.
+          currentTrackRef.current = { ...track, ...resolved };
           setQueue((prev) =>
             prev.map((qItem) =>
               qItem.id === track.id
