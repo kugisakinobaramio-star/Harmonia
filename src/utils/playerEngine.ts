@@ -237,7 +237,8 @@ export function getSearchFallbackQueries(query: string): string[] {
   return [
     tokens.slice(0, -1).join(' '),
     tokens.slice(0, -2).join(' '),
-    tokens.slice(2).join(' '),
+    tokens.slice(-2).join(' '),
+    tokens.slice(-1).join(' '),
   ].filter((candidate, index, all) => Boolean(candidate) && all.indexOf(candidate) === index);
 }
 
