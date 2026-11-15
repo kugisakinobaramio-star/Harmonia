@@ -176,6 +176,36 @@ function mapSaavnSong(raw: SaavnSongRaw): Track {
   };
 }
 
+function searchTextTokens(value: string): string[] {
+  return value.toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').trim().split(/\s+/).filter((token) => token.length > 1);
+}
+
+function isRelevantSearchCandidate(track: Pick<Track, 'name' | 'artist' | 'albumName'>, query: string): boolean {
+  const q = searchTextTokens(query);
+  if (!q.length) return true;
+  const title = new Set(searchTextTokens(track.name));
+  const artist = new Set(searchTextTokens(track.artist));
+  const album = new Set(searchTextTokens(track.albumName));
+  const hits = q.filter((token) => title.has(token)).length + q.filter((token) => artist.has(token)).length + q.filter((token) => album.has(token)).length * 0.35;
+  const exactTitle = searchTextTokens(track.name).join(' ') === q.join(' ');
+  const exactArtist = searchTextTokens(track.artist).join(' ') === q.join(' ');
+  return exactTitle || exactArtist || hits / q.length >= 0.5;
+}
+
+function scoreSearchCandidate(track: Track, query: string): number {
+  const q = searchTextTokens(query);
+  const title = searchTextTokens(track.name);
+  const artist = searchTextTokens(track.artist);
+  const album = searchTextTokens(track.albumName);
+  const qText = q.join(' ');
+  const titleText = title.join(' ');
+  const artistText = artist.join(' ');
+  let score = titleText === qText ? 120 : titleText.startsWith(qText) ? 85 : q.filter((token) => title.includes(token)).length * 18;
+  score += artistText === qText ? 105 : q.filter((token) => artist.includes(token)).length * 16;
+  score += q.filter((token) => album.includes(token)).length * 4;
+  score += Math.min(8, Math.log10(Math.max(1, track.playCount || 1)) * 2);
+  return score;
+}
 function normalizeRemoteTrack(raw: Track): Track {
   return {
     ...raw,
@@ -248,20 +278,20 @@ export async function searchSongs(
       const musicBrainzTracks = languageFilter === 'All'
         ? (json.data?.musicBrainzRecordings || [])
             .map(mapMusicBrainzRecording)
-            .filter((t) => isPlausibleSongDuration(t.duration) && isRelevantTrackTitle(t.name, trimmed))
+            .filter((t) => isPlausibleSongDuration(t.duration) && isRelevantSearchCandidate(t, trimmed))
         : [];
 
       const combinedRemote = [...deezerRaw, ...itunesRaw, ...mappedSaavn, ...audiusRaw, ...musicBrainzTracks]
         .filter(
           (t) =>
             isPlausibleSongDuration(t.duration) &&
-            isRelevantTrackTitle(t.name, trimmed) &&
+            isRelevantSearchCandidate(t, trimmed) &&
             (languageFilter === 'All' || t.language === languageFilter) &&
             !isRemixOrKnockoff(`${t.name} ${t.albumName}`, trimmed, t.artist, trimmed)
         )
-        .sort((a, b) => (b.playCount || 0) - (a.playCount || 0));
+        .sort((a, b) => scoreSearchCandidate(b, trimmed) - scoreSearchCandidate(a, trimmed));
 
-      const seen = new Set(localMatches.map((t) => `${t.name.toLowerCase()}::${t.artist.toLowerCase()}`));
+      const seen = new Set<string>();
       const dedupedRemote: Track[] = [];
       for (const item of combinedRemote) {
         const key = `${item.name.toLowerCase()}::${item.artist.toLowerCase()}`;
@@ -273,7 +303,7 @@ export async function searchSongs(
 
       // Prefer live catalogue matches; keep local catalogue matches as a fallback,
       // not as a fixed block that crowds out the user's actual query.
-      const merged = [...dedupedRemote, ...localMatches].slice(0, 30);
+      const merged = [...dedupedRemote, ...localMatches].sort((a, b) => scoreSearchCandidate(b, trimmed) - scoreSearchCandidate(a, trimmed)).slice(0, 30);
       if (merged.length > 0) {
         return { tracks: merged, source: 'live' };
       }
