@@ -61,7 +61,6 @@ import {
   hasFullPlaybackSource,
   isShortPreviewUrl,
   isSpotifyLinkOrUri,
-  isUnnecessaryNoLyricsTrack,
   mapCoordsToRegion,
   REGION_LABELS,
   reorderQueueItem,
@@ -484,10 +483,8 @@ export default function App() {
     let cancelled = false;
     fetchRegionalDiscovery(region).then((tracks) => {
       if (cancelled) return;
-      const vocalOnly = prioritizeLyrics
-        ? tracks.filter((t) => !isUnnecessaryNoLyricsTrack(t))
-        : tracks;
-      setRegionalTracks(vocalOnly);
+      // Keep tracks with missing lyric metadata discoverable; ranking handles the preference.
+      setRegionalTracks(tracks);
     });
     return () => {
       cancelled = true;
@@ -574,7 +571,6 @@ export default function App() {
       ...recentlyPlayed,
       ...regionalTracks,
     ]) {
-      if (prioritizeLyrics && isUnnecessaryNoLyricsTrack(track)) continue;
       const key = `${track.name.toLowerCase()}::${track.artist.split(',')[0]?.trim().toLowerCase()}`;
       if (!seenKeys.has(key)) {
         seenKeys.add(key);
