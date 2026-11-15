@@ -10,6 +10,7 @@ import {
   AddToPlaylistModal,
   CreatePlaylistModal,
   PersonaliseModal,
+  ProfileModal,
   SpotifyImportModal,
   VideoModal,
 } from './components/Modals';
@@ -142,6 +143,7 @@ function loadLocalSnapshot(): {
   languageAffinity?: Record<string, number>;
   genreAffinity?: Record<string, number>;
   playCounts?: Record<string, number>;
+  playedTracks?: Record<string, Track>;
   volume?: number;
   quality?: AudioQuality;
   eqPreset?: EqPreset;
@@ -226,6 +228,9 @@ export default function App() {
   const [playCounts, setPlayCounts] = useState<Record<string, number>>(
     initialSnap.playCounts || {}
   );
+  const [playedTracks, setPlayedTracks] = useState<Record<string, Track>>(
+    initialSnap.playedTracks || {}
+  );
 
   // Audio playback state
   const [queue, setQueue] = useState<Track[]>(SEED_PLAYLISTS[0].tracks);
@@ -253,6 +258,7 @@ export default function App() {
   const [addToPlaylistTrack, setAddToPlaylistTrack] = useState<Track | null>(null);
   const [spotifyImportOpen, setSpotifyImportOpen] = useState(false);
   const [personaliseOpen, setPersonaliseOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
   const [videoModalOpen, setVideoModalOpen] = useState(false);
   const [videos, setVideos] = useState<VideoResult[]>(SEED_VIDEOS);
   const [selectedVideoId, setSelectedVideoId] = useState<string | null>(SEED_VIDEOS[0]?.id || null);
@@ -365,6 +371,7 @@ export default function App() {
           languageAffinity,
           genreAffinity,
           playCounts,
+          playedTracks,
           volume,
           quality,
           eqPreset,
@@ -387,6 +394,7 @@ export default function App() {
     languageAffinity,
     genreAffinity,
     playCounts,
+    playedTracks,
     volume,
     quality,
     eqPreset,
@@ -948,6 +956,7 @@ export default function App() {
       // Update local affinity + recently played + backend event
       setRecentlyPlayed((prev) => [track, ...prev.filter((t) => t.id !== track.id)].slice(0, 20));
       setPlayCounts((prev) => ({ ...prev, [track.id]: (prev[track.id] || 0) + 1 }));
+      setPlayedTracks((prev) => ({ ...prev, [track.id]: track }));
       const primaryArtist = track.artist.split(',')[0]?.trim();
       if (primaryArtist) {
         setArtistAffinity((prev) => ({
@@ -1641,7 +1650,7 @@ export default function App() {
         recentDrops={recommendedTracks}
         onPlayTrack={(t) => playTrackList([t, ...recommendedTracks.filter((x) => x.id !== t.id)], 0)}
         displayName={displayName}
-        onOpenPersonalise={() => setPersonaliseOpen(true)}
+        onOpenProfile={() => setProfileOpen(true)}
       />
 
       {/* Main 3-Pane Spotify Desktop Shell */}
@@ -1681,6 +1690,9 @@ export default function App() {
                 spotifyPlaylists={spotifyPlaylists}
                 recentlyPlayed={recentlyPlayed}
                 likedCount={likedTracks.length}
+                likedTracks={likedTracks}
+                playCounts={playCounts}
+                playedTracks={Object.values(playedTracks)}
                 tasteHighlights={tasteHighlights}
                 onPlayTrackList={playTrackList}
                 onOpenPlaylist={openPlaylistCollection}
@@ -1993,6 +2005,23 @@ export default function App() {
         selectedId={selectedVideoId}
         onSelectVideo={setSelectedVideoId}
         onClose={() => setVideoModalOpen(false)}
+      />
+
+      <ProfileModal
+        open={profileOpen}
+        displayName={displayName}
+        region={region}
+        preferredLanguages={preferredLanguages}
+        favoriteArtists={favoriteArtists}
+        preferredMoods={preferredMoods}
+        totalPlays={Object.values(playCounts).reduce((sum, count) => sum + count, 0)}
+        uniqueTracks={Object.keys(playCounts).length}
+        likedCount={likedTracks.length}
+        onClose={() => setProfileOpen(false)}
+        onEditPreferences={() => {
+          setProfileOpen(false);
+          setPersonaliseOpen(true);
+        }}
       />
 
       <PersonaliseModal
