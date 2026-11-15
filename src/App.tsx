@@ -855,8 +855,7 @@ export default function App() {
         if (cancelled) return;
         if (
           (resolved.streamUrls && Object.keys(resolved.streamUrls).length > 0) ||
-          resolved.previewUrl ||
-          resolved.youtubeId
+          resolved.previewUrl
         ) {
           setQueue((prev) =>
             prev.map((qItem) =>
@@ -865,7 +864,6 @@ export default function App() {
                     ...qItem,
                     streamUrls: resolved.streamUrls || qItem.streamUrls,
                     previewUrl: resolved.previewUrl || qItem.previewUrl,
-                    youtubeId: resolved.youtubeId || qItem.youtubeId,
                     youtubeAlternates: resolved.youtubeAlternates || qItem.youtubeAlternates,
                   }
                 : qItem
@@ -1011,7 +1009,7 @@ export default function App() {
         candidateIdxRef.current = 0;
         if (!urls.length) {
           setIsPlaying(false);
-          showToast(`No stream found for "${track.name}" — try another track`);
+          showToast(`No playable audio source found for "${track.name}" — try another track`);
           return;
         }
         usingSynthRef.current = false;
@@ -1052,8 +1050,6 @@ export default function App() {
             ).filter((url) => !failedUrls.has(url));
             if (freshCandidates.length) {
               playNativeAudioCandidates(freshCandidates);
-            } else if (refreshed.youtubeId) {
-              playYouTubeAudio(refreshed.youtubeId);
             } else {
               setIsPlaying(false);
               showToast('No playable audio source found for this track');
@@ -1069,26 +1065,6 @@ export default function App() {
         loadAndPlayCandidate(0, playSeq, onCandidatesExhausted);
       };
 
-      const playYouTubeAudio = (youtubeId: string) => {
-        if (playSeq !== playbackSeqRef.current) return;
-        activeEngineRef.current = 'yt';
-        try {
-          audio?.pause();
-        } catch {}
-        if (ytPlayerRef.current && isYtReadyRef.current) {
-          try {
-            ytPlayerRef.current.loadVideoById(youtubeId);
-            ytPlayerRef.current.setVolume(volume);
-            if (volume === 0) ytPlayerRef.current.mute();
-            else ytPlayerRef.current.unMute();
-            ytPlayerRef.current.playVideo();
-            setIsPlaying(true);
-          } catch {}
-        } else {
-          pendingYtVideoIdRef.current = youtubeId;
-          setIsPlaying(true);
-        }
-      };
 
       // 1. Direct full-length audio stream (e.g. JioSaavn 320k or Audius verified)
       if (hasFullAudioStream(track)) {
@@ -1099,13 +1075,7 @@ export default function App() {
         }
       }
 
-      // 2. Full-length studio track via official YouTube audio ID
-      if (track.youtubeId) {
-        playYouTubeAudio(track.youtubeId);
-        return;
-      }
-
-      // 3. User gesture preservation while resolving
+      // Preserve the user gesture while authorized audio sources resolve.
       if (audio) {
         audio.src = SILENT_WAV_DATA_URI;
         audio.play().catch(() => {});
@@ -1115,11 +1085,9 @@ export default function App() {
         if (playSeq !== playbackSeqRef.current) return;
         if (
           (resolved.streamUrls && Object.keys(resolved.streamUrls).length > 0) ||
-          resolved.previewUrl ||
-          resolved.youtubeId
+          resolved.previewUrl
         ) {
-          // Update synchronously before starting YouTube: its iframe may emit onError
-          // before the queue state update commits and the ref-sync effect runs.
+          // Keep the resolved track in sync before native audio starts.
           const resolvedTrack = {
             ...track,
             ...resolved,
@@ -1134,7 +1102,6 @@ export default function App() {
                     ...qItem,
                     streamUrls: resolved.streamUrls || qItem.streamUrls,
                     previewUrl: resolved.previewUrl || qItem.previewUrl,
-                    youtubeId: resolved.youtubeId || qItem.youtubeId,
                   }
                 : qItem
             )
@@ -1148,8 +1115,6 @@ export default function App() {
             resolved.alternates || []
           );
           playNativeAudioCandidates(resolvedCandidates);
-        } else if (resolved.youtubeId) {
-          playYouTubeAudio(resolved.youtubeId);
         } else {
           const resolvedCandidates = buildStreamCandidates(
             resolved,
@@ -1158,6 +1123,10 @@ export default function App() {
           );
           playNativeAudioCandidates(resolvedCandidates);
         }
+      }).catch(() => {
+        if (playSeq !== playbackSeqRef.current) return;
+        setIsPlaying(false);
+        showToast('Could not resolve an authorized audio source for this recording. Try another match.');
       });
     },
     [quality, showToast, loadAndPlayCandidate, volume]
