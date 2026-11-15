@@ -71,6 +71,7 @@ import {
   toggleTrackInLiked,
 } from './utils/playerEngine';
 import { audioEngine } from './utils/webAudioSynth';
+import { downloadTrackForOffline, listOfflineTracks, removeOfflineTrack } from './utils/offlineStore';
 
 const SILENT_WAV_DATA_URI =
   'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
@@ -272,6 +273,8 @@ export default function App() {
   const [videoSearchError, setVideoSearchError] = useState('');
   const videoSearchRequestRef = useRef(0);
   const [toastMsg, setToastMsg] = useState<string>('');
+  const [downloadedIds, setDownloadedIds] = useState<Set<string>>(() => new Set());
+  const [downloadingIds, setDownloadingIds] = useState<Set<string>>(() => new Set());
 
   // Refs for audio control and main scroll reset
   const mainScrollRef = useRef<HTMLDivElement | null>(null);
@@ -330,6 +333,52 @@ export default function App() {
   const showToast = useCallback((msg: string) => {
     setToastMsg(msg);
   }, []);
+
+  useEffect(() => {
+    let active = true;
+    listOfflineTracks()
+      .then((items) => {
+        if (active) setDownloadedIds(new Set(items.map((item) => item.id)));
+      })
+      .catch(() => {
+        if (active) showToast('Offline storage is unavailable in this browser.');
+      });
+    return () => { active = false; };
+  }, [showToast]);
+
+  const handleToggleDownload = useCallback(async (track: Track) => {
+    if (downloadingIds.has(track.id)) return;
+    setDownloadingIds((current) => new Set(current).add(track.id));
+    try {
+      if (downloadedIds.has(track.id)) {
+        await removeOfflineTrack(track.id);
+        setDownloadedIds((current) => {
+          const next = new Set(current);
+          next.delete(track.id);
+          return next;
+        });
+        showToast(`Removed ${track.name} from offline downloads.`);
+      } else {
+        await downloadTrackForOffline(track, quality);
+        setDownloadedIds((current) => new Set(current).add(track.id));
+        showToast(`Saved ${track.name} for offline listening.`);
+      }
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Could not update offline downloads.');
+    } finally {
+      setDownloadingIds((current) => {
+        const next = new Set(current);
+        next.delete(track.id);
+        return next;
+      });
+    }
+  }, [downloadedIds, downloadingIds, quality, showToast]);
+
+  const handleDownloadAll = useCallback(async (tracks: Track[]) => {
+    for (const track of tracks) {
+      if (!downloadedIds.has(track.id)) await handleToggleDownload(track);
+    }
+  }, [downloadedIds, handleToggleDownload]);
 
   useEffect(() => {
     if (!toastMsg) return;
@@ -1839,6 +1888,9 @@ export default function App() {
                 currentTrackId={currentTrack?.id}
                 isPlaying={isPlaying}
                 likedIds={likedMap}
+                downloadedIds={downloadedIds}
+                downloadingIds={downloadingIds}
+                onToggleDownload={handleToggleDownload}
                 onPlayList={playTrackList}
                 onEnqueue={handleEnqueue}
                 onToggleLike={handleToggleLike}
@@ -1859,6 +1911,9 @@ export default function App() {
                 recentlyPlayed={recentlyPlayed}
                 currentTrackId={currentTrack?.id}
                 isPlaying={isPlaying}
+                downloadedIds={downloadedIds}
+                downloadingIds={downloadingIds}
+                onToggleDownload={handleToggleDownload}
                 onPlayList={playTrackList}
                 onOpenPlaylist={openPlaylistCollection}
                 onEnqueue={handleEnqueue}
@@ -1880,8 +1935,12 @@ export default function App() {
                 currentTrackId={currentTrack?.id}
                 isPlaying={isPlaying}
                 likedMap={likedMap}
+                downloadedIds={downloadedIds}
+                downloadingIds={downloadingIds}
                 onPlayList={playTrackList}
                 onToggleLike={handleToggleLike}
+                onToggleDownload={handleToggleDownload}
+                onDownloadAll={handleDownloadAll}
                 onEnqueue={handleEnqueue}
                 onAddToPlaylist={(t) => setAddToPlaylistTrack(t)}
                 onOpenVideo={(t) => openVideosForQuery(`${t.name} ${t.artist} official video`)}
@@ -1912,6 +1971,9 @@ export default function App() {
           lyrics={lyrics}
           currentTime={currentTime}
           duration={duration}
+          downloadedIds={downloadedIds}
+          downloadingIds={downloadingIds}
+          onToggleDownload={handleToggleDownload}
           onOpenFullLyrics={() => navigateTo('lyrics', null)}
           onPlayIndex={(idx) => {
             if (queue[idx]) {
@@ -2004,6 +2066,8 @@ export default function App() {
         shuffle={shuffle}
         repeatMode={repeatMode}
         isLiked={Boolean(currentTrack && likedMap[currentTrack.id])}
+        isDownloaded={Boolean(currentTrack && downloadedIds.has(currentTrack.id))}
+        isDownloading={Boolean(currentTrack && downloadingIds.has(currentTrack.id))}
         quality={quality}
         lyrics={lyrics}
         lyricsSynced={lyricsSynced}
@@ -2014,6 +2078,7 @@ export default function App() {
         onToggleShuffle={() => setShuffle((s) => !s)}
         onCycleRepeat={() => setRepeatMode((r) => ((r + 1) % 3) as RepeatMode)}
         onToggleLike={() => currentTrack && handleToggleLike(currentTrack)}
+        onToggleDownload={() => currentTrack && handleToggleDownload(currentTrack)}
         onSeek={handleSeek}
         onOpenQueue={() => {
           setRightPanelMode('queue');
