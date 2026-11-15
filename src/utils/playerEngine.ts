@@ -217,6 +217,45 @@ export function resolveNextTrackIndex(params: {
   return Math.max(0, Math.min(queueLength - 1, next));
 }
 
+export function isMatchingLyricsCandidate(
+  candidate: { trackName?: string; artistName?: string; duration?: number },
+  requestedTitle: string,
+  requestedArtist: string,
+  requestedDurationSec = 0
+): boolean {
+  const normalize = (value: string) =>
+    decodeHtmlEntities(value)
+      .toLowerCase()
+      .normalize('NFKD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/\([^)]*\)|\[[^\]]*\]/g, ' ')
+      .replace(/\b(remaster(ed)?|radio edit|explicit|clean version)\b/g, ' ')
+      .replace(/[^a-z0-9]+/g, ' ')
+      .trim()
+      .replace(/\s+/g, ' ');
+
+  const title = normalize(candidate.trackName || '');
+  const requested = normalize(requestedTitle);
+  const artist = normalize(requestedArtist);
+  if (!title || !requested || !artist || title !== requested) return false;
+
+  const artistNames = (candidate.artistName || '')
+    .split(/,|&|\bfeat\.?\b|\bft\.?\b|\bwith\b/i)
+    .map(normalize)
+    .filter(Boolean);
+  if (!artistNames.includes(artist)) return false;
+
+  const candidateDuration = Number(candidate.duration) || 0;
+  if (
+    requestedDurationSec > 30 &&
+    candidateDuration > 30 &&
+    Math.abs(candidateDuration - requestedDurationSec) > 25
+  ) {
+    return false;
+  }
+  return true;
+}
+
 export function parseLrcLyrics(lrcText: string): LyricLine[] {
   const out: LyricLine[] = [];
   const lines = String(lrcText || '').split('\n');
