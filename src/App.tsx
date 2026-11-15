@@ -545,6 +545,26 @@ export default function App() {
       incoming.volume = 0;
       incoming.muted = volume === 0;
 
+      // Some providers leave a media request stalled without emitting an
+      // error. Move on when playback has not advanced after the startup window.
+      const candidateSlot: 1 | 2 = incoming === a1 ? 1 : 2;
+      const stallTimer = window.setTimeout(() => {
+        if (
+          playSeq !== playbackSeqRef.current ||
+          activeAudioSlotRef.current !== candidateSlot ||
+          incoming.currentTime >= 0.25
+        ) {
+          return;
+        }
+        incoming.pause();
+        incoming.src = '';
+        loadAndPlayCandidate(idx + 1, playSeq, onAllFailed);
+      }, 12_000);
+      const clearStallTimer = () => window.clearTimeout(stallTimer);
+      incoming.addEventListener('playing', clearStallTimer, { once: true });
+      incoming.addEventListener('timeupdate', clearStallTimer, { once: true });
+      incoming.addEventListener('error', clearStallTimer, { once: true });
+
       incoming.play().then(() => {
         if (playSeq !== playbackSeqRef.current) return;
         const targetVol = volume / 100;
@@ -571,6 +591,7 @@ export default function App() {
           }
         }, stepTime);
       }).catch(() => {
+        clearStallTimer();
         if (playSeq === playbackSeqRef.current) {
           loadAndPlayCandidate(idx + 1, playSeq, onAllFailed);
         }
