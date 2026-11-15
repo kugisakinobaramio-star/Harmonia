@@ -515,6 +515,30 @@ export function isUnnecessaryNoLyricsTrack(track: Track): boolean {
   return bannedPatterns.some((pat) => hay.includes(pat));
 }
 
+export function isRelevantTrackTitle(itemTitle: string, query: string): boolean {
+  const normalize = (value: string) =>
+    decodeHtmlEntities(value)
+      .toLowerCase()
+      .replace(/\([^)]*\)|\[[^\]]*\]/g, ' ')
+      .replace(/[^a-z0-9]+/g, ' ')
+      .trim()
+      .split(/\s+/)
+      .filter((token) => token.length > 1);
+
+  const titleTokens = normalize(itemTitle);
+  const queryTokens = normalize(query);
+  if (titleTokens.length === 0 || queryTokens.length === 0) return false;
+
+  const querySet = new Set(queryTokens);
+  const overlap = titleTokens.filter((token) => querySet.has(token)).length;
+  const titleCoverage = overlap / titleTokens.length;
+  const queryCoverage = overlap / queryTokens.length;
+
+  // Artist names may be included in the query, but a result must still
+  // substantially match the requested track title.
+  return titleCoverage >= 0.6 && queryCoverage >= 0.5;
+}
+
 export function filterAndRankTracks(
   tracks: Track[],
   query: string,
@@ -537,6 +561,9 @@ export function filterAndRankTracks(
 
   const q = query.trim().toLowerCase();
   if (!q) return pool;
+
+  pool = pool.filter((track) => isRelevantTrackTitle(track.name, q));
+  if (pool.length === 0) return [];
 
   const terms = q.split(/\s+/).filter(Boolean);
   const scored: Array<{ track: Track; score: number }> = [];
