@@ -385,6 +385,30 @@ export function isRemixOrKnockoff(
   return false;
 }
 
+export function selectSaavnArtistForMatch(
+  primary: Array<{ name?: string }> | undefined,
+  all: Array<{ name?: string }> | undefined,
+  requestedArtist: string
+): string {
+  const primaryNames = (primary || []).map((artist) => (artist.name || '').trim()).filter(Boolean);
+  if (primaryNames.length) return primaryNames.join(', ');
+
+  // The "all" list can contain composers, lyricists, and producers. Only use it
+  // when it unambiguously contains one artist and that name exactly matches the
+  // requested artist; never promote a partial/ambiguous credit to lead artist.
+  const allNames = (all || []).map((artist) => decodeHtmlEntities(artist.name || '').trim()).filter(Boolean);
+  const normalize = (value: string) =>
+    decodeHtmlEntities(value).toLowerCase().normalize('NFKD')
+      .replace(/[\\u0300-\\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, ' ')
+      .trim()
+      .replace(/\\s+/g, ' ');
+  if (allNames.length === 1 && normalize(allNames[0]) === normalize(requestedArtist)) {
+    return allNames[0];
+  }
+  return '';
+}
+
 export function splitArtistTokens(artist: string): string[] {
   const cleaned = decodeHtmlEntities(artist).toLowerCase();
   const tokens = cleaned
