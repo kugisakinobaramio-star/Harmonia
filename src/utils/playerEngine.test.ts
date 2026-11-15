@@ -13,6 +13,7 @@ import {
   isRemixOrKnockoff,
   isMatchingLyricsCandidate,
   getSearchFallbackQueries,
+  isRelevantSongSearchCandidate,
   isPlausibleSongDuration,
   isRelevantTrackTitle,
   isShortPreviewUrl,
@@ -543,9 +544,16 @@ test('removeQueueItem preserves the current track index and reports when playbac
 test('search fallback covers title-first, artist-first, and explicit title/artist queries', () => {
   assert.deepEqual(getSearchFallbackQueries('Maharani Arpit Bala'), ['Maharani Arpit', 'Maharani', 'Arpit Bala', 'Bala']);
   assert.deepEqual(getSearchFallbackQueries('Arpit Bala Maharani'), ['Arpit Bala', 'Arpit', 'Bala Maharani', 'Maharani']);
-  assert.deepEqual(getSearchFallbackQueries('A Sky Full of Stars Coldplay'), ['A Sky Full of Stars', 'A Sky Full of', 'Stars Coldplay', 'Coldplay']);
+  assert.deepEqual(getSearchFallbackQueries('A Sky Full of Stars Coldplay'), ['A Sky Full of Stars', 'A Sky Full of', 'Coldplay', 'Stars Coldplay']);
   assert.deepEqual(getSearchFallbackQueries('Maharani - Arpit Bala'), ['Maharani', 'Arpit Bala', 'Arpit Bala Maharani']);
   assert.deepEqual(getSearchFallbackQueries('Arpit Bala by Maharani'), ['Arpit Bala', 'Maharani', 'Maharani Arpit Bala']);
   assert.deepEqual(getSearchFallbackQueries('Billie Eilish'), []);
   assert.deepEqual(getSearchFallbackQueries('Maharani'), []);
+});
+
+test('song search candidate matching uses title and artist tokens for both query orders', () => {
+  assert.equal(isRelevantSongSearchCandidate('Maharani', 'Arpit Bala', 'Maharani Arpit Bala'), true);
+  assert.equal(isRelevantSongSearchCandidate('Maharani', 'Arpit Bala', 'Arpit Bala Maharani'), true);
+  assert.equal(isRelevantSongSearchCandidate('Birds of a Feather', 'Billie Eilish', 'Billie Eilish Birds of a Feather'), true);
+  assert.equal(isRelevantSongSearchCandidate('A Different Song', 'Another Artist', 'Maharani Arpit Bala'), false);
 });
