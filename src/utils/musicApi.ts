@@ -272,7 +272,6 @@ export async function searchSongs(
         .map(mapSaavnSong)
         .filter(
           (t) =>
-            (!prioritizeLyrics || !isUnnecessaryNoLyricsTrack(t)) &&
             isPlausibleSongDuration(t.duration) &&
             !isRemixOrKnockoff(`${t.name} ${t.albumName}`, trimmed, t.artist, trimmed)
         );
@@ -291,7 +290,16 @@ export async function searchSongs(
             (languageFilter === 'All' || t.language === languageFilter) &&
             !isRemixOrKnockoff(`${t.name} ${t.albumName}`, trimmed, t.artist, trimmed)
         )
-        .sort((a, b) => scoreSearchCandidate(b, trimmed) - scoreSearchCandidate(a, trimmed));
+        .sort((a, b) => {
+          const lyricsPreference = (track: Track) =>
+            prioritizeLyrics
+              ? isUnnecessaryNoLyricsTrack(track) ? -80 : 20
+              : 0;
+          return (
+            scoreSearchCandidate(b, trimmed) + lyricsPreference(b) -
+            scoreSearchCandidate(a, trimmed) - lyricsPreference(a)
+          );
+        });
 
       const seen = new Set<string>();
       const dedupedRemote: Track[] = [];
@@ -305,7 +313,15 @@ export async function searchSongs(
 
       // Prefer live catalogue matches; keep local catalogue matches as a fallback,
       // not as a fixed block that crowds out the user's actual query.
-      const merged = [...dedupedRemote, ...localMatches].sort((a, b) => scoreSearchCandidate(b, trimmed) - scoreSearchCandidate(a, trimmed)).slice(0, 30);
+      const lyricsPreference = (track: Track) =>
+        prioritizeLyrics ? (isUnnecessaryNoLyricsTrack(track) ? -80 : 20) : 0;
+      const merged = [...dedupedRemote, ...localMatches]
+        .sort(
+          (a, b) =>
+            scoreSearchCandidate(b, trimmed) + lyricsPreference(b) -
+            scoreSearchCandidate(a, trimmed) - lyricsPreference(a)
+        )
+        .slice(0, 30);
       if (merged.length > 0) {
         return { tracks: merged, source: 'live' };
       }
