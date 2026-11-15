@@ -9,9 +9,6 @@ import {
   scoreAuthenticTrackCandidate,
 } from './src/utils/playerEngine.ts';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
 const SAAVN_BASE = 'https://saavn.sumit.co';
 
 interface StoredLyricLine {
@@ -1786,6 +1783,7 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
   });
 
   if (mode === 'node-production') {
+    const __dirname = path.dirname(fileURLToPath(import.meta.url));
     const distDir = path.join(__dirname, 'dist');
     app.use(express.static(distDir));
     app.get('*', (_req, res) => {
