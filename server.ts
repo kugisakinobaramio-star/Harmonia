@@ -1532,7 +1532,8 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
           attempted: internetArchiveAttempted,
           selected: internetArchiveSelected,
         },
-        },
+      },
+      saavnCandidates: saavnCandidateDiagnostics,
       output: {
         has320kbps: Boolean(streamUrls['320kbps']),
         has160kbps: Boolean(streamUrls['160kbps']),
@@ -1543,7 +1544,13 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
       },
       cache: { forceRefresh, bypassed: forceRefresh },
     };
-    console.log('[music-resolve-diagnostics]', JSON.stringify(diagnostics));
+    // Keep candidate titles/artists out of routine logs; expose them only
+    // in the explicit diagnostics=1 response requested by the client.
+    console.log('[music-resolve-diagnostics]', JSON.stringify({
+      providers: diagnostics.providers,
+      output: diagnostics.output,
+      cache: diagnostics.cache,
+    }));
     if (Object.keys(streamUrls).length > 0) {
       if (streamResolveCache.size >= 300) {
         const first = streamResolveCache.keys().next().value;
