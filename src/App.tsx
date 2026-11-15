@@ -479,7 +479,7 @@ export default function App() {
   }, [favoriteArtists, artistAffinity, genreAffinity, likedMap, recentlyPlayed, region, prioritizeLyrics]);
 
   // Dynamic User-Based Recommendation Ranking
-  const { recommendedTracks, recommendationReason, tasteHighlights } = useMemo(() => {
+  const { recommendedTracks, recommendationReason } = useMemo(() => {
     const tasteProfile = buildTasteProfile({
       region,
       preferredLanguages,
@@ -520,7 +520,6 @@ export default function App() {
     return {
       recommendedTracks: ranked,
       recommendationReason: highlights.reason,
-      tasteHighlights: highlights,
     };
   }, [
     region,
@@ -1696,7 +1695,6 @@ export default function App() {
                 likedTracks={likedTracks}
                 playCounts={playCounts}
                 playedTracks={Object.values(playedTracks)}
-                tasteHighlights={tasteHighlights}
                 onPlayTrackList={playTrackList}
                 onOpenPlaylist={openPlaylistCollection}
                 onOpenLiked={openLikedCollection}
