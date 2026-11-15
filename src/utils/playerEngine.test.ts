@@ -540,10 +540,12 @@ test('removeQueueItem preserves the current track index and reports when playbac
   assert.equal(invalid.removedCurrent, false);
 });
 
-test('search fallback tries title prefixes with one- and two-word artist names', () => {
-  assert.deepEqual(getSearchFallbackQueries('Maharani Arpit Bala'), ['Maharani Arpit', 'Maharani']);
-  assert.deepEqual(getSearchFallbackQueries('lovely Billie Eilish'), ['lovely Billie', 'lovely']);
-  assert.deepEqual(getSearchFallbackQueries('A Sky Full of Stars Coldplay'), ['A Sky Full of Stars', 'A Sky Full of']);
+test('search fallback covers title-first, artist-first, and explicit title/artist queries', () => {
+  assert.deepEqual(getSearchFallbackQueries('Maharani Arpit Bala'), ['Maharani Arpit', 'Maharani', 'Arpit Bala']);
+  assert.deepEqual(getSearchFallbackQueries('Arpit Bala Maharani'), ['Arpit Bala Maharani'.split(' ').slice(0, -1).join(' '), 'Arpit', 'Maharani']);
+  assert.deepEqual(getSearchFallbackQueries('A Sky Full of Stars Coldplay'), ['A Sky Full of Stars Coldplay'.split(' ').slice(0, -1).join(' '), 'A Sky Full of Stars', 'Full of Stars Coldplay']);
+  assert.deepEqual(getSearchFallbackQueries('Maharani - Arpit Bala'), ['Maharani', 'Arpit Bala', 'Arpit Bala Maharani']);
+  assert.deepEqual(getSearchFallbackQueries('Arpit Bala by Maharani'), ['Arpit Bala', 'Maharani', 'Maharani Arpit Bala']);
   assert.deepEqual(getSearchFallbackQueries('Billie Eilish'), []);
   assert.deepEqual(getSearchFallbackQueries('Maharani'), []);
 });
