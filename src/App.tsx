@@ -921,14 +921,21 @@ export default function App() {
           const failedUrls = new Set(urls);
           resolveTrackStreams(track, { forceRefresh: true }).then((refreshed) => {
             if (playSeq !== playbackSeqRef.current) return;
+            const refreshedTrack = {
+              ...track,
+              ...refreshed,
+              alternates: refreshed.alternates || [],
+            } as Track;
+            currentTrackRef.current = refreshedTrack;
+            resolvedPlaybackTrackRef.current = refreshedTrack;
             setQueue((prev) =>
               prev.map((item) =>
                 item.id === track.id
                   ? {
                       ...item,
-                      streamUrls: refreshed.streamUrls || item.streamUrls,
-                      previewUrl: refreshed.previewUrl || item.previewUrl,
-                      youtubeId: refreshed.youtubeId || item.youtubeId,
+                      streamUrls: refreshed.streamUrls,
+                      previewUrl: refreshed.previewUrl,
+                      youtubeId: refreshed.youtubeId,
                     }
                   : item
               )
