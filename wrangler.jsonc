@@ -13,5 +13,6 @@
   },
   "alias": {
     "body-parser": "./worker/body-parser-shim.ts"
-  }
+  },
+  "previews": {}
 }
