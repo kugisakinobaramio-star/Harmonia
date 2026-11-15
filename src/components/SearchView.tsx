@@ -85,7 +85,11 @@ export function SearchView({
   useEffect(() => {
     const seq = ++seqRef.current;
     const rawQuery = query.trim();
-    const fallbackQuery = rawQuery || 'Arijit Singh Kesariya';
+    if (!drillCollection && activeTab === 'videos' && !rawQuery) {
+      setVideos([]);
+      setLoading(false);
+      return;
+    }
 
     const timer = window.setTimeout(async () => {
       setLoading(true);
@@ -118,7 +122,7 @@ export function SearchView({
             if (seq !== seqRef.current) return;
             setArtists(res.artists);
           } else if (activeTab === 'videos') {
-            const res = await searchVideos(fallbackQuery);
+            const res = await searchVideos(rawQuery);
             if (seq !== seqRef.current) return;
             setVideos(res);
           }
@@ -388,6 +392,12 @@ export function SearchView({
               <div className="truncate text-xs text-zinc-400">{art.subtitle}</div>
             </button>
           ))}
+        </div>
+      ) : videos.length === 0 ? (
+        <div className="rounded-lg bg-[#18181b] p-4 text-sm text-zinc-400" role="status">
+          {query.trim()
+            ? 'No videos found for this search. Try another title or artist.'
+            : 'Search for a song, artist, or music video to see video results here.'}
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 md:grid-cols-3">
