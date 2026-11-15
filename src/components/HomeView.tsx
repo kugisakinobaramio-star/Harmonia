@@ -24,6 +24,7 @@ interface HomeViewProps {
   likedCount: number;
   likedTracks: Track[];
   playCounts: Record<string, number>;
+  playedTracks: Track[];
   tasteHighlights?: {
     topArtists: string[];
     topLanguage: MusicLanguage | null;
@@ -52,6 +53,7 @@ export function HomeView({
   likedCount,
   likedTracks,
   playCounts,
+  playedTracks,
   tasteHighlights,
   onPlayTrackList,
   onOpenPlaylist,
@@ -85,13 +87,13 @@ export function HomeView({
 
   const smartTrackPool = useMemo(() => {
     const seen = new Set<string>();
-    return [...likedTracks, ...recentlyPlayed, ...recommendedTracks, ...personalizedFeedTracks, ...regionalTracks]
+    return [...playedTracks, ...likedTracks, ...recentlyPlayed, ...recommendedTracks, ...personalizedFeedTracks, ...regionalTracks]
       .filter((track) => {
         if (seen.has(track.id)) return false;
         seen.add(track.id);
         return true;
       });
-  }, [likedTracks, recentlyPlayed, recommendedTracks, personalizedFeedTracks, regionalTracks]);
+  }, [playedTracks, likedTracks, recentlyPlayed, recommendedTracks, personalizedFeedTracks, regionalTracks]);
 
   const allTimeFavorites = useMemo(
     () => smartTrackPool
