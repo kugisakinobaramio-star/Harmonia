@@ -61,6 +61,7 @@ import {
   hasFullPlaybackSource,
   isShortPreviewUrl,
   isSpotifyLinkOrUri,
+  isInstrumentalOrLowValueTrack,
   mapCoordsToRegion,
   REGION_LABELS,
   reorderQueueItem,
@@ -572,6 +573,7 @@ export default function App() {
       ...recentlyPlayed,
       ...regionalTracks,
     ]) {
+      if (isInstrumentalOrLowValueTrack(track)) continue;
       const key = `${track.name.toLowerCase()}::${track.artist.split(',')[0]?.trim().toLowerCase()}`;
       if (!seenKeys.has(key)) {
         seenKeys.add(key);
