@@ -709,29 +709,75 @@ export default function App() {
               }
             },
             onError: (event: any) => {
-              // A YouTube error is a source failure, not proof that the song ended.
-              // Keep the provider error code visible so embedding/availability failures
-              // can be distinguished from native-audio candidate failures.
+              // Error 150/101 means this video cannot be embedded. Never retry the
+              // same YouTube ID; refresh independent audio providers instead.
               if (activeEngineRef.current !== 'yt') return;
+              const errorCode = Number(event?.data) || 0;
               const cur =
                 resolvedPlaybackTrackRef.current?.id === currentTrackRef.current?.id
                   ? resolvedPlaybackTrackRef.current
                   : currentTrackRef.current;
               if (!cur) return;
+
+              const playRefreshedAudio = (failedUrls: Set<string>) => {
+                resolveTrackStreams(cur, { forceRefresh: true })
+                  .then((refreshed) => {
+                    if (!refreshed || cur.id !== currentTrackRef.current?.id) return;
+                    const refreshedTrack = {
+                      ...cur,
+                      ...refreshed,
+                      alternates: refreshed.alternates || [],
+                    } as Track;
+                    currentTrackRef.current = refreshedTrack;
+                    resolvedPlaybackTrackRef.current = refreshedTrack;
+                    setQueue((prev) =>
+                      prev.map((item) =>
+                        item.id === cur.id
+                          ? {
+                              ...item,
+                              streamUrls: refreshed.streamUrls || item.streamUrls,
+                              previewUrl: refreshed.previewUrl || item.previewUrl,
+                              alternates: refreshed.alternates || [],
+                            } as Track
+                          : item
+                      )
+                    );
+                    const fresh = buildStreamCandidates(
+                      refreshedTrack,
+                      quality,
+                      refreshed.alternates || []
+                    ).filter((url) => !failedUrls.has(url));
+                    if (!fresh.length) {
+                      setIsPlaying(false);
+                      showToast(
+                        `YouTube error ${errorCode || 'unknown'}; no independent audio source is currently playable.`
+                      );
+                      return;
+                    }
+                    activeEngineRef.current = 'audio';
+                    candidateFailureRef.current = () => {
+                      setIsPlaying(false);
+                      showToast('All refreshed audio sources failed. Try again later.');
+                    };
+                    candidateUrlsRef.current = fresh;
+                    loadAndPlayCandidate(0, playbackSeqRef.current, candidateFailureRef.current);
+                  })
+                  .catch(() => {
+                    setIsPlaying(false);
+                    showToast('YouTube is unavailable and audio sources could not be refreshed.');
+                  });
+              };
+
               const candidates = buildStreamCandidates(cur, quality);
-              if (candidates.length > 0) {
+              const failed = new Set(candidates);
+              if (candidates.length) {
                 activeEngineRef.current = 'audio';
-                loadAndPlayCandidate(0, playbackSeqRef.current, () => {
-                  setIsPlaying(false);
-                  showToast(
-                    `YouTube error ${Number(event?.data) || 'unknown'}; no alternate audio source could be played.`
-                  );
-                });
+                candidateFailureRef.current = () => playRefreshedAudio(failed);
+                candidateUrlsRef.current = candidates;
+                loadAndPlayCandidate(0, playbackSeqRef.current, candidateFailureRef.current);
               } else {
-                setIsPlaying(false);
-                showToast(
-                  `YouTube error ${Number(event?.data) || 'unknown'}; no alternate audio source is available.`
-                );
+                activeEngineRef.current = 'audio';
+                playRefreshedAudio(failed);
               }
             },
           },
