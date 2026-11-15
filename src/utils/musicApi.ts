@@ -646,13 +646,17 @@ const resolvedTrackCache = new Map<
 >();
 
 export async function resolveTrackStreams(
-  track: Track
+  track: Track,
+  options: { forceRefresh?: boolean } = {}
 ): Promise<Track & { alternates?: string[] }> {
+  const forceRefresh = options.forceRefresh === true;
   const cached = resolvedTrackCache.get(track.id);
-  if (hasFullAudioStream(track)) {
+
+  if (!forceRefresh && hasFullAudioStream(track)) {
     return { ...track, alternates: cached?.alternates, youtubeId: cached?.youtubeId || track.youtubeId };
   }
   if (
+    !forceRefresh &&
     cached &&
     ((cached.streamUrls && Object.keys(cached.streamUrls).length > 0) ||
       cached.previewUrl ||
@@ -666,11 +670,13 @@ export async function resolveTrackStreams(
       youtubeId: cached.youtubeId || track.youtubeId,
     };
   }
+  if (forceRefresh) resolvedTrackCache.delete(track.id);
+
   try {
     const res = await fetch(
       `/api/music/resolve?title=${encodeURIComponent(track.name)}&artist=${encodeURIComponent(
         track.artist
-      )}&duration=${Math.round(track.duration || 0)}`
+      )}&duration=${Math.round(track.duration || 0)}&refresh=${forceRefresh ? '1' : '0'}`
     );
     if (res.ok) {
       const json = (await res.json()) as {
@@ -690,10 +696,12 @@ export async function resolveTrackStreams(
           streamUrls:
             json.streamUrls && Object.keys(json.streamUrls).length > 0
               ? json.streamUrls
-              : track.streamUrls,
-          previewUrl: json.previewUrl || track.previewUrl,
+              : forceRefresh
+                ? undefined
+                : track.streamUrls,
+          previewUrl: json.previewUrl || (forceRefresh ? undefined : track.previewUrl),
           alternates: json.alternates,
-          youtubeId: json.youtubeId || track.youtubeId,
+          youtubeId: json.youtubeId || (forceRefresh ? undefined : track.youtubeId),
         };
         resolvedTrackCache.set(track.id, entry);
         return { ...track, ...entry };
@@ -701,6 +709,16 @@ export async function resolveTrackStreams(
     }
   } catch {
     // Fallback gracefully
+  }
+
+  if (forceRefresh) {
+    return {
+      ...track,
+      streamUrls: undefined,
+      previewUrl: undefined,
+      youtubeId: undefined,
+      alternates: [],
+    };
   }
   return track;
 }
