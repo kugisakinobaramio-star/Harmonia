@@ -281,10 +281,10 @@ export function CollectionView({
                       type="button"
                       onClick={() => onToggleLike(track)}
                       aria-label={isLiked ? `Unlike ${track.name}` : `Like ${track.name}`}
-                      className={`p-1 transition-colors ${
+                      className={`p-1 transition-colors focus-visible:opacity-100 ${
                         isLiked
-                          ? 'text-[#1DB954]'
-                          : 'text-zinc-400 opacity-0 group-hover:opacity-100 hover:text-white'
+                          ? 'text-[#1DB954] opacity-100'
+                          : 'text-zinc-400 opacity-100 hover:text-white sm:opacity-0 sm:group-hover:opacity-100'
                       }`}
                     >
                       <Heart className={`h-3.5 w-3.5 ${isLiked ? 'fill-current' : ''}`} />
@@ -295,7 +295,7 @@ export function CollectionView({
                       onClick={() => onEnqueue(track)}
                       aria-label={`Add ${track.name} to queue`}
                       title="Add to queue"
-                      className="p-1 text-zinc-400 opacity-0 transition-opacity group-hover:opacity-100 hover:text-white"
+                      className="p-1 text-zinc-400 opacity-100 transition-opacity hover:text-white focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
                     >
                       <ListPlus className="h-3.5 w-3.5" />
                     </button>
