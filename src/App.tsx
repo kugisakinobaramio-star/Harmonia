@@ -1213,6 +1213,13 @@ export default function App() {
                     ...qItem,
                     streamUrls: resolved.streamUrls || qItem.streamUrls,
                     previewUrl: resolved.previewUrl || qItem.previewUrl,
+                    sourceProvider: resolved.sourceProvider || qItem.sourceProvider,
+                    sourceAvailability: resolved.sourceAvailability || qItem.sourceAvailability,
+                    sourcePageUrl: resolved.sourcePageUrl || qItem.sourcePageUrl,
+                    sourceLicense: resolved.sourceLicense || qItem.sourceLicense,
+                    offlineAvailable: typeof resolved.offlineAvailable === 'boolean'
+                      ? resolved.offlineAvailable
+                      : qItem.offlineAvailable,
                   }
                 : qItem
             )
