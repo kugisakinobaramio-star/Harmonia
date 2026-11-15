@@ -635,8 +635,8 @@ export default function App() {
         ) return;
         // Use a hard handoff instead of a timed crossfade. A stale fade interval
         // could otherwise keep an older slot audible after rapid track changes.
-        incoming.volume = targetVol;
-        incoming.muted = targetVol === 0;
+        incoming.volume = volume / 100;
+        incoming.muted = volume === 0;
         try {
           outgoing.pause();
           outgoing.removeAttribute('src');
