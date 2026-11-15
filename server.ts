@@ -2042,7 +2042,7 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
           ) return null;
 
           if (
-            !isSearchCandidateMatch(title, artist, query) ||
+            !isRelevantSongSearchCandidate(title, artist, query) ||
             isRemixOrKnockoff(title, query, artist, query)
           ) return null;
 
