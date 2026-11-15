@@ -44,6 +44,7 @@ Harmonia uses multiple independent providers because no single catalogue offers 
 | Provider | Current role | Important limitation |
 | --- | --- | --- |
 | Audius / Open Audio Protocol | Search and full-track stream candidates | Open catalogue; availability and rights depend on each upload. Uses the canonical Audius API with a discovery-provider fallback. |
+| Internet Archive | Fallback for openly licensed audio | Used only when no full stream has been found. Harmonia filters to CC0, CC BY and CC BY-SA item licences and checks title, creator and available runtime metadata. The archive is not a substitute for commercial music catalogues. |
 | JioSaavn community API | Search metadata and candidate audio URLs | Third-party integration, not an official JioSaavn developer API. It can change or become unavailable. |
 | Jamendo | Candidate audio from its catalogue | Check each recording's licence and the service's API terms. Do not assume every recording has identical reuse rights. |
 | Deezer | Search metadata and short previews | Preview access is not full-track streaming access. |
@@ -57,6 +58,7 @@ Audius is the active open music-network integration. Its read-only API supports 
 
 Other open projects are useful for different jobs, but they are not interchangeable streaming catalogues:
 
+- [Internet Archive](https://archive.org/developers/) provides an open collection of media. Harmonia uses it only as a best-effort fallback for recordings with an explicit CC0, CC BY or CC BY-SA licence.
 - [Funkwhale](https://docs.funkwhale.audio/) is an open-source, federated, self-hosted audio platform. Connecting a pod requires a configured instance and its access rules; it is not a universal public catalogue.
 - [ListenBrainz](https://listenbrainz.org/) provides open listening-history and recommendation services. It is a recommendation/data source, not a source of audio streams. Its [recommendation API](https://listenbrainz.readthedocs.io/en/latest/users/api/recommendation.html) can be explored as an optional, user-authorised integration.
 - [MusicBrainz](https://musicbrainz.org/doc/MusicBrainz_API) provides open music metadata, not audio hosting or playback.
