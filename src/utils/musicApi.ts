@@ -21,7 +21,7 @@ import type {
 import {
   decodeHtmlEntities,
   filterAndRankTracks,
-  getTitleOnlySearchFallback,
+  getSearchFallbackQueries,
   hasFullAudioStream,
   isRemixOrKnockoff,
   isPlausibleSongDuration,
@@ -249,8 +249,7 @@ export async function searchSongs(
   });
 
   try {
-    const fallbackQuery = getTitleOnlySearchFallback(trimmed);
-    const providerQueries = [...new Set([trimmed, fallbackQuery].filter(Boolean))];
+    const providerQueries = [...new Set([trimmed, ...getSearchFallbackQueries(trimmed)])];
 
     for (const providerQuery of providerQueries) {
       const res = await fetch(
