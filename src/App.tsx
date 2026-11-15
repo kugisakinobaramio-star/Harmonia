@@ -115,7 +115,9 @@ function buildStreamCandidates(
   };
 
   for (const raw of fullRaw) {
-    if (raw.startsWith('/') || raw.startsWith('data:') || raw.startsWith('blob:')) {
+    if (raw.startsWith('/api/')) {
+      pushUnique(apiUrl(raw));
+    } else if (raw.startsWith('/') || raw.startsWith('data:') || raw.startsWith('blob:')) {
       pushUnique(raw);
     } else if (/^https?:\/\//i.test(raw)) {
       pushUnique(apiUrl(`/api/music/audio?url=${encodeURIComponent(raw)}`));
