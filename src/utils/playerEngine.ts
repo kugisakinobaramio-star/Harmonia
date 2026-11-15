@@ -399,10 +399,10 @@ export function selectSaavnArtistForMatch(
   const allNames = (all || []).map((artist) => decodeHtmlEntities(artist.name || '').trim()).filter(Boolean);
   const normalize = (value: string) =>
     decodeHtmlEntities(value).toLowerCase().normalize('NFKD')
-      .replace(/[\\u0300-\\u036f]/g, '')
+      .replace(/[\u0300-\u036f]/g, '')
       .replace(/[^a-z0-9]+/g, ' ')
       .trim()
-      .replace(/\\s+/g, ' ');
+      .replace(/\s+/g, ' ');
   if (allNames.length === 1 && normalize(allNames[0]) === normalize(requestedArtist)) {
     return allNames[0];
   }
