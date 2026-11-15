@@ -262,8 +262,12 @@ export default function App() {
   const [personaliseOpen, setPersonaliseOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [videoModalOpen, setVideoModalOpen] = useState(false);
-  const [videos, setVideos] = useState<VideoResult[]>(SEED_VIDEOS);
-  const [selectedVideoId, setSelectedVideoId] = useState<string | null>(SEED_VIDEOS[0]?.id || null);
+  const [videos, setVideos] = useState<VideoResult[]>([]);
+  const [selectedVideoId, setSelectedVideoId] = useState<string | null>(null);
+  const [videoSearchQuery, setVideoSearchQuery] = useState('');
+  const [videoSearchLoading, setVideoSearchLoading] = useState(false);
+  const [videoSearchError, setVideoSearchError] = useState('');
+  const videoSearchRequestRef = useRef(0);
   const [toastMsg, setToastMsg] = useState<string>('');
 
   // Refs for audio control and main scroll reset
@@ -1681,14 +1685,34 @@ export default function App() {
     [navigateTo, showToast]
   );
 
-  // Videos
+  // Video search uses request sequencing so slower older searches cannot overwrite newer results.
   const openVideosForQuery = useCallback(
     async (queryText: string) => {
+      const query = queryText.trim();
+      const requestId = ++videoSearchRequestRef.current;
       setVideoModalOpen(true);
-      const found = await searchVideos(queryText);
-      if (found.length) {
+      setVideoSearchQuery(query);
+      setVideoSearchLoading(true);
+      setVideoSearchError('');
+      setVideos([]);
+      setSelectedVideoId(null);
+      if (!query) {
+        setVideoSearchLoading(false);
+        setVideoSearchError('Enter a song, artist, or video title to search.');
+        return;
+      }
+      try {
+        const found = await searchVideos(query);
+        if (requestId !== videoSearchRequestRef.current) return;
         setVideos(found);
-        setSelectedVideoId(found[0].id);
+        setSelectedVideoId(found[0]?.id || null);
+        if (!found.length) setVideoSearchError('No relevant videos found. Try the song title and artist, or a different search phrase.');
+      } catch {
+        if (requestId === videoSearchRequestRef.current) {
+          setVideoSearchError('Video search is temporarily unavailable. Please try again.');
+        }
+      } finally {
+        if (requestId === videoSearchRequestRef.current) setVideoSearchLoading(false);
       }
     },
     []
@@ -2113,6 +2137,10 @@ export default function App() {
         open={videoModalOpen}
         videos={videos}
         selectedId={selectedVideoId}
+        query={videoSearchQuery}
+        loading={videoSearchLoading}
+        error={videoSearchError}
+        onSearch={openVideosForQuery}
         onSelectVideo={setSelectedVideoId}
         onClose={() => setVideoModalOpen(false)}
       />
