@@ -164,22 +164,39 @@ export function createArchiveDownloadsRouter() {
         res.status(403).json({ ok: false, error: 'This file is not listed as an eligible public audio download.' });
         return;
       }
-      const upstreamUrl = `https://archive.org/download/${encodeURIComponent(identifier)}/${fileName.split('/').map(encodeURIComponent).join('/')}`;
+      let target = `https://archive.org/download/${encodeURIComponent(identifier)}/${encodeURIComponent(fileName)}`;
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 25_000);
-      let upstream: Response;
-      try {
-        upstream = await fetch(upstreamUrl, { signal: controller.signal, redirect: 'follow' });
-      } finally {
-        clearTimeout(timer);
+      const timer = setTimeout(() => controller.abort(), 120_000);
+      let upstream: Response | null = null;
+      for (let redirects = 0; redirects <= 4; redirects += 1) {
+        const targetUrl = new URL(target);
+        if (targetUrl.protocol !== 'https:' ||
+            !(targetUrl.hostname === 'archive.org' || targetUrl.hostname.endsWith('.archive.org'))) {
+          clearTimeout(timer);
+          res.status(502).json({ ok: false, error: 'Internet Archive returned an unexpected download host.' });
+          return;
+        }
+        upstream = await fetch(targetUrl, { signal: controller.signal, redirect: 'manual' });
+        if (upstream.status < 300 || upstream.status >= 400) break;
+        const location = upstream.headers.get('location');
+        if (!location) break;
+        target = new URL(location, targetUrl).toString();
       }
-      if (!upstream.ok || !upstream.body) {
+      if (!upstream || !upstream.ok || !upstream.body) {
+        clearTimeout(timer);
         res.status(502).json({ ok: false, error: 'Internet Archive did not provide this file for download.' });
         return;
       }
       const contentLength = Number(upstream.headers.get('content-length') || requestedFile.size || 0);
       if (contentLength > MAX_FILE_BYTES) {
+        clearTimeout(timer);
         res.status(413).json({ ok: false, error: 'This audio file is larger than Harmonia’s 100 MB download limit.' });
+        return;
+      }
+      const upstreamType = (upstream.headers.get('content-type') || '').toLowerCase();
+      if (upstreamType.includes('text/html')) {
+        clearTimeout(timer);
+        res.status(502).json({ ok: false, error: 'Internet Archive returned a web page instead of an audio file.' });
         return;
       }
       const extension = fileName.split('.').pop()?.toLowerCase() || 'mp3';
@@ -192,8 +209,9 @@ export function createArchiveDownloadsRouter() {
       res.setHeader('Cache-Control', 'no-store');
       if (contentLength > 0) res.setHeader('Content-Length', String(contentLength));
       const stream = Readable.fromWeb(upstream.body as Parameters<typeof Readable.fromWeb>[0]);
-      res.on('close', () => stream.destroy());
-      stream.on('error', () => { if (!res.headersSent) res.status(502); res.end(); });
+      res.on('close', () => { clearTimeout(timer); stream.destroy(); });
+      stream.on('end', () => clearTimeout(timer));
+      stream.on('error', () => { clearTimeout(timer); if (!res.headersSent) res.status(502); res.end(); });
       stream.pipe(res);
     } catch {
       if (!res.headersSent) res.status(502).json({ ok: false, error: 'Download failed. Please try again.' });
