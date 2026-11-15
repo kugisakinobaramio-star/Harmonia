@@ -6,6 +6,7 @@ import { isPublicAddress } from './src/utils/networkSecurity.ts';
 import { fileURLToPath } from 'node:url';
 import {
   isPlausibleSongDuration,
+  isRelevantSongSearchCandidate,
   isMatchingLyricsCandidate,
   isRemixOrKnockoff,
   scoreAuthenticTrackCandidate,
@@ -371,25 +372,6 @@ interface ItunesTrackRaw {
   artworkUrl100?: string;
   previewUrl?: string;
   primaryGenreName?: string;
-}
-
-function isSearchCandidateMatch(itemTitle: string, itemArtist: string, query: string): boolean {
-  const normalize = (value: string) =>
-    value.toLowerCase().normalize('NFKD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .replace(/[^a-z0-9]+/g, ' ')
-      .trim()
-      .split(/\s+/)
-      .filter((token) => token.length > 1);
-  const queryTokens = [...new Set(normalize(query))];
-  const titleTokens = new Set(normalize(itemTitle));
-  const artistTokens = new Set(normalize(itemArtist));
-  if (!queryTokens.length) return false;
-  const titleHits = queryTokens.filter((token) => titleTokens.has(token));
-  const artistHits = queryTokens.filter((token) => artistTokens.has(token));
-  const totalHits = new Set([...titleHits, ...artistHits]).size;
-  const minimumHits = queryTokens.length <= 2 ? queryTokens.length : Math.ceil(queryTokens.length * 0.65);
-  return totalHits >= minimumHits && (titleHits.length > 0 || artistHits.length > 0);
 }
 
 function mapItunesTrack(raw: ItunesTrackRaw, region: string, hintLang?: string): StoredTrack {
@@ -2019,7 +2001,7 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
           const audio = String(item.audio || '').trim();
           if (!title || !artist || !audio || !isPlausibleSongDuration(duration)) return null;
           if (
-            !isSearchCandidateMatch(title, artist, query) ||
+            !isRelevantSongSearchCandidate(title, artist, query) ||
             isRemixOrKnockoff(title, query, artist, query)
           ) return null;
           return {
