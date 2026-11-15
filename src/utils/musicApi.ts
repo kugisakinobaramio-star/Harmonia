@@ -809,7 +809,7 @@ export async function resolveTrackStreams(
 
   const request = (async (): Promise<Track & { alternates?: string[] }> => {
     const controller = new AbortController();
-    const timeout = window.setTimeout(() => controller.abort(), 12_000);
+    const timeout = setTimeout(() => controller.abort(), 12_000);
     try {
       const res = await fetch(
         `/api/music/resolve?title=${encodeURIComponent(track.name)}&artist=${encodeURIComponent(
@@ -850,7 +850,7 @@ export async function resolveTrackStreams(
     } catch {
       // A timed-out or unavailable resolver must not block the player.
     } finally {
-      window.clearTimeout(timeout);
+      clearTimeout(timeout);
     }
 
     // Avoid hammering every provider on repeated renders when no source was found.
