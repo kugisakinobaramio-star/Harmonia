@@ -84,7 +84,7 @@ export function PlayerBar({
   const progressPct = Math.min(100, Math.max(0, (currentTime / safeDuration) * 100));
 
   return (
-    <footer aria-label="Spotify playback bar" className="z-30 shrink-0 bg-black">
+    <footer aria-label="Harmonia playback bar" className="z-30 shrink-0 bg-black">
       {/* Mobile Spotify Floating Mini-Player Pill (tappable to expand into full player) */}
       <div className="mx-2 mb-1 overflow-hidden rounded-lg bg-[#222227] md:hidden">
         <div className="flex items-center gap-2.5 px-2.5 py-2">
@@ -374,8 +374,8 @@ export function PlayerBar({
           <button
             type="button"
             onClick={onDownload}
-            aria-label="Download music track"
-            title="Download track"
+            aria-label="Open offline library"
+            title="Offline library"
             className="p-1.5 text-zinc-400 transition-colors hover:text-[#1DB954]"
           >
             <Download className="h-4 w-4" />
