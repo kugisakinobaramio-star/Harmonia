@@ -136,10 +136,21 @@ test('isUnnecessaryNoLyricsTrack filters out instrumental and karaoke tracks', (
   );
 });
 
-test('filterAndRankTracks removes no-lyrics tracks when prioritizeLyrics is true', () => {
-  const filtered = filterAndRankTracks(sampleTracks, '', { prioritizeLyrics: true });
-  assert.equal(filtered.some((t) => t.id === 't4'), false);
-  assert.equal(filtered.length, 3);
+test('filterAndRankTracks ranks vocal tracks first without hiding tracks lacking lyrics', () => {
+  const noLyricsTrack: Track = {
+    ...sampleTracks[3],
+    id: 't5',
+    name: 'Ordinary Song',
+    albumName: 'A Normal Album',
+  };
+  const noLyricsFirst = [noLyricsTrack, ...sampleTracks.slice(0, 3)];
+  const prioritized = filterAndRankTracks(noLyricsFirst, '', { prioritizeLyrics: true });
+  assert.equal(prioritized.length, 4);
+  assert.equal(prioritized.at(-1)?.id, 't5');
+
+  const unprioritized = filterAndRankTracks(noLyricsFirst, '', { prioritizeLyrics: false });
+  assert.equal(unprioritized.length, 4);
+  assert.equal(unprioritized[0]?.id, 't5');
 
   const jpop = filterAndRankTracks(sampleTracks, '', { languageFilter: 'J-Pop' });
   assert.deepEqual(

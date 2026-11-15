@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Music2, Trash2, Upload } from 'lucide-react';
 import type { Track } from '../types/music';
+import { normalizeImportedAudioBlob } from '../utils/offlineHelpers';
 
 type Item = { id: string; name: string; artist: string; size: number; blob: Blob };
 const DB = 'harmonia-offline-audio';
@@ -63,7 +64,8 @@ export function OfflineDownloadsView({ onPlayList, onToast }: { onPlayList: (tra
         const split = base.split(' - ');
         const artist = split.length > 1 ? split.shift()!.trim() : 'Local audio';
         const name = split.join(' - ').trim() || base;
-        await putItem({ id: 'local-' + file.name + '-' + file.size + '-' + file.lastModified, name, artist, size: file.size, blob: file });
+        const audioBlob = normalizeImportedAudioBlob(file, file.name);
+        await putItem({ id: 'local-' + file.name + '-' + file.size + '-' + file.lastModified, name, artist, size: audioBlob.size, blob: audioBlob });
       }
       await refresh();
       onToast('Audio files added to your offline library.');

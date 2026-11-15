@@ -23,6 +23,21 @@ export function LyricsView({
   const activeLineRef = useRef<HTMLButtonElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
+  const { activeIndex } = track
+    ? resolveActiveLyricPair(lyrics, currentTime, duration)
+    : { activeIndex: -1 };
+
+  // Keep hooks unconditional: the player can move between an empty queue and
+  // an active track without changing the number/order of hooks in this component.
+  useEffect(() => {
+    if (track && activeLineRef.current) {
+      activeLineRef.current.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center',
+      });
+    }
+  }, [activeIndex, track?.id]);
+
   if (!track) {
     return (
       <div className="rounded-lg bg-[#161619] p-8 text-center text-sm text-zinc-400">
@@ -30,17 +45,6 @@ export function LyricsView({
       </div>
     );
   }
-
-  const { activeIndex } = resolveActiveLyricPair(lyrics, currentTime, duration);
-
-  useEffect(() => {
-    if (activeLineRef.current) {
-      activeLineRef.current.scrollIntoView({
-        behavior: 'smooth',
-        block: 'center',
-      });
-    }
-  }, [activeIndex]);
 
   return (
     <section

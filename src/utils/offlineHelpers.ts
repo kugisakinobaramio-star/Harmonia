@@ -19,6 +19,23 @@ export interface OfflineTrackRecord {
 
 type StreamKey = keyof NonNullable<Track['streamUrls']>;
 
+const AUDIO_MIME_TYPES: Record<string, string> = {
+  mp3: 'audio/mpeg',
+  m4a: 'audio/mp4',
+  aac: 'audio/aac',
+  ogg: 'audio/ogg',
+  opus: 'audio/ogg',
+  wav: 'audio/wav',
+  flac: 'audio/flac',
+};
+
+export function normalizeImportedAudioBlob(file: Blob, fileName: string): Blob {
+  if (file.type.startsWith('audio/')) return file;
+  const extension = fileName.split('.').pop()?.toLowerCase() || '';
+  const mimeType = AUDIO_MIME_TYPES[extension];
+  return mimeType ? file.slice(0, file.size, mimeType) : file;
+}
+
 export function formatStorageBytes(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes <= 0) return '0 KB';
   if (bytes < 1048576) return `${Math.max(1, Math.round(bytes / 1024))} KB`;

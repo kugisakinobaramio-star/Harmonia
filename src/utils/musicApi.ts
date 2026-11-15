@@ -26,7 +26,6 @@ import {
   isPlausibleSongDuration,
   isRelevantTrackTitle,
   isUnnecessaryNoLyricsTrack,
-  parsePlainLyricsToLines,
   toProxiedImageUrl,
 } from './playerEngine';
 
@@ -272,7 +271,6 @@ export async function searchSongs(
         .map(mapSaavnSong)
         .filter(
           (t) =>
-            (!prioritizeLyrics || !isUnnecessaryNoLyricsTrack(t)) &&
             isPlausibleSongDuration(t.duration) &&
             !isRemixOrKnockoff(`${t.name} ${t.albumName}`, trimmed, t.artist, trimmed)
         );
@@ -291,7 +289,16 @@ export async function searchSongs(
             (languageFilter === 'All' || t.language === languageFilter) &&
             !isRemixOrKnockoff(`${t.name} ${t.albumName}`, trimmed, t.artist, trimmed)
         )
-        .sort((a, b) => scoreSearchCandidate(b, trimmed) - scoreSearchCandidate(a, trimmed));
+        .sort((a, b) => {
+          const lyricsPreference = (track: Track) =>
+            prioritizeLyrics
+              ? isUnnecessaryNoLyricsTrack(track) ? -80 : 20
+              : 0;
+          return (
+            scoreSearchCandidate(b, trimmed) + lyricsPreference(b) -
+            scoreSearchCandidate(a, trimmed) - lyricsPreference(a)
+          );
+        });
 
       const seen = new Set<string>();
       const dedupedRemote: Track[] = [];
@@ -305,7 +312,15 @@ export async function searchSongs(
 
       // Prefer live catalogue matches; keep local catalogue matches as a fallback,
       // not as a fixed block that crowds out the user's actual query.
-      const merged = [...dedupedRemote, ...localMatches].sort((a, b) => scoreSearchCandidate(b, trimmed) - scoreSearchCandidate(a, trimmed)).slice(0, 30);
+      const lyricsPreference = (track: Track) =>
+        prioritizeLyrics ? (isUnnecessaryNoLyricsTrack(track) ? -80 : 20) : 0;
+      const merged = [...dedupedRemote, ...localMatches]
+        .sort(
+          (a, b) =>
+            scoreSearchCandidate(b, trimmed) + lyricsPreference(b) -
+            scoreSearchCandidate(a, trimmed) - lyricsPreference(a)
+        )
+        .slice(0, 30);
       if (merged.length > 0) {
         return { tracks: merged, source: 'live' };
       }
@@ -596,11 +611,12 @@ export async function loadCollectionTracks(
     // Fallback
   }
 
+  // A failed remote collection lookup must not silently play unrelated demo tracks.
   return {
-    title: 'Curated Mix',
-    subtitle: 'Harmonia Selection',
+    title: 'Collection unavailable',
+    subtitle: 'The provider could not load this collection. Try again later.',
     image: ARTWORK.englishVinyl,
-    tracks: SEED_TRACKS.slice(0, 8),
+    tracks: [],
   };
 }
 
@@ -674,11 +690,9 @@ export async function fetchTrackLyrics(track: Track): Promise<{ lines: LyricLine
     return { lines: track.lyrics, synced: true };
   }
 
-  const fallbackLines = parsePlainLyricsToLines(
-    `${track.name}\n${track.artist}\n${track.albumName}`,
-    track.duration
-  );
-  return { lines: fallbackLines, synced: false };
+  // Do not fabricate lyric lines from track metadata. An empty result lets
+  // the UI state clearly that lyrics are unavailable for this recording.
+  return { lines: [], synced: false };
 }
 
 export interface BackendUserState {

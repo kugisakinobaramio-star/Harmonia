@@ -5,6 +5,7 @@ import {
   formatStorageBytes,
   isCollectionFullyDownloaded,
   offlineItemToTrack,
+  normalizeImportedAudioBlob,
   sanitizeDownloadFilename,
 } from './offlineHelpers';
 
@@ -81,4 +82,14 @@ test('offlineItemToTrack restores offline metadata with local object URL', () =>
   assert.equal(track.albumName, 'OutRun');
   assert.equal(track.language, 'English');
   assert.equal(track.streamUrls?.['320kbps'], 'blob:http://localhost:3000/abc');
+});
+
+test('normalizeImportedAudioBlob assigns a playable MIME type when file metadata is generic', () => {
+  const unknownM4a = new Blob(['audio-bytes'], { type: 'application/octet-stream' });
+  const normalized = normalizeImportedAudioBlob(unknownM4a, 'recording.m4a');
+  assert.equal(normalized.type, 'audio/mp4');
+  assert.equal(normalized.size, unknownM4a.size);
+
+  const known = new Blob(['audio-bytes'], { type: 'audio/ogg' });
+  assert.strictEqual(normalizeImportedAudioBlob(known, 'recording.opus'), known);
 });
