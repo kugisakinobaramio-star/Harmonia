@@ -1375,8 +1375,13 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
           `https://api.audius.co/v1/tracks/${encodeURIComponent(bestAud.id)}/stream`,
           `https://discoveryprovider.audius.co/v1/tracks/${encodeURIComponent(bestAud.id)}/stream`,
         ];
-        if (!streamUrls['160kbps']) streamUrls['160kbps'] = audStreams[0];
-        if (!streamUrls['96kbps']) streamUrls['96kbps'] = audStreams[1];
+        // Keep Audius behind every available JioSaavn quality. Putting an Audius
+        // URL in the 160/96 slots made Auto/160 playback choose Audius even when
+        // an exact JioSaavn 320kbps stream had already matched.
+        if (!Object.values(streamUrls).some(Boolean)) {
+          streamUrls['160kbps'] = audStreams[0];
+          streamUrls['96kbps'] = audStreams[1];
+        }
         fullAlternates.push(...audStreams);
       }
     }
