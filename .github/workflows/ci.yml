@@ -26,12 +26,12 @@ jobs:
       - name: Smoke test Cloudflare Worker API and static assets
         run: |
           for i in $(seq 1 30); do
-            if curl --fail --silent http://127.0.0.1:8787/api/music/health > /tmp/health.json; then
+            if curl --max-time 5 --fail --silent http://127.0.0.1:8787/api/music/health > /tmp/health.json; then
               break
             fi
             sleep 2
           done
           cat /tmp/wrangler.log
           grep -q '"ok":true' /tmp/health.json
-          curl --fail --silent http://127.0.0.1:8787/ > /tmp/index.html
+          curl --max-time 5 --fail --silent http://127.0.0.1:8787/ > /tmp/index.html
           grep -q 'id="root"' /tmp/index.html
