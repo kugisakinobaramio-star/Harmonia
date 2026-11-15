@@ -980,7 +980,11 @@ export default function App() {
 
   // Fetch synced lyrics whenever current track changes
   useEffect(() => {
-    if (!currentTrack) return;
+    if (!currentTrack) {
+      setLyrics([]);
+      setLyricsSynced(false);
+      return;
+    }
     if (currentTrack.lyrics?.length) {
       setLyrics(currentTrack.lyrics);
       setLyricsSynced(true);
@@ -2006,6 +2010,7 @@ export default function App() {
             playbackSeqRef.current += 1;
             currentTrackRef.current = null;
             resolvedPlaybackTrackRef.current = null;
+            pendingYtVideoIdRef.current = null;
             candidateUrlsRef.current = [];
             candidateIdxRef.current = 0;
             candidateFailureRef.current = () => {};
