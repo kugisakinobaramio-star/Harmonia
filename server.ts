@@ -1039,6 +1039,21 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
     licenseurl?: string | string[];
   }
 
+  interface FunkwhaleTrackRaw {
+    id?: number | string;
+    title?: string;
+    name?: string;
+    artist_name?: string;
+    artists?: Array<{ name?: string }>;
+    duration?: number | string;
+    listen_url?: string;
+    is_playable?: boolean;
+    album?: { title?: string; cover?: string; cover_url?: string };
+    cover?: string;
+    uploads?: Array<{ listen_url?: string; audio_file?: { listen_url?: string } }>;
+  }
+
+
   interface InternetArchiveFile {
     name?: string;
     format?: string;
@@ -1175,7 +1190,69 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
     }
   }
 
-    const [saavnSettled, audiusSettled, deezerSettled, itunesSettled, jamendoSettled] =
+  // Funkwhale is an open-source, federated music platform. Only public,
+  // playable recordings with a strong title/artist/duration match are eligible.
+  // Remix/cover filtering is applied before a stream can enter the fallback list.
+  async function resolveFunkwhaleStream(
+    cleanTitle: string,
+    primaryArtist: string,
+    targetDurationSec = 0
+  ): Promise<string | undefined> {
+    const pods = ['https://open.audio', 'https://demo.funkwhale.audio'];
+    const results = await Promise.allSettled(
+      pods.map(async (pod) => {
+        const endpoint = `${pod}/api/v1/tracks/?q=${encodeURIComponent(
+          `${cleanTitle} ${primaryArtist}`.trim()
+        )}&page_size=12`;
+        const response = await fetchWithTimeout(endpoint, 3500);
+        if (!response.ok) return [];
+        const json = (await response.json()) as { results?: FunkwhaleTrackRaw[] };
+        return (json.results || []).map((track) => ({ track, pod }));
+      })
+    );
+    const candidates = results.flatMap((r) => r.status === 'fulfilled' ? r.value : []);
+    const ranked = candidates.map(({ track, pod }) => {
+      const title = String(track.title || track.name || '');
+      const artist = String(
+        track.artist_name ||
+        track.artists?.map((a) => a.name || '').filter(Boolean).join(', ') ||
+        primaryArtist
+      );
+      const duration = Number(track.duration || 0);
+      const listenPath =
+        track.listen_url ||
+        track.uploads?.find((u) => u.listen_url)?.listen_url ||
+        track.uploads?.find((u) => u.audio_file?.listen_url)?.audio_file?.listen_url ||
+        '';
+      const score = scoreAuthenticTrackCandidate({
+        itemTitle: title,
+        itemArtist: artist,
+        requestedTitle: cleanTitle,
+        requestedArtist: primaryArtist,
+        itemDurationSec: duration,
+        targetDurationSec,
+      });
+      if (
+        track.is_playable === false ||
+        !listenPath ||
+        !isPlausibleSongDuration(duration) ||
+        isRemixOrKnockoff(title, cleanTitle, artist, primaryArtist) ||
+        score === null
+      ) return null;
+      let streamUrl = '';
+      try {
+        streamUrl = new URL(listenPath, pod).toString();
+      } catch {
+        return null;
+      }
+      if (!streamUrl.startsWith(`${pod}/`)) return null;
+      return { streamUrl, score };
+    }).filter((item): item is { streamUrl: string; score: number } => item !== null)
+      .sort((a, b) => b.score - a.score);
+    return ranked[0]?.streamUrl;
+  }
+
+    const [saavnSettled, audiusSettled, deezerSettled, itunesSettled, jamendoSettled, funkwhaleSettled] =
       await Promise.allSettled([
         fetchWithTimeout(
           `${SAAVN_BASE}/api/search/songs?query=${encodeURIComponent(query)}&page=0&limit=12`,
@@ -1217,12 +1294,19 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
           4000
         ).then((r) => (r.ok ? r.json() : null)),
         resolveJamendoStream(cleanTitle, primaryArtist, targetDurationSec),
+        resolveFunkwhaleStream(cleanTitle, primaryArtist, targetDurationSec),
       ]);
 
     if (jamendoSettled.status === 'fulfilled' && jamendoSettled.value) {
       const jamUrl = jamendoSettled.value;
       if (!streamUrls['160kbps']) streamUrls['160kbps'] = jamUrl;
       fullAlternates.push(jamUrl);
+    }
+
+    if (funkwhaleSettled.status === 'fulfilled' && funkwhaleSettled.value) {
+      const funkwhaleUrl = funkwhaleSettled.value;
+      if (!streamUrls['160kbps']) streamUrls['160kbps'] = funkwhaleUrl;
+      fullAlternates.push(funkwhaleUrl);
     }
 
 
@@ -1374,6 +1458,10 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
         jamendo: {
           request: jamendoSettled.status,
           candidateSelected: Boolean(jamendoSettled.status === 'fulfilled' && jamendoSettled.value),
+        },
+        funkwhale: {
+          request: funkwhaleSettled.status,
+          candidateSelected: Boolean(funkwhaleSettled.status === 'fulfilled' && funkwhaleSettled.value),
         },
         internetArchive: {
           attempted: internetArchiveAttempted,
