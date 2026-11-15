@@ -844,3 +844,117 @@ export function sortTracks(
   }
   return copy.sort((a, b) => a.duration - b.duration);
 }
+
+
+export interface DiscoverTasteSignals {
+  likedTracks: Track[];
+  playCounts: Record<string, number>;
+  artistAffinity: Record<string, number>;
+  genreAffinity: Record<string, number>;
+  preferredLanguages: MusicLanguage[];
+  favoriteArtists: string[];
+  preferredMoods: string[];
+}
+
+/** Rank catalogue results with local listener signals and a greedy diversity pass. */
+export function rankDiscoverTracks(
+  tracks: Track[],
+  recentlyPlayed: Track[],
+  taste: DiscoverTasteSignals,
+  rotation = 0
+): Track[] {
+  const normalize = (value: string) =>
+    value.toLocaleLowerCase().normalize('NFKD').replace(/[\\u0300-\\u036f]/g, '').trim();
+  const artistKey = (track: Track) =>
+    normalize(track.artist.split(/,|&|\\bfeat\\.?\\b|\\bft\\.?\\b|\\bwith\\b/i)[0] || track.artist);
+  const genreKey = (track: Track) => normalize((track.genre || '').split(/[,/&]/)[0] || '');
+  const recentIds = new Set(recentlyPlayed.slice(0, 8).map((track) => track.id));
+  const likedArtists = new Set(taste.likedTracks.map(artistKey));
+  const likedGenres = new Set(taste.likedTracks.map(genreKey).filter(Boolean));
+  const favoriteArtists = taste.favoriteArtists.map(normalize).filter(Boolean);
+  const preferredLanguages = taste.preferredLanguages.map(normalize);
+  const preferredMoods = taste.preferredMoods.map(normalize).filter(Boolean);
+  const artistWeights = Object.entries(taste.artistAffinity).map(([key, value]) => [normalize(key), value] as const);
+  const genreWeights = Object.entries(taste.genreAffinity).map(([key, value]) => [normalize(key), value] as const);
+
+  const score = (track: Track): number => {
+    const artist = artistKey(track);
+    const genre = genreKey(track);
+    const language = normalize(track.language || '');
+    const context = normalize([track.name, track.albumName, track.genre || ''].join(' '));
+    let value = 0;
+    if (likedArtists.has(artist)) value += 3.5;
+    if (favoriteArtists.some((name) => artist === name || artist.includes(name) || name.includes(artist))) value += 4.5;
+    for (const [name, weight] of artistWeights) {
+      if (name && (artist === name || artist.includes(name) || name.includes(artist))) {
+        value += Math.min(4, Math.log1p(Math.max(0, weight)) * 1.5);
+        break;
+      }
+    }
+    if (likedGenres.has(genre) && genre) value += 2.5;
+    for (const [name, weight] of genreWeights) {
+      if (name && genre && (genre.includes(name) || name.includes(genre))) {
+        value += Math.min(3, Math.log1p(Math.max(0, weight)) * 1.2);
+        break;
+      }
+    }
+    const languageIndex = preferredLanguages.indexOf(language);
+    if (languageIndex >= 0) value += Math.max(0.8, 2.8 - languageIndex * 0.35);
+    if (preferredMoods.some((mood) => mood.split(/[\\s&/]+/).filter((token) => token.length > 2).some((token) => context.includes(token)))) value += 1.6;
+    const plays = Math.max(0, taste.playCounts[track.id] || 0);
+    value -= Math.min(2.8, Math.log1p(plays) * 0.9);
+    if (recentIds.has(track.id)) value -= 5;
+    if (track.playCount && Number.isFinite(track.playCount)) value += Math.min(0.35, Math.log1p(Math.max(0, track.playCount)) * 0.025);
+    return value;
+  };
+
+  const unique = new Map<string, Track>();
+  for (const track of tracks) {
+    if (!track || !track.id || !track.name || !track.artist) continue;
+    const key = `${normalize(track.name)}::${artistKey(track)}`;
+    if (!unique.has(key)) unique.set(key, track);
+  }
+  let pool = [...unique.values()];
+  const freshPool = pool.filter((track) => !recentIds.has(track.id));
+  if (freshPool.length) pool = freshPool;
+  if (!pool.length) return [];
+
+  const hash = (value: string) => {
+    let result = 2166136261;
+    for (let index = 0; index < value.length; index += 1) {
+      result ^= value.charCodeAt(index);
+      result = Math.imul(result, 16777619);
+    }
+    return result >>> 0;
+  };
+  const baseScores = new Map(pool.map((track) => [
+    track.id,
+    score(track) + (hash(`${track.id}:${rotation}`) / 0xffffffff) * 0.08,
+  ]));
+  const artistCounts = new Map<string, number>();
+  const genreCounts = new Map<string, number>();
+  const ranked: Track[] = [];
+
+  while (pool.length) {
+    let bestIndex = 0;
+    let bestScore = Number.NEGATIVE_INFINITY;
+    for (let index = 0; index < pool.length; index += 1) {
+      const track = pool[index];
+      const artist = artistKey(track);
+      const genre = genreKey(track);
+      const diversityPenalty = (artistCounts.get(artist) || 0) * 2.2 + (genre ? (genreCounts.get(genre) || 0) * 0.65 : 0);
+      const candidateScore = (baseScores.get(track.id) || 0) - diversityPenalty;
+      if (candidateScore > bestScore) {
+        bestScore = candidateScore;
+        bestIndex = index;
+      }
+    }
+    const [selected] = pool.splice(bestIndex, 1);
+    ranked.push(selected);
+    const artist = artistKey(selected);
+    const genre = genreKey(selected);
+    artistCounts.set(artist, (artistCounts.get(artist) || 0) + 1);
+    if (genre) genreCounts.set(genre, (genreCounts.get(genre) || 0) + 1);
+  }
+  return ranked;
+}
