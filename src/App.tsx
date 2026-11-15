@@ -628,6 +628,9 @@ export default function App() {
             },
             onStateChange: (event: any) => {
               const state = event.data;
+              // The hidden YouTube player is initialized with a placeholder video.
+              // Its ENDED event must never advance a track playing on the native audio engine.
+              if (activeEngineRef.current !== 'yt') return;
               if (state === 0) {
                 advanceTrackRef.current(1, true);
               } else if (state === 1) {
@@ -635,19 +638,21 @@ export default function App() {
               }
             },
             onError: () => {
-              if (activeEngineRef.current === 'yt') {
-                const cur = currentTrackRef.current;
-                if (cur) {
-                  const candidates = buildStreamCandidates(cur, quality);
-                  if (candidates.length > 0) {
-                    activeEngineRef.current = 'audio';
-                    loadAndPlayCandidate(0, playbackSeqRef.current, () => {
-                      advanceTrackRef.current(1, true);
-                    });
-                  } else {
-                    advanceTrackRef.current(1, true);
-                  }
-                }
+              // A YouTube error is a source failure, not proof that the song ended.
+              // Try any already-resolved native candidates, but never silently skip the track.
+              if (activeEngineRef.current !== 'yt') return;
+              const cur = currentTrackRef.current;
+              if (!cur) return;
+              const candidates = buildStreamCandidates(cur, quality);
+              if (candidates.length > 0) {
+                activeEngineRef.current = 'audio';
+                loadAndPlayCandidate(0, playbackSeqRef.current, () => {
+                  setIsPlaying(false);
+                  showToast('This track could not be played. Try another source or track.');
+                });
+              } else {
+                setIsPlaying(false);
+                showToast('This track could not be played. Try another source or track.');
               }
             },
           },
