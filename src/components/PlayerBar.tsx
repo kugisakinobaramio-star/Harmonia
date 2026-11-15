@@ -142,10 +142,19 @@ export function PlayerBar({
         </div>
 
         {/* Bottom mini progress line inside Spotify mobile pill */}
-        <div className="h-[2px] w-full bg-white/15">
+        <div className="relative h-3 w-full touch-none bg-white/15">
           <div
-            className="h-full bg-white transition-[width] duration-150"
+            className="pointer-events-none absolute left-0 top-1/2 h-[2px] -translate-y-1/2 bg-white transition-[width] duration-150"
             style={{ width: `${progressPct}%` }}
+          />
+          <input
+            type="range"
+            min={0}
+            max={1000}
+            value={Math.round((progressPct / 100) * 1000)}
+            aria-label="Playback progress"
+            onChange={(e) => onSeek((Number(e.target.value) / 1000) * safeDuration)}
+            className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
           />
         </div>
       </div>

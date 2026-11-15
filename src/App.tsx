@@ -633,29 +633,15 @@ export default function App() {
           activeAudioSlotRef.current !== candidateSlot ||
           incoming.getAttribute('src') !== url
         ) return;
-        const targetVol = volume / 100;
-        const steps = 15;
-        const stepTime = 100; // 1.5 seconds total crossfade
-        let step = 0;
-
-        const fadeTimer = window.setInterval(() => {
-          step++;
-          const progress = step / steps;
-          if (incoming && Number.isFinite(targetVol)) {
-            incoming.volume = Math.min(targetVol, progress * targetVol);
-          }
-          if (outgoing && Number.isFinite(outgoing.volume)) {
-            outgoing.volume = Math.max(0, (1 - progress) * outgoing.volume);
-          }
-
-          if (step >= steps) {
-            window.clearInterval(fadeTimer);
-            try {
-              outgoing.pause();
-              outgoing.src = '';
-            } catch {}
-          }
-        }, stepTime);
+        // Use a hard handoff instead of a timed crossfade. A stale fade interval
+        // could otherwise keep an older slot audible after rapid track changes.
+        incoming.volume = volume / 100;
+        incoming.muted = volume === 0;
+        try {
+          outgoing.pause();
+          outgoing.removeAttribute('src');
+          outgoing.load();
+        } catch {}
       }).catch(() => {
         if (!candidateFailed) onCandidateError();
       });
@@ -943,6 +929,14 @@ export default function App() {
     (track: Track) => {
       const audio = audioRef.current;
       const playSeq = ++playbackSeqRef.current;
+      // Stop both native slots before starting a new track so an outgoing stream
+      // cannot remain audible when the next track resolves or switches engines.
+      [audioRef.current, audioRef2.current].forEach((slot) => {
+        if (!slot) return;
+        slot.pause();
+        slot.removeAttribute('src');
+        slot.load();
+      });
       // Keep the active track ref in sync immediately; React state updates below are async.
       // YouTube can fail before the queue update effect runs, and its fallback needs this
       // track's freshly resolved preview/alternate URLs.
@@ -1273,8 +1267,16 @@ export default function App() {
         try {
           ytPlayerRef.current?.seekTo?.(clamped, true);
         } catch {}
-      } else if (audioRef.current && !usingSynthRef.current && Number.isFinite(audioRef.current.duration)) {
-        audioRef.current.currentTime = clamped;
+      } else if (!usingSynthRef.current) {
+        const activeAudio =
+          activeAudioSlotRef.current === 1 ? audioRef.current : audioRef2.current;
+        if (activeAudio && Number.isFinite(activeAudio.duration) && activeAudio.duration > 0) {
+          try {
+            activeAudio.currentTime = clamped;
+          } catch {
+            // Some streams are not seekable until their media metadata is ready.
+          }
+        }
       }
     },
     [duration]
