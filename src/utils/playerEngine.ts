@@ -523,8 +523,7 @@ export function scoreAuthenticTrackCandidate(params: {
  * Detects instrumental / karaoke / no-lyrics / low-value spam tracks
  * so they are removed or demoted from priority recommendations and search.
  */
-export function isUnnecessaryNoLyricsTrack(track: Track): boolean {
-  if (track.hasLyrics === false) return true;
+export function isInstrumentalOrLowValueTrack(track: Track): boolean {
   const hay = `${track.name} ${track.albumName} ${track.genre || ''}`.toLowerCase();
   const bannedPatterns = [
     'instrumental',
@@ -539,6 +538,10 @@ export function isUnnecessaryNoLyricsTrack(track: Track): boolean {
     'rain sound',
   ];
   return bannedPatterns.some((pat) => hay.includes(pat));
+}
+
+export function isUnnecessaryNoLyricsTrack(track: Track): boolean {
+  return track.hasLyrics === false || isInstrumentalOrLowValueTrack(track);
 }
 
 export function isRelevantTrackTitle(itemTitle: string, query: string): boolean {
@@ -645,13 +648,17 @@ export function mapCoordsToRegion(lat: number, lng: number): MusicRegion {
 }
 
 export function scoreTrackForUser(track: Track, profile: UserTasteProfile): number {
-  if (isUnnecessaryNoLyricsTrack(track)) return -500;
+  if (isInstrumentalOrLowValueTrack(track)) return -500;
   if (isRemixOrKnockoff(track.name, '', track.artist, '')) return -500;
 
   let score = 0;
-  // Lyrics priority boost
-  if (track.hasLyrics || (track.lyrics && track.lyrics.length > 0)) {
-    score += 40;
+  // Lyrics are a preference, not a hard eligibility rule.
+  if (profile.prioritizeLyrics !== false) {
+    if (track.hasLyrics || (track.lyrics && track.lyrics.length > 0)) {
+      score += 40;
+    } else if (track.hasLyrics === false) {
+      score -= 28;
+    }
   }
 
   // Preferred languages are ranked from the listener's own settings and history.
