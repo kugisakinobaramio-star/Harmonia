@@ -604,8 +604,8 @@ export async function loadCollectionTracks(
 
 function videoSearchTokens(value: string): string[] {
   const ignored = new Set(['official', 'music', 'video', 'videos', 'audio', 'lyrics', 'hd', '4k', 'full', 'song']);
-  return value.toLowerCase().normalize('NFKD').replace(/[\\u0300-\\u036f]/g, '')
-    .replace(/[^a-z0-9]+/g, ' ').trim().split(/\\s+/)
+  return value.toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ').trim().split(/\s+/)
     .filter((token) => token.length > 1 && !ignored.has(token));
 }
 
@@ -627,7 +627,7 @@ export async function searchVideos(query: string): Promise<VideoResult[]> {
         const channel = videoSearchTokens(video.channel || '');
         const titleHits = tokens.filter((token) => title.some((part) => part.includes(token) || token.includes(part))).length;
         const channelHits = tokens.filter((token) => channel.some((part) => part.includes(token) || token.includes(part))).length;
-        const phrase = trimmed.toLowerCase().replace(/\\s+/g, ' ');
+        const phrase = trimmed.toLowerCase().replace(/\s+/g, ' ');
         const titleText = (video.title || '').toLowerCase();
         const score = (titleHits / tokens.length) * 100 + (channelHits / tokens.length) * 18
           + (titleText.includes(phrase) ? 35 : 0);
