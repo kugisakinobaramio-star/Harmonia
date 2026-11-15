@@ -1,6 +1,7 @@
-import { Home, Library, Search } from 'lucide-react';
+import { Compass, Home, Library, Search } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CollectionView } from './components/CollectionView';
+import { DiscoverView } from './components/DiscoverView';
 import { ExpandedPlayer } from './components/ExpandedPlayer';
 import { Header } from './components/Header';
 import { HomeView } from './components/HomeView';
@@ -1703,6 +1704,10 @@ export default function App() {
               />
             )}
 
+            {activeView === 'discover' && (
+              <DiscoverView tracks={[...regionalTracks, ...personalizedFeedTracks, ...recommendedTracks]} recentlyPlayed={recentlyPlayed} onPlayTrackList={playTrackList} />
+            )}
+
             {activeView === 'search' && (
               <SearchView
                 query={searchQuery}
@@ -1918,7 +1923,7 @@ export default function App() {
       {/* Mobile Bottom Navigation Bar */}
       <nav
         aria-label="Mobile navigation"
-        className="grid grid-cols-3 border-t border-white/[0.08] bg-black py-1.5 lg:hidden"
+        className="grid grid-cols-4 border-t border-white/[0.08] bg-black py-1.5 lg:hidden"
       >
         <button
           type="button"
@@ -1929,6 +1934,9 @@ export default function App() {
         >
           <Home className="h-5 w-5" />
           <span>Home</span>
+        </button>
+        <button type="button" onClick={() => navigateTo('discover', null)} className={`flex flex-col items-center gap-0.5 py-1 text-[11px] font-semibold ${activeView === 'discover' ? 'text-white' : 'text-zinc-400'}`}>
+          <Compass className="h-5 w-5" /><span>Discover</span>
         </button>
         <button
           type="button"
