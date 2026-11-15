@@ -1459,6 +1459,37 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
     // Safe playback diagnostics: never log search terms, stream URLs, or user data.
     // Promise status distinguishes provider timeouts/errors from fulfilled requests;
     // candidate counts and selected-source flags show where resolution stopped.
+    const saavnCandidateDiagnostics = saavnSettled.status === 'fulfilled'
+      ? ((saavnSettled.value?.data?.results || []) as SaavnCandidateRaw[]).slice(0, 8).map((candidate) => {
+          const primaryArtists = (candidate.artists?.primary || [])
+            .map((entry) => (entry.name || '').trim())
+            .filter(Boolean)
+            .join(', ');
+          const downloadEntries = Array.isArray(candidate.downloadUrl) ? candidate.downloadUrl : [];
+          const score = scoreSaavnMatch(candidate, cleanTitle, artist || primaryArtist, targetDurationSec);
+          const reason = !candidate.name
+            ? 'missing_title'
+            : !primaryArtists
+              ? 'missing_primary_artist'
+              : !downloadEntries.length
+                ? 'missing_download_urls'
+                : score === null
+                  ? 'strict_match_rejected'
+                  : 'accepted';
+          return {
+            title: String(candidate.name || '').slice(0, 120),
+            primaryArtist: primaryArtists.slice(0, 160),
+            duration: Number(candidate.duration || 0),
+            downloadEntryCount: downloadEntries.length,
+            downloadQualities: downloadEntries
+              .map((entry) => String(entry.quality || ''))
+              .filter(Boolean)
+              .slice(0, 8),
+            score,
+            reason,
+          };
+        })
+      : [];
     const diagnostics = {
       providers: {
         saavn: {
