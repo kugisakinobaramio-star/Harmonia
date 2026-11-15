@@ -1455,6 +1455,7 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
       if (streamUrls['320kbps']) fullAlternates.push(streamUrls['320kbps']);
       if (streamUrls['160kbps']) fullAlternates.push(streamUrls['160kbps']);
       if (streamUrls['96kbps']) fullAlternates.push(streamUrls['96kbps']);
+      if (Object.values(streamUrls).some(Boolean)) resolvedSourceProvider = 'JioSaavn';
     }
 
     if (audiusSettled.status === 'fulfilled' && audiusSettled.value?.data?.length) {
@@ -1480,6 +1481,7 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
         if (!Object.values(streamUrls).some(Boolean)) {
           streamUrls['160kbps'] = audStreams[0];
           streamUrls['96kbps'] = audStreams[1];
+          resolvedSourceProvider = 'Audius';
         }
         fullAlternates.push(...audStreams);
       }
@@ -1497,20 +1499,29 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
       if (archiveUrl) {
         streamUrls['160kbps'] = archiveUrl;
         fullAlternates.push(archiveUrl);
+        resolvedSourceProvider = 'Internet Archive';
         internetArchiveSelected = true;
       }
     }
 
     if (!Object.values(streamUrls).some(Boolean)) {
-      // Jamendo/Funkwhale are fallback sources. Do not mix their 160kbps
-      // stream into a track that already has an exact primary-catalogue match:
-      // otherwise quality selection can accidentally play a different version.
-      const fallbackUrl =
-        (jamendoSettled.status === 'fulfilled' ? jamendoSettled.value : undefined) ||
-        (funkwhaleSettled.status === 'fulfilled' ? funkwhaleSettled.value : undefined);
-      if (fallbackUrl) {
-        streamUrls['160kbps'] = fallbackUrl;
-        fullAlternates.push(fallbackUrl);
+      // Do not mix lower-priority fallback streams into a track that already
+      // has an exact primary-catalogue match.
+      const jamendoCandidate =
+        jamendoSettled.status === 'fulfilled' ? jamendoSettled.value : undefined;
+      const funkwhaleCandidate =
+        funkwhaleSettled.status === 'fulfilled' ? funkwhaleSettled.value : undefined;
+      if (jamendoCandidate) {
+        streamUrls['160kbps'] = jamendoCandidate.url;
+        fullAlternates.push(jamendoCandidate.url);
+        resolvedSourceProvider = 'Jamendo';
+        resolvedSourcePageUrl = jamendoCandidate.sourcePageUrl;
+        resolvedSourceLicense = jamendoCandidate.sourceLicense;
+        resolvedOfflineAvailable = false;
+      } else if (funkwhaleCandidate) {
+        streamUrls['160kbps'] = funkwhaleCandidate;
+        fullAlternates.push(funkwhaleCandidate);
+        resolvedSourceProvider = 'Funkwhale';
       }
     }
 
@@ -1532,7 +1543,10 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
         .filter((x): x is { d: DeezerTrackRaw; score: number } => x.score !== null)
         .sort((x, y) => y.score - x.score)[0]?.d;
       if (bestDz?.preview) {
-        previewUrl = bestDz.preview;
+        if (!previewUrl) {
+          previewUrl = bestDz.preview;
+          previewSourceProvider = 'Deezer';
+        }
         previewAlternates.push(bestDz.preview);
       }
     }
@@ -1555,7 +1569,10 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
         .filter((x): x is { r: ItunesTrackRaw; score: number } => x.score !== null)
         .sort((x, y) => y.score - x.score)[0]?.r;
       if (bestIt?.previewUrl) {
-        if (!previewUrl) previewUrl = bestIt.previewUrl;
+        if (!previewUrl) {
+          previewUrl = bestIt.previewUrl;
+          previewSourceProvider = 'Apple Music';
+        }
         previewAlternates.push(bestIt.previewUrl);
       }
     }
@@ -1564,10 +1581,15 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
     // Do not resolve YouTube IDs into the hidden audio engine: that would
     // rely on unofficial search endpoints and could enable background audio.
 
-    const payload = {
+    const payload: StreamResolvePayload = {
       streamUrls,
       previewUrl,
       alternates: Array.from(new Set([...fullAlternates, ...previewAlternates])),
+      sourceProvider: resolvedSourceProvider || previewSourceProvider,
+      sourceAvailability: resolvedSourceProvider ? 'full' : previewUrl ? 'preview' : 'lookup',
+      sourcePageUrl: resolvedSourcePageUrl,
+      sourceLicense: resolvedSourceLicense,
+      offlineAvailable: resolvedOfflineAvailable,
     };
 
     // Safe playback diagnostics: never log search terms, stream URLs, or user data.
