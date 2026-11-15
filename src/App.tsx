@@ -375,8 +375,11 @@ export default function App() {
   }, [downloadedIds, downloadingIds, quality, showToast]);
 
   const handleDownloadAll = useCallback(async (tracks: Track[]) => {
+    const removeAll = tracks.length > 0 && tracks.every((track) => downloadedIds.has(track.id));
     for (const track of tracks) {
-      if (!downloadedIds.has(track.id)) await handleToggleDownload(track);
+      if (removeAll ? downloadedIds.has(track.id) : !downloadedIds.has(track.id)) {
+        await handleToggleDownload(track);
+      }
     }
   }, [downloadedIds, handleToggleDownload]);
 
