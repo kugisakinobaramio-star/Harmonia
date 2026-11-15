@@ -25,13 +25,13 @@ jobs:
           (npx wrangler dev --local --ip 127.0.0.1 --port 8787 > /tmp/wrangler.log 2>&1 & echo $! > /tmp/wrangler.pid)
       - name: Smoke test Cloudflare Worker API and static assets
         run: |
-          for i in $(seq 1 30); do
-            if curl --max-time 5 --fail --silent http://127.0.0.1:8787/api/music/health > /tmp/health.json; then
+          for i in $(seq 1 10); do
+            if curl --connect-timeout 2 --max-time 4 --fail --silent http://127.0.0.1:8787/api/music/health > /tmp/health.json; then
               break
             fi
-            sleep 2
+            sleep 1
           done
           cat /tmp/wrangler.log
           grep -q '"ok":true' /tmp/health.json
-          curl --max-time 5 --fail --silent http://127.0.0.1:8787/ > /tmp/index.html
+          curl --connect-timeout 2 --max-time 4 --fail --silent http://127.0.0.1:8787/ > /tmp/index.html
           grep -q 'id="root"' /tmp/index.html
