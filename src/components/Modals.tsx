@@ -277,7 +277,7 @@ export function SpotifyImportModal({
     >
       <div className="w-full max-w-lg rounded-xl border border-white/10 bg-[#18181b] p-5 shadow-2xl">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-extrabold text-white">Spotify Free Stream &amp; Import</h2>
+          <h2 className="text-lg font-extrabold text-white">Import from Spotify</h2>
           <button
             type="button"
             onClick={onClose}
@@ -289,8 +289,9 @@ export function SpotifyImportModal({
         </div>
 
         <p className="mt-2 text-xs leading-relaxed text-zinc-400">
-          Paste any Spotify track, album, or playlist link (no API key or login needed) to stream
-          ad-free inside Harmonia, or pick a live Spotify playlist below.
+          Paste a public Spotify track, album, or playlist link to import its metadata into Harmonia.
+          Playback, when available, comes from separate providers; this does not unlock Spotify audio
+          or guarantee a full-length track. You can also browse public playlist information below.
         </p>
 
         <label htmlFor="spotify-import-input" className="sr-only">
