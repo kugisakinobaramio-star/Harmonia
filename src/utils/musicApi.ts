@@ -25,6 +25,7 @@ import {
   isRemixOrKnockoff,
   isPlausibleSongDuration,
   isRelevantTrackTitle,
+  isUnnecessaryNoLyricsTrack,
   toProxiedImageUrl,
 } from './playerEngine';
 
