@@ -941,16 +941,10 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
             return scored[0].id;
           }
 
-          for (const item of data.items) {
-            const rawId = item.url?.replace('/watch?v=', '') || '';
-            if (
-              rawId &&
-              rawId.length === 11 &&
-              !isRemixOrKnockoff(item.title || '', '', item.uploaderName || '', '')
-            ) {
-              return rawId;
-            }
-          }
+          // Do not fall back to the first merely plausible video when every
+          // candidate failed title/artist/duration validation. Returning an
+          // unscored result can select podcasts or unrelated long-form uploads.
+
         }
       } catch {
         // Try next endpoint
@@ -967,9 +961,16 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
         const html = await ytRes.text();
         const items = parseYouTubeSearchHtml(html, 6);
         for (const item of items) {
-          if (!isRemixOrKnockoff(item.title, '', item.channel, '')) {
-            return item.id;
-          }
+          // The HTML scrape has no reliable duration field, but still require
+          // a real title + artist match. Never accept the first generic result.
+          const score = scoreAuthenticTrackCandidate({
+            itemTitle: item.title || '',
+            itemArtist: item.channel || '',
+            requestedTitle: cleanTitle,
+            requestedArtist: primaryArtist,
+            targetDurationSec,
+          });
+          if (score !== null) return item.id;
         }
       }
     } catch {

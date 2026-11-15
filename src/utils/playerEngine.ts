@@ -437,6 +437,13 @@ export function scoreAuthenticTrackCandidate(params: {
   const hasCjk = /[\u3040-\u30ff\u4e00-\u9faf]/.test(itemTitle);
   const itemDur = params.itemDurationSec || 0;
   const targetDur = params.targetDurationSec || 0;
+
+  // Music search endpoints occasionally return podcasts, mixes, or long-form uploads.
+  // Never accept those as a song, and reject candidates whose runtime is far from
+  // the requested catalogue track instead of merely applying a small score penalty.
+  if (itemDur > 0 && itemDur > 15 * 60) return null;
+  if (targetDur > 35 && itemDur > 0 && Math.abs(itemDur - targetDur) > 180) return null;
+
   const cjkExactArtistAndDuration =
     Boolean(params.allowCjkDurationMatch) &&
     hasCjk &&
