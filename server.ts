@@ -373,6 +373,25 @@ interface ItunesTrackRaw {
   primaryGenreName?: string;
 }
 
+function isSearchCandidateMatch(itemTitle: string, itemArtist: string, query: string): boolean {
+  const normalize = (value: string) =>
+    value.toLowerCase().normalize('NFKD')
+      .replace(/[\\u0300-\\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, ' ')
+      .trim()
+      .split(/\\s+/)
+      .filter((token) => token.length > 1);
+  const queryTokens = [...new Set(normalize(query))];
+  const titleTokens = new Set(normalize(itemTitle));
+  const artistTokens = new Set(normalize(itemArtist));
+  if (!queryTokens.length) return false;
+  const titleHits = queryTokens.filter((token) => titleTokens.has(token));
+  const artistHits = queryTokens.filter((token) => artistTokens.has(token));
+  const totalHits = new Set([...titleHits, ...artistHits]).size;
+  const minimumHits = queryTokens.length <= 2 ? queryTokens.length : Math.ceil(queryTokens.length * 0.65);
+  return totalHits >= minimumHits && (titleHits.length > 0 || artistHits.length > 0);
+}
+
 function mapItunesTrack(raw: ItunesTrackRaw, region: string, hintLang?: string): StoredTrack {
   const highResArt = (raw.artworkUrl100 || '').replace('100x100bb', '300x300bb');
   const title = raw.trackName || 'Untitled Track';
@@ -1999,14 +2018,10 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
           const duration = Number(item.duration || 0);
           const audio = String(item.audio || '').trim();
           if (!title || !artist || !audio || !isPlausibleSongDuration(duration)) return null;
-          const score = scoreAuthenticTrackCandidate({
-            itemTitle: title,
-            itemArtist: artist,
-            requestedTitle: query,
-            requestedArtist: query,
-            itemDurationSec: duration,
-          });
-          if (score === null || isRemixOrKnockoff(title, query, artist, query)) return null;
+          if (
+            !isSearchCandidateMatch(title, artist, query) ||
+            isRemixOrKnockoff(title, query, artist, query)
+          ) return null;
           return {
             id: 'jamendo-' + String(item.id || title + '-' + artist),
             name: title,
@@ -2045,14 +2060,10 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
             !isPlausibleSongDuration(duration)
           ) return null;
 
-          const score = scoreAuthenticTrackCandidate({
-            itemTitle: title,
-            itemArtist: artist,
-            requestedTitle: query,
-            requestedArtist: query,
-            itemDurationSec: duration,
-          });
-          if (score === null || isRemixOrKnockoff(title, query, artist, query)) return null;
+          if (
+            !isSearchCandidateMatch(title, artist, query) ||
+            isRemixOrKnockoff(title, query, artist, query)
+          ) return null;
 
           let streamUrl = '';
           try {
