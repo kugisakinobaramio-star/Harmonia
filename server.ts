@@ -1986,7 +1986,6 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
       const byGenre: Track[][] = settled.map((result) =>
         result.status === 'fulfilled' ? result.value : []
       );
-      const merged: StoredTrack[] = [];
       const seenTracks = new Set<string>();
       const seenArtists = new Set<string>();
       // Round-robin across genres and providers, then allow artist repeats only
@@ -2009,8 +2008,7 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
           repeats.push(track);
         }
       }
-      merged.push(...firstPass, ...repeats);
-      const tracks = merged.slice(0, 80) as StoredTrack[];
+      const tracks = [...firstPass, ...repeats].slice(0, 80) as StoredTrack[];
       if (tracks.length) discoverCache.set(region, { expiresAt: Date.now() + 5 * 60_000, tracks });
       res.json({ ok: tracks.length > 0, region, tracks, cached: false });
     } catch {
