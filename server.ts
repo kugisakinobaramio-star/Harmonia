@@ -1327,10 +1327,42 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
 
     const [saavnSettled, audiusSettled, deezerSettled, itunesSettled, jamendoSettled, funkwhaleSettled] =
       await Promise.allSettled([
-        fetchWithTimeout(
-          `${SAAVN_BASE}/api/search/songs?query=${encodeURIComponent(query)}&page=0&limit=12`,
-          5000
-        ).then((r) => (r.ok ? r.json() : null)),
+        (async () => {
+          // Search both the combined query and title-only variants. Public catalogues
+          // sometimes tokenize artist/title differently; the strict scorer below
+          // still verifies the primary artist before accepting any stream.
+          const saavnQueries = [...new Set([
+            query,
+            `${primaryArtist} ${cleanTitle}`.trim(),
+            cleanTitle,
+          ].filter(Boolean))];
+          const responses = await Promise.allSettled(
+            saavnQueries.map((term) =>
+              fetchWithTimeout(
+                `${SAAVN_BASE}/api/search/songs?query=${encodeURIComponent(term)}&page=0&limit=12`,
+                5000
+              ).then((r) => (r.ok ? r.json() : null))
+            )
+          );
+          const seen = new Set<string>();
+          const results: SaavnCandidateRaw[] = [];
+          for (const response of responses) {
+            if (response.status !== 'fulfilled') continue;
+            const items = response.value?.data?.results;
+            if (!Array.isArray(items)) continue;
+            for (const item of items as SaavnCandidateRaw[]) {
+              const primary = (item.artists?.primary || [])
+                .map((entry) => entry.name || '')
+                .join(', ')
+                .toLowerCase();
+              const key = `${String(item.name || '').toLowerCase()}::${primary}`;
+              if (!item.name || seen.has(key)) continue;
+              seen.add(key);
+              results.push(item);
+            }
+          }
+          return { data: { results } };
+        })(),
         (async () => {
           // Audius' public API is the canonical read endpoint; keep a discovery
           // provider as a resilient mirror. Read-only search/streaming is public.
