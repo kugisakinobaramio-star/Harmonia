@@ -476,8 +476,9 @@ function scoreAuthenticAudiusMatch(
 ): number | null {
   if (!audItem.id || !audItem.title) return null;
   if ((audItem.duration || 0) < 75) return null;
-  // Require verified original artist account on Audius so community DJ re-uploads never sneak through
-  if (audItem.user?.is_verified !== true) return null;
+  // Verification is a trust signal, not a matching requirement. Unverified uploads
+  // remain eligible only when title, uploader/artist identity, and duration pass
+  // the same strict authenticity scorer used for every other candidate.
 
   const audArtist = audItem.user?.name || audItem.user?.handle || '';
   return scoreAuthenticTrackCandidate({
@@ -1512,11 +1513,11 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
             ? 'missing_track_identity'
             : Number(candidate.duration || 0) < 75
               ? 'duration_too_short'
-              : candidate.user?.is_verified !== true
-                ? 'uploader_not_verified'
-                : score === null
-                  ? 'strict_match_rejected'
-                  : 'accepted';
+              : score === null
+                ? 'strict_match_rejected'
+                : candidate.user?.is_verified === true
+                  ? 'accepted_verified'
+                  : 'accepted_unverified_strict_match';
           return {
             title: String(candidate.title || '').slice(0, 120),
             uploader: uploader.slice(0, 120),
@@ -1871,7 +1872,7 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
         .map((r) => mapDeezerTrack(r, country));
 
       const audiusTracks = audiusRaw
-        .filter((r) => r.user?.is_verified === true && (r.duration || 0) >= 75)
+        .filter((r) => (r.duration || 0) >= 75)
         .map((r) => mapAudiusTrack(r, country))
         .filter(
           (t) =>
