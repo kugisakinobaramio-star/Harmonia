@@ -443,13 +443,14 @@ export default function App() {
     const uniqueArtists = [...new Set(artistSeeds.map((artist) => artist.toLowerCase()))]
       .map((key) => artistSeeds.find((artist) => artist.toLowerCase() === key) || '')
       .filter(Boolean)
-      .slice(0, 3);
+      .slice(0, 1);
     const topGenres = Object.entries(genreAffinity)
       .filter(([, weight]) => weight > 0)
       .sort((a, b) => b[1] - a[1])
-      .slice(0, 1)
+      .slice(0, 2)
       .map(([genre]) => genre);
-    const queries = [...uniqueArtists, ...topGenres].slice(0, 3);
+    const languageSeed = preferredLanguages[0] || '';
+    const queries = [...topGenres, ...uniqueArtists, ...(languageSeed ? [languageSeed] : [])].slice(0, 4);
     if (!queries.length) {
       setPersonalizedFeedTracks([]);
       return () => { cancelled = true; };
