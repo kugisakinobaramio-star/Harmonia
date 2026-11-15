@@ -137,6 +137,17 @@ export function ExpandedPlayer({
                 {track.name}
               </h2>
               <p className="mt-0.5 truncate text-sm font-medium text-zinc-300">{track.artist}</p>
+              {track.sourceProvider && (
+                <p className="mt-1 truncate text-[10px] text-zinc-500">Source: {track.sourceProvider}</p>
+              )}
+              {track.sourceProvider === 'Jamendo' && track.sourcePageUrl && (
+                <div className="mt-1 flex flex-wrap gap-x-3 text-[10px]">
+                  <a href={track.sourcePageUrl} target="_blank" rel="noreferrer" className="text-[#86dba4] underline underline-offset-2">Jamendo track</a>
+                  {track.sourceLicense && (
+                    <a href={track.sourceLicense} target="_blank" rel="noreferrer" className="text-zinc-500 underline underline-offset-2">Creative Commons licence</a>
+                  )}
+                </div>
+              )}
             </div>
 
             <button
