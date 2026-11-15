@@ -443,14 +443,20 @@ export default function App() {
     const uniqueArtists = [...new Set(artistSeeds.map((artist) => artist.toLowerCase()))]
       .map((key) => artistSeeds.find((artist) => artist.toLowerCase() === key) || '')
       .filter(Boolean)
-      .slice(0, 1);
+      .slice(0, 3);
     const topGenres = Object.entries(genreAffinity)
       .filter(([, weight]) => weight > 0)
       .sort((a, b) => b[1] - a[1])
-      .slice(0, 2)
+      .slice(0, 3)
       .map(([genre]) => genre);
-    const languageSeed = preferredLanguages[0] || '';
-    const queries = [...topGenres, ...uniqueArtists, ...(languageSeed ? [languageSeed] : [])].slice(0, 4);
+    // Blend several independent taste signals instead of letting one artist
+    // dominate the entire discovery query set.
+    const queries = [
+      ...topGenres,
+      ...uniqueArtists,
+      ...preferredLanguages.slice(0, 2),
+      ...preferredMoods.slice(0, 2),
+    ].filter(Boolean).slice(0, 8);
     if (!queries.length) {
       setPersonalizedFeedTracks([]);
       return () => { cancelled = true; };
