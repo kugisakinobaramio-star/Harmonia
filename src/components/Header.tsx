@@ -41,7 +41,7 @@ interface HeaderProps {
   recentDrops: Track[];
   onPlayTrack: (track: Track) => void;
   displayName: string;
-  onOpenPersonalise: () => void;
+  onOpenProfile: () => void;
 }
 
 const REGIONS: MusicRegion[] = ['IN', 'JP', 'US', 'GB', 'GLOBAL'];
@@ -77,7 +77,7 @@ export function Header({
   recentDrops,
   onPlayTrack,
   displayName,
-  onOpenPersonalise,
+  onOpenProfile,
 }: HeaderProps) {
   const [openMenu, setOpenMenu] = useState<'none' | 'loc' | 'audio' | 'notif'>('none');
   const rightActionsRef = useRef<HTMLDivElement | null>(null);
@@ -408,9 +408,9 @@ export function Header({
         {/* User Avatar -> Personalise Feed */}
         <button
           type="button"
-          onClick={onOpenPersonalise}
-          aria-label="Personalise feed"
-          title={`Personalise feed (${displayName || 'Listener'})`}
+          onClick={onOpenProfile}
+          aria-label="Open listener profile"
+          title={`Your profile (${displayName || 'Listener'})`}
           className="grid h-8 w-8 shrink-0 place-items-center rounded-full border-4 border-[#1f1f1f] bg-[#19e68c] text-xs font-extrabold text-black transition-transform hover:scale-105"
         >
           {(displayName.trim()[0] || 'H').toUpperCase()}
