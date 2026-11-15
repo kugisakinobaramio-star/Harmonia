@@ -758,9 +758,13 @@ export function getArtistProfileById(id: string): ArtistProfile | undefined {
   return SEED_ARTISTS.find((a) => a.id === id);
 }
 
+type ResolvedTrackCacheValue = Partial<
+  Pick<Track, 'streamUrls' | 'previewUrl' | 'youtubeId' | 'youtubeAlternates'>
+> & { alternates?: string[] };
+
 const resolvedTrackCache = new Map<
   string,
-  Partial<Pick<Track, 'streamUrls' | 'previewUrl' | 'youtubeId' | 'youtubeAlternates'>> & { alternates?: string[] }
+  { value: ResolvedTrackCacheValue; expiresAt: number }
 >();
 const resolvedTrackInflight = new Map<string, Promise<Track & { alternates?: string[] }>>();
 const failedResolveUntil = new Map<string, number>();
@@ -770,7 +774,13 @@ export async function resolveTrackStreams(
   options: { forceRefresh?: boolean } = {}
 ): Promise<Track & { alternates?: string[] }> {
   const forceRefresh = Boolean(options.forceRefresh);
-  const cached = resolvedTrackCache.get(track.id);
+  const cachedEntry = resolvedTrackCache.get(track.id);
+  if (cachedEntry && cachedEntry.expiresAt <= Date.now()) {
+    resolvedTrackCache.delete(track.id);
+  }
+  const cached = cachedEntry && cachedEntry.expiresAt > Date.now()
+    ? cachedEntry.value
+    : undefined;
   if (forceRefresh) {
     resolvedTrackCache.delete(track.id);
     failedResolveUntil.delete(track.id);
@@ -842,7 +852,10 @@ export async function resolveTrackStreams(
             youtubeId: json.youtubeId || track.youtubeId,
             youtubeAlternates: json.youtubeAlternates || track.youtubeAlternates,
           };
-          resolvedTrackCache.set(track.id, entry);
+          resolvedTrackCache.set(track.id, {
+            value: entry,
+            expiresAt: Date.now() + 5 * 60_000,
+          });
           failedResolveUntil.delete(track.id);
           return { ...track, ...entry };
         }
