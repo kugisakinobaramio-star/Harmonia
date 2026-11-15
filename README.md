@@ -11,6 +11,13 @@ Harmonia combines a React interface, a small Express API and a Cloudflare Worker
 
 ---
 
+
+### Federated open-audio provider
+
+Harmonia can also resolve public, playable recordings from **Funkwhale** (an open-source, federated music platform). The resolver queries public Funkwhale pods, checks playability, duration, title and artist similarity, and rejects remix/cover-style matches before adding a stream candidate. Pod availability and catalog coverage vary; this source is best treated as an independent-music discovery fallback, not a replacement for commercial catalogues.
+
+Existing open/independent sources include Audius, Jamendo and license-filtered Internet Archive recordings. Each source is best-effort and only returns audio that its upstream makes publicly playable. Harmonia does not use remix-only catalogs as a substitute for original recordings, and provider metadata is never treated as proof that a commercial recording is licensed for redistribution.
+
 ## What Harmonia includes
 
 - Music search and discovery across supported catalogues
