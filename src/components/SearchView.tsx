@@ -78,6 +78,7 @@ export function SearchView({
   const [songPage, setSongPage] = useState(0);
   const [canLoadMoreSongs, setCanLoadMoreSongs] = useState(false);
   const [loadingMoreSongs, setLoadingMoreSongs] = useState(false);
+  const [loadMoreError, setLoadMoreError] = useState('');
   const [loading, setLoading] = useState(false);
   const [songs, setSongs] = useState<Track[]>([]);
   const [albums, setAlbums] = useState<
@@ -124,6 +125,7 @@ export function SearchView({
             setSongPage(0);
             setCanLoadMoreSongs(Boolean(rawQuery) && res.tracks.length > 0);
             setLoadingMoreSongs(false);
+            setLoadMoreError('');
           } else if (activeTab === 'albums') {
             const res = await searchAlbums(rawQuery);
             if (seq !== seqRef.current) return;
@@ -156,6 +158,7 @@ export function SearchView({
     const requestSeq = seqRef.current;
     const nextPage = songPage + 1;
     setLoadingMoreSongs(true);
+    setLoadMoreError('');
     try {
       const result = await searchSongs(rawQuery, {
         region,
@@ -180,6 +183,12 @@ export function SearchView({
       setSongs((previous) => [...previous, ...newTracks]);
       setSongPage(nextPage);
       setCanLoadMoreSongs(newTracks.length > 0);
+      if (newTracks.length === 0) setLoadMoreError('There are no additional matches for this search.');
+    } catch {
+      if (requestSeq === seqRef.current) {
+        setCanLoadMoreSongs(false);
+        setLoadMoreError('Could not load more results. Try the search again.');
+      }
     } finally {
       if (requestSeq === seqRef.current) setLoadingMoreSongs(false);
     }
@@ -397,6 +406,11 @@ export function SearchView({
                   {loadingMoreSongs ? 'Loading more songs…' : 'Load more results'}
                 </button>
               </div>
+            )}
+            {loadMoreError && (
+              <p className="pt-2 text-center text-xs text-zinc-500" role="status">
+                {loadMoreError}
+              </p>
             )}
           </div>
         )
