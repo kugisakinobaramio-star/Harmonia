@@ -139,6 +139,10 @@ function loadLocalSnapshot(): {
   likedMap?: Record<string, Track>;
   playlists?: CuratedPlaylist[];
   recentlyPlayed?: Track[];
+  artistAffinity?: Record<string, number>;
+  languageAffinity?: Record<string, number>;
+  genreAffinity?: Record<string, number>;
+  playCounts?: Record<string, number>;
   volume?: number;
   quality?: AudioQuality;
   eqPreset?: EqPreset;
@@ -189,19 +193,19 @@ export default function App() {
   const [region, setRegion] = useState<MusicRegion>(initialSnap.region || 'IN');
   const [detectingLocation, setDetectingLocation] = useState(false);
   const [preferredLanguages, setPreferredLanguages] = useState<MusicLanguage[]>(
-    initialSnap.preferredLanguages || ['Hindi', 'English', 'J-Pop']
+    initialSnap.preferredLanguages || []
   );
   const [favoriteArtists, setFavoriteArtists] = useState<string[]>(
-    initialSnap.favoriteArtists || ['Arijit Singh', 'YOASOBI', 'The Weeknd']
+    initialSnap.favoriteArtists || []
   );
   const [preferredMoods, setPreferredMoods] = useState<string[]>(
-    initialSnap.preferredMoods || ['Late Night Dark', 'Bollywood Romantic', 'Anime & J-Pop']
+    initialSnap.preferredMoods || []
   );
   const [prioritizeLyrics, setPrioritizeLyrics] = useState<boolean>(
     typeof initialSnap.prioritizeLyrics === 'boolean' ? initialSnap.prioritizeLyrics : true
   );
   const [languageFilter, setLanguageFilter] = useState<MusicLanguage | 'All'>('All');
-  const [regionalTracks, setRegionalTracks] = useState<Track[]>(SEED_TRACKS);
+  const [regionalTracks, setRegionalTracks] = useState<Track[]>([]);
   const [personalizedFeedTracks, setPersonalizedFeedTracks] = useState<Track[]>([]);
 
   const [likedMap, setLikedMap] = useState<Record<string, Track>>(initialSnap.likedMap || {});
@@ -209,20 +213,20 @@ export default function App() {
     initialSnap.playlists || []
   );
   const [recentlyPlayed, setRecentlyPlayed] = useState<Track[]>(
-    initialSnap.recentlyPlayed || SEED_TRACKS.slice(0, 4)
+    initialSnap.recentlyPlayed || []
   );
-  const [artistAffinity, setArtistAffinity] = useState<Record<string, number>>({
-    'Arijit Singh': 3,
-    YOASOBI: 3,
-    'The Weeknd': 2,
-  });
-  const [languageAffinity, setLanguageAffinity] = useState<Record<string, number>>({
-    Hindi: 4,
-    'J-Pop': 4,
-    English: 3,
-  });
-  const [genreAffinity, setGenreAffinity] = useState<Record<string, number>>({});
-  const [playCounts, setPlayCounts] = useState<Record<string, number>>({});
+  const [artistAffinity, setArtistAffinity] = useState<Record<string, number>>(
+    initialSnap.artistAffinity || {}
+  );
+  const [languageAffinity, setLanguageAffinity] = useState<Record<string, number>>(
+    initialSnap.languageAffinity || {}
+  );
+  const [genreAffinity, setGenreAffinity] = useState<Record<string, number>>(
+    initialSnap.genreAffinity || {}
+  );
+  const [playCounts, setPlayCounts] = useState<Record<string, number>>(
+    initialSnap.playCounts || {}
+  );
 
   // Audio playback state
   const [queue, setQueue] = useState<Track[]>(SEED_PLAYLISTS[0].tracks);
@@ -358,6 +362,10 @@ export default function App() {
           likedMap,
           playlists: userPlaylists,
           recentlyPlayed: recentlyPlayed.slice(0, 20),
+          artistAffinity,
+          languageAffinity,
+          genreAffinity,
+          playCounts,
           volume,
           quality,
           eqPreset,
@@ -376,6 +384,10 @@ export default function App() {
     likedMap,
     userPlaylists,
     recentlyPlayed,
+    artistAffinity,
+    languageAffinity,
+    genreAffinity,
+    playCounts,
     volume,
     quality,
     eqPreset,
@@ -400,58 +412,61 @@ export default function App() {
       const vocalOnly = prioritizeLyrics
         ? tracks.filter((t) => !isUnnecessaryNoLyricsTrack(t))
         : tracks;
-      setRegionalTracks(vocalOnly.length ? vocalOnly : SEED_TRACKS);
+      setRegionalTracks(vocalOnly);
     });
     return () => {
       cancelled = true;
     };
   }, [region, prioritizeLyrics]);
 
-  // Fetch personalized tracks for favorite artists so Home "Your Personal Mix" reflects custom picks
+  // Build discovery queries only from explicit picks and the listener's own activity.
   useEffect(() => {
     let cancelled = false;
-    const basePool = [...SEED_TRACKS, ...regionalTracks];
-    const seedArtistHits = basePool.filter((t) =>
-      favoriteArtists.some((fav) => t.artist.toLowerCase().includes(fav.toLowerCase()))
-    );
-    const missingArtists = favoriteArtists
-      .filter(
-        (fav) =>
-          basePool.filter((t) => t.artist.toLowerCase().includes(fav.toLowerCase())).length < 2
-      )
+    const historyTracks = [...Object.values(likedMap), ...recentlyPlayed];
+    const artistSeeds = [
+      ...favoriteArtists,
+      ...Object.entries(artistAffinity)
+        .filter(([, weight]) => weight > 0)
+        .sort((a, b) => b[1] - a[1])
+        .map(([artist]) => artist),
+      ...historyTracks.map((track) => track.artist.split(',')[0]?.trim()).filter(Boolean),
+    ];
+    const uniqueArtists = [...new Set(artistSeeds.map((artist) => artist.toLowerCase()))]
+      .map((key) => artistSeeds.find((artist) => artist.toLowerCase() === key) || '')
+      .filter(Boolean)
       .slice(0, 3);
-
-    if (!missingArtists.length) {
-      setPersonalizedFeedTracks(seedArtistHits.slice(0, 10));
-      return;
+    const topGenres = Object.entries(genreAffinity)
+      .filter(([, weight]) => weight > 0)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 1)
+      .map(([genre]) => genre);
+    const queries = [...uniqueArtists, ...topGenres].slice(0, 3);
+    if (!queries.length) {
+      setPersonalizedFeedTracks([]);
+      return () => { cancelled = true; };
     }
 
     Promise.allSettled(
-      missingArtists.map((art) => searchSongs(art, { region, prioritizeLyrics }))
+      queries.map((query) => searchSongs(query, { region, prioritizeLyrics }))
     ).then((settled) => {
       if (cancelled) return;
-      const fetched: Track[] = [];
-      for (const s of settled) {
-        if (s.status === 'fulfilled' && s.value?.tracks?.length) {
-          fetched.push(...s.value.tracks.slice(0, 4));
-        }
-      }
-      const combined: Track[] = [];
       const seen = new Set<string>();
-      for (const t of [...fetched, ...seedArtistHits]) {
-        const key = `${t.name.toLowerCase()}::${t.artist.split(',')[0]?.trim().toLowerCase()}`;
-        if (!seen.has(key)) {
-          seen.add(key);
-          combined.push(t);
+      const combined: Track[] = [];
+      for (const result of settled) {
+        if (result.status !== 'fulfilled') continue;
+        for (const track of result.value.tracks) {
+          const key = `${track.name.toLowerCase()}::${track.artist.split(',')[0]?.trim().toLowerCase()}`;
+          if (!seen.has(key)) {
+            seen.add(key);
+            combined.push(track);
+          }
         }
       }
-      setPersonalizedFeedTracks(combined.slice(0, 12));
+      setPersonalizedFeedTracks(combined.slice(0, 24));
     });
 
-    return () => {
-      cancelled = true;
-    };
-  }, [favoriteArtists, region, prioritizeLyrics, regionalTracks]);
+    return () => { cancelled = true; };
+  }, [favoriteArtists, artistAffinity, genreAffinity, likedMap, recentlyPlayed, region, prioritizeLyrics]);
 
   // Dynamic User-Based Recommendation Ranking
   const { recommendedTracks, recommendationReason, tasteHighlights } = useMemo(() => {
@@ -471,7 +486,12 @@ export default function App() {
 
     const combined: Track[] = [];
     const seenKeys = new Set<string>();
-    for (const track of [...personalizedFeedTracks, ...SEED_TRACKS, ...regionalTracks]) {
+    for (const track of [
+      ...personalizedFeedTracks,
+      ...Object.values(likedMap),
+      ...recentlyPlayed,
+      ...regionalTracks,
+    ]) {
       if (prioritizeLyrics && isUnnecessaryNoLyricsTrack(track)) continue;
       const key = `${track.name.toLowerCase()}::${track.artist.split(',')[0]?.trim().toLowerCase()}`;
       if (!seenKeys.has(key)) {
@@ -555,8 +575,52 @@ export default function App() {
       incoming.volume = 0;
       incoming.muted = volume === 0;
 
-      incoming.play().then(() => {
+      // Some hosts leave a media request stalled without firing an error.
+      // Advance only if this candidate is still active and playback never began.
+      const candidateSlot: 1 | 2 = incoming === a1 ? 1 : 2;
+      let candidateFailed = false;
+      let startupTimer = 0;
+      const clearCandidateWatch = () => {
+        if (startupTimer) window.clearTimeout(startupTimer);
+        incoming.removeEventListener('playing', onCandidatePlaying);
+        incoming.removeEventListener('error', onCandidateError);
+      };
+      const onCandidatePlaying = () => clearCandidateWatch();
+      const onCandidateError = () => {
+        if (candidateFailed) return;
+        candidateFailed = true;
+        clearCandidateWatch();
         if (playSeq !== playbackSeqRef.current) return;
+        incoming.pause();
+        incoming.removeAttribute('src');
+        incoming.load();
+        loadAndPlayCandidate(idx + 1, playSeq, onAllFailed);
+      };
+      incoming.addEventListener('playing', onCandidatePlaying, { once: true });
+      incoming.addEventListener('error', onCandidateError, { once: true });
+      startupTimer = window.setTimeout(() => {
+        if (
+          playSeq !== playbackSeqRef.current ||
+          activeAudioSlotRef.current !== candidateSlot ||
+          candidateIdxRef.current !== idx
+        ) {
+          clearCandidateWatch();
+          return;
+        }
+        if (!incoming.paused && incoming.currentTime < 0.25) {
+          onCandidateError();
+        } else {
+          clearCandidateWatch();
+        }
+      }, 12_000);
+
+      incoming.play().then(() => {
+        if (
+          candidateFailed ||
+          playSeq !== playbackSeqRef.current ||
+          activeAudioSlotRef.current !== candidateSlot ||
+          incoming.src !== url
+        ) return;
         const targetVol = volume / 100;
         const steps = 15;
         const stepTime = 100; // 1.5 seconds total crossfade
@@ -581,9 +645,7 @@ export default function App() {
           }
         }, stepTime);
       }).catch(() => {
-        if (playSeq === playbackSeqRef.current) {
-          loadAndPlayCandidate(idx + 1, playSeq, onAllFailed);
-        }
+        if (!candidateFailed) onCandidateError();
       });
     },
     [volume]
@@ -815,6 +877,10 @@ export default function App() {
         const lang = track.language;
         setLanguageAffinity((prev) => ({ ...prev, [lang]: (prev[lang] || 0) + 1 }));
       }
+      if (track.genre) {
+        const genre = track.genre.split(',')[0].trim();
+        if (genre) setGenreAffinity((prev) => ({ ...prev, [genre]: (prev[genre] || 0) + 1 }));
+      }
       sendUserEvent({ type: 'play', track }).then((nextState) => {
         if (nextState) {
           setArtistAffinity(nextState.artistAffinity);
@@ -855,14 +921,21 @@ export default function App() {
           const failedUrls = new Set(urls);
           resolveTrackStreams(track, { forceRefresh: true }).then((refreshed) => {
             if (playSeq !== playbackSeqRef.current) return;
+            const refreshedTrack = {
+              ...track,
+              ...refreshed,
+              alternates: refreshed.alternates || [],
+            } as Track;
+            currentTrackRef.current = refreshedTrack;
+            resolvedPlaybackTrackRef.current = refreshedTrack;
             setQueue((prev) =>
               prev.map((item) =>
                 item.id === track.id
                   ? {
                       ...item,
-                      streamUrls: refreshed.streamUrls || item.streamUrls,
-                      previewUrl: refreshed.previewUrl || item.previewUrl,
-                      youtubeId: refreshed.youtubeId || item.youtubeId,
+                      streamUrls: refreshed.streamUrls,
+                      previewUrl: refreshed.previewUrl,
+                      youtubeId: refreshed.youtubeId,
                     }
                   : item
               )
@@ -1305,9 +1378,13 @@ export default function App() {
   const handleResetPersonalisation = useCallback(() => {
     setDisplayName('Listener');
     setRegion('IN');
-    setPreferredLanguages(['Hindi', 'English', 'J-Pop']);
-    setFavoriteArtists(['Arijit Singh', 'YOASOBI', 'The Weeknd']);
-    setPreferredMoods(['Late Night Dark', 'Bollywood Romantic', 'Anime & J-Pop']);
+    setPreferredLanguages([]);
+    setFavoriteArtists([]);
+    setPreferredMoods([]);
+    setArtistAffinity({});
+    setLanguageAffinity({});
+    setGenreAffinity({});
+    setPlayCounts({});
     setPrioritizeLyrics(true);
 
     sendPersonalisation({ resetTaste: true }).then((state) => {
@@ -1318,7 +1395,7 @@ export default function App() {
         setPlayCounts(state.playCounts);
       }
     });
-    showToast('Taste profile reset to Harmonia defaults');
+    showToast('Your taste profile has been reset');
   }, [showToast]);
 
   // Collection openers
@@ -1505,7 +1582,6 @@ export default function App() {
             {activeView === 'home' && (
               <HomeView
                 displayName={displayName}
-                favoriteArtists={favoriteArtists}
                 personalizedFeedTracks={personalizedFeedTracks}
                 region={region}
                 languageFilter={languageFilter}
@@ -1514,7 +1590,6 @@ export default function App() {
                 recommendationReason={recommendationReason}
                 regionalTracks={regionalTracks}
                 spotifyPlaylists={spotifyPlaylists}
-                allCatalogTracks={SEED_TRACKS}
                 recentlyPlayed={recentlyPlayed}
                 likedCount={likedTracks.length}
                 tasteHighlights={tasteHighlights}
@@ -1522,7 +1597,6 @@ export default function App() {
                 onOpenPlaylist={openPlaylistCollection}
                 onOpenLiked={openLikedCollection}
                 onOpenRecent={openRecentCollection}
-                onOpenArtist={openArtistCollection}
                 onOpenPersonalise={() => setPersonaliseOpen(true)}
               />
             )}

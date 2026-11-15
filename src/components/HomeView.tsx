@@ -1,8 +1,7 @@
 import { Play, Sparkles } from 'lucide-react';
 import { useMemo } from 'react';
-import { SEED_ARTISTS, SEED_PLAYLISTS, SEED_TRACKS } from '../data/catalog';
+import { SEED_PLAYLISTS } from '../data/catalog';
 import type {
-  ArtistProfile,
   CuratedPlaylist,
   MusicLanguage,
   MusicRegion,
@@ -13,7 +12,6 @@ import { CoverImage } from './CoverImage';
 
 interface HomeViewProps {
   displayName: string;
-  favoriteArtists: string[];
   personalizedFeedTracks: Track[];
   region: MusicRegion;
   languageFilter: MusicLanguage | 'All';
@@ -22,7 +20,6 @@ interface HomeViewProps {
   recommendationReason: string;
   regionalTracks: Track[];
   spotifyPlaylists: CuratedPlaylist[];
-  allCatalogTracks: Track[];
   recentlyPlayed: Track[];
   likedCount: number;
   tasteHighlights?: {
@@ -36,13 +33,11 @@ interface HomeViewProps {
   onOpenPlaylist: (pl: CuratedPlaylist) => void;
   onOpenLiked: () => void;
   onOpenRecent: () => void;
-  onOpenArtist: (artist: ArtistProfile) => void;
   onOpenPersonalise: () => void;
 }
 
 export function HomeView({
   displayName,
-  favoriteArtists,
   personalizedFeedTracks,
   region,
   languageFilter,
@@ -51,7 +46,6 @@ export function HomeView({
   recommendationReason,
   regionalTracks,
   spotifyPlaylists,
-  allCatalogTracks,
   recentlyPlayed,
   likedCount,
   tasteHighlights,
@@ -59,7 +53,6 @@ export function HomeView({
   onOpenPlaylist,
   onOpenLiked,
   onOpenRecent,
-  onOpenArtist,
   onOpenPersonalise,
 }: HomeViewProps) {
   const baseGreeting = getGreetingForHour(new Date().getHours());
@@ -76,15 +69,21 @@ export function HomeView({
 
   const visibleRecommended = filterByLang(recommendedTracks);
   const visibleRegional = filterByLang(regionalTracks);
-  const hindiTracks = allCatalogTracks.filter((t) => t.language === 'Hindi');
-  const jpopTracks = allCatalogTracks.filter((t) => t.language === 'J-Pop');
-  const englishTracks = allCatalogTracks.filter((t) => t.language === 'English');
+  const randomDiscoverTracks = useMemo(() => {
+    const recentIds = new Set([...recommendedTracks, ...recentlyPlayed].map((track) => track.id));
+    const pool = regionalTracks.filter((track) => !recentIds.has(track.id));
+    for (let i = pool.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [pool[i], pool[j]] = [pool[j], pool[i]];
+    }
+    return pool.slice(0, 5);
+  }, [regionalTracks, recommendedTracks, recentlyPlayed]);
 
   const repeatFocusedArtist = tasteHighlights?.repeatFocusedArtist;
   const repeatArtistTracks = useMemo(() => {
     if (!repeatFocusedArtist) return [];
     const q = repeatFocusedArtist.toLowerCase();
-    const pool = [...allCatalogTracks, ...personalizedFeedTracks, ...regionalTracks];
+    const pool = [...recommendedTracks, ...personalizedFeedTracks, ...regionalTracks, ...recentlyPlayed];
     const seen = new Set<string>();
     const res: Track[] = [];
     for (const t of pool) {
@@ -97,16 +96,9 @@ export function HomeView({
       }
     }
     return res;
-  }, [repeatFocusedArtist, allCatalogTracks, personalizedFeedTracks, regionalTracks]);
+  }, [repeatFocusedArtist, recommendedTracks, personalizedFeedTracks, regionalTracks, recentlyPlayed]);
 
   const quickPicks = [
-    {
-      id: 'qp-daily',
-      title: 'Daily Mix 1',
-      image: SEED_PLAYLISTS[0].image,
-      onOpen: () => onOpenPlaylist(SEED_PLAYLISTS[0]),
-      onPlay: () => onPlayTrackList(SEED_PLAYLISTS[0].tracks, 0),
-    },
     {
       id: 'qp-liked',
       title: `Liked Songs (${likedCount})`,
@@ -114,38 +106,41 @@ export function HomeView({
       onOpen: onOpenLiked,
       onPlay: onOpenLiked,
     },
-    {
-      id: 'qp-hindi',
-      title: 'Hindi Midnight',
-      image: SEED_PLAYLISTS[1].image,
-      onOpen: () => onOpenPlaylist(SEED_PLAYLISTS[1]),
-      onPlay: () => onPlayTrackList(SEED_PLAYLISTS[1].tracks, 0),
-    },
-    {
-      id: 'qp-jpop',
-      title: 'Tokyo Rain J-Pop',
-      image: SEED_PLAYLISTS[2].image,
-      onOpen: () => onOpenPlaylist(SEED_PLAYLISTS[2]),
-      onPlay: () => onPlayTrackList(SEED_PLAYLISTS[2].tracks, 0),
-    },
-    {
-      id: 'qp-english',
-      title: 'After Hours Dark Pop',
-      image: SEED_PLAYLISTS[3].image,
-      onOpen: () => onOpenPlaylist(SEED_PLAYLISTS[3]),
-      onPlay: () => onPlayTrackList(SEED_PLAYLISTS[3].tracks, 0),
-    },
-    {
-      id: 'qp-recent',
-      title: 'Recently Played',
-      image: recentlyPlayed[0]?.image || SEED_TRACKS[8]?.image || SEED_PLAYLISTS[0].image,
-      onOpen: onOpenRecent,
-      onPlay: () => {
-        if (recentlyPlayed.length) onPlayTrackList(recentlyPlayed, 0);
-        else onOpenRecent();
-      },
-    },
-  ];
+    ...(recentlyPlayed.length
+      ? [{
+          id: 'qp-recent',
+          title: 'Recently Played',
+          image: recentlyPlayed[0].image || SEED_PLAYLISTS[0].image,
+          onOpen: onOpenRecent,
+          onPlay: () => onPlayTrackList(recentlyPlayed, 0),
+        }]
+      : []),
+    ...(recommendedTracks.length
+      ? [{
+          id: 'qp-made-for-you',
+          title: 'Made For You',
+          image: recommendedTracks[0].image,
+          onOpen: () => onPlayTrackList(recommendedTracks, 0),
+          onPlay: () => onPlayTrackList(recommendedTracks, 0),
+        }]
+      : []),
+    ...(regionalTracks.length
+      ? [{
+          id: 'qp-discover',
+          title: 'Discover Something New',
+          image: regionalTracks[0].image,
+          onOpen: () => onPlayTrackList(regionalTracks, 0),
+          onPlay: () => onPlayTrackList(regionalTracks, 0),
+        }]
+      : []),
+    ...spotifyPlaylists.slice(0, 3).map((playlist) => ({
+      id: playlist.id,
+      title: playlist.name,
+      image: playlist.image,
+      onOpen: () => onOpenPlaylist(playlist),
+      onPlay: () => onPlayTrackList(playlist.tracks, 0),
+    })),
+  ].slice(0, 6);
 
   const renderTrackShelf = (title: string, subtitle: string, tracks: Track[]) => {
     if (!tracks.length) return null;
@@ -285,36 +280,13 @@ export function HomeView({
         )}
 
       {/* User-Based Personalized Recommendations */}
-      {renderTrackShelf(
-        'Made For You',
-        recommendationReason,
-        visibleRecommended.length ? visibleRecommended : allCatalogTracks
-      )}
+      {visibleRecommended.length > 0 &&
+        renderTrackShelf('Made For You', recommendationReason, visibleRecommended)}
 
-      {/* Dynamic Language Affinity Shelf */}
-      {tasteHighlights?.topLanguage &&
-        languageFilter === 'All' &&
-        renderTrackShelf(
-          `Your ${tasteHighlights.topLanguage} Mix`,
-          `Because you listen to ${tasteHighlights.topLanguage} music repeatedly`,
-          allCatalogTracks.filter((t) => t.language === tasteHighlights.topLanguage)
-        )}
+      {randomDiscoverTracks.length > 0 &&
+        renderTrackShelf('A Little Outside Your Usual', 'A rotating mix to help you discover something different', randomDiscoverTracks)}
 
-      {/* Explicit Favorite Artist Mix Shelf when custom picks exist */}
-      {personalizedFeedTracks.length > 0 &&
-        renderTrackShelf(
-          cleanName && cleanName.toLowerCase() !== 'listener'
-            ? `Your Personal Mix, ${cleanName}`
-            : 'Your Personal Mix',
-          favoriteArtists.length
-            ? `Because you picked ${favoriteArtists.slice(0, 3).join(', ')}`
-            : 'Handpicked from your taste settings',
-          filterByLang(personalizedFeedTracks).length
-            ? filterByLang(personalizedFeedTracks)
-            : personalizedFeedTracks
-        )}
-
-      {/* Spotify Free — Ad-Free Live Editorial Playlists */}
+      {/* Spotify Playlist Discovery */}
       {spotifyPlaylists.length > 0 && (
         <section className="space-y-3">
           <div className="flex items-baseline justify-between gap-2">
@@ -323,7 +295,7 @@ export function HomeView({
                 Spotify Free Mixes
               </h2>
               <p className="text-xs text-zinc-400">
-                Live Spotify charts & playlists · No API key · Ad-free streaming
+                Public Spotify playlist discovery · Playback uses available licensed audio sources
               </p>
             </div>
           </div>
@@ -375,65 +347,10 @@ export function HomeView({
       {renderTrackShelf(
         `Popular in ${REGION_LABELS[region]}`,
         'Location-tuned vocal tracks with verified lyrics',
-        visibleRegional.length ? visibleRegional : regionalTracks
+        visibleRegional
       )}
 
-      {/* Language Priority Shelves */}
-      {(languageFilter === 'All' || languageFilter === 'Hindi') &&
-        renderTrackShelf(
-          'Hindi Essentials',
-          'Arijit Singh, Pritam, Shilpa Rao & Coke Studio',
-          hindiTracks
-        )}
 
-      {(languageFilter === 'All' || languageFilter === 'J-Pop') &&
-        renderTrackShelf(
-          'J-Pop & Tokyo Nights',
-          'YOASOBI, Kenshi Yonezu, Fujii Kaze & Official HIGE DANdism',
-          jpopTracks
-        )}
-
-      {(languageFilter === 'All' || languageFilter === 'English') &&
-        renderTrackShelf(
-          'English Dark Pop & Indie',
-          'The Weeknd, Kavinsky, Glass Animals & Frank Ocean',
-          englishTracks
-        )}
-
-      {/* Artists Row */}
-      <section className="space-y-3">
-        <h2 className="text-xl font-bold tracking-tight text-white">Featured Artists</h2>
-        <div className="grid grid-cols-2 gap-3.5 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6">
-          {SEED_ARTISTS.filter((a) =>
-            languageFilter === 'All' ? true : a.language === languageFilter
-          ).map((artist) => (
-            <button
-              key={artist.id}
-              type="button"
-              onClick={() => onOpenArtist(artist)}
-              className="group rounded-lg bg-[#161619] p-3 text-left transition-colors hover:bg-[#222227]"
-            >
-              <div className="relative aspect-square w-full overflow-hidden rounded-full bg-black shadow-lg">
-                <CoverImage
-                  src={artist.image}
-                  alt={artist.name}
-                  className="h-full w-full object-cover"
-                />
-                <span
-                  aria-hidden="true"
-                  className="absolute bottom-2 right-2 grid h-9 w-9 translate-y-2 place-items-center rounded-full bg-[#1DB954] text-black opacity-0 shadow-xl transition-all duration-150 group-hover:translate-y-0 group-hover:opacity-100"
-                >
-                  <Play className="h-4 w-4 fill-current pl-0.5" />
-                </span>
-              </div>
-              <div className="mt-3 truncate text-sm font-bold text-white">{artist.name}</div>
-              <div className="mt-0.5 truncate text-xs text-zinc-400">
-                Artist · {artist.language}
-              </div>
-            </button>
-          ))}
-        </div>
-      </section>
     </div>
   );
 }
