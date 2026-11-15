@@ -211,6 +211,7 @@ export async function searchSongs(
       const combinedRemote = [...deezerRaw, ...itunesRaw, ...mappedSaavn, ...audiusRaw]
         .filter(
           (t) =>
+            isPlausibleSongDuration(t.duration) &&
             (languageFilter === 'All' ? true : t.language === languageFilter) &&
             !isRemixOrKnockoff(`${t.name} ${t.albumName}`, trimmed, t.artist, trimmed)
         )
