@@ -217,6 +217,12 @@ export function resolveNextTrackIndex(params: {
   return Math.max(0, Math.min(queueLength - 1, next));
 }
 
+export function getTitleOnlySearchFallback(query: string): string {
+  const tokens = query.trim().split(/\\s+/).filter(Boolean);
+  if (tokens.length < 3) return '';
+  return tokens.slice(0, -2).join(' ');
+}
+
 export function isMatchingLyricsCandidate(
   candidate: { trackName?: string; artistName?: string; duration?: number },
   requestedTitle: string,
