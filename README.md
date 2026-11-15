@@ -42,6 +42,7 @@ Existing open/independent sources include Audius, Jamendo and license-filtered I
 - Retry and alternate-source handling when a stream fails
 - Listener-specific recommendations based on likes, recent listening, artist affinity, language and genre signals
 - Saved likes, playlists, preferences and listening history in browser storage
+- Device-local offline library with manual audio import and Internet Archive downloads for eligible CC0, CC BY and CC BY-SA recordings
 - Lyrics, artwork, queue controls, playback quality selection and an equalizer interface
 - Responsive React UI
 - Express API routes running inside a Cloudflare Worker
@@ -68,7 +69,7 @@ Harmonia uses multiple independent providers because no single catalogue offers 
 | Provider | Current role | Important limitation |
 | --- | --- | --- |
 | Audius / Open Audio Protocol | Search and full-track stream candidates | Open catalogue; availability and rights depend on each upload. Uses the canonical Audius API with a discovery-provider fallback. |
-| Internet Archive | Fallback for openly licensed audio | Used only when no full stream has been found. Harmonia filters to CC0, CC BY and CC BY-SA item licences and checks title, creator and available runtime metadata. The archive is not a substitute for commercial music catalogues. |
+| Internet Archive | Open-audio discovery, playback fallback and offline downloads | Search/download is limited to public audio files whose item metadata declares CC0, CC BY or CC BY-SA. Harmonia rechecks the licence and file metadata at download time. Uploader declarations are not a guarantee of copyright status; users should inspect the item page and licence. Not a substitute for commercial music catalogues. |
 | JioSaavn community API | Search metadata and candidate audio URLs | Third-party integration, not an official JioSaavn developer API. It can change or become unavailable. |
 | Jamendo | Candidate audio from its catalogue | API access is free for non-commercial use under the published terms; each recording has its own Creative Commons licence. Commercial use requires a separate agreement, and API access does not guarantee uptime. |
 | Deezer | Search metadata and short previews | Preview access is not full-track streaming access. |
@@ -82,7 +83,7 @@ Audius is the active open music-network integration. Its read-only API supports 
 
 Other open projects are useful for different jobs, but they are not interchangeable streaming catalogues:
 
-- [Internet Archive](https://archive.org/developers/) provides an open collection of media. Harmonia uses it only as a best-effort fallback for recordings with an explicit CC0, CC BY or CC BY-SA licence.
+- [Internet Archive](https://archive.org/developers/) provides an open collection of media. Harmonia searches its audio metadata and can save eligible public audio files into the device-local Offline Library when the item metadata declares CC0, CC BY or CC BY-SA. Stream-only/private files and unsupported formats are excluded; users should verify each item's rights statement.
 - [Funkwhale](https://docs.funkwhale.audio/) is an open-source, federated, self-hosted audio platform. Connecting a pod requires a configured instance and its access rules; it is not a universal public catalogue.
 - [ListenBrainz](https://listenbrainz.org/) provides open listening-history and recommendation services. It is a recommendation/data source, not a source of audio streams. Its [recommendation API](https://listenbrainz.readthedocs.io/en/latest/users/api/recommendation.html) can be explored as an optional, user-authorised integration.
 - [MusicBrainz](https://musicbrainz.org/doc/MusicBrainz_API) provides open music metadata, not audio hosting or playback.

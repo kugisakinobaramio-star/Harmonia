@@ -1,4 +1,5 @@
 import express from 'express';
+import { createArchiveDownloadsRouter } from './src/server/archiveDownloads.ts';
 import path from 'node:path';
 import { Readable } from 'node:stream';
 import { isIP } from 'node:net';
@@ -746,6 +747,7 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
   const mode = options.mode ?? (process.env.NODE_ENV === 'production' ? 'node-production' : 'node-development');
   cloudflareWorkerRuntime = mode === 'worker';
   const app = express();
+  app.use('/api/music/archive', createArchiveDownloadsRouter());
   app.disable('x-powered-by');
   app.use((_req, res, next) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -766,7 +768,7 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
   // Bound expensive user-controlled media proxy requests per client IP.
   // Keep the map bounded so spoofed clients cannot grow it indefinitely.
   const proxyRateLimits = new Map<string, { count: number; resetAt: number }>();
-  app.use(['/api/music/image', '/api/music/audio', '/api/music/download'], (req, res, next) => {
+  app.use(['/api/music/image', '/api/music/audio', '/api/music/download', '/api/music/archive'], (req, res, next) => {
     const now = Date.now();
     const key = req.get('cf-connecting-ip') || req.ip || req.socket.remoteAddress || 'unknown';
     let bucket = proxyRateLimits.get(key);
