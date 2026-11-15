@@ -316,5 +316,41 @@ test('isRemixOrKnockoff and scoreAuthenticTrackCandidate enforce original-artist
     targetDurationSec: 268,
   });
   assert.ok(exactScore !== null && liveScore !== null && exactScore > liveScore);
+
+  // Reject long-form results and duration mismatches rather than accidentally
+  // selecting podcasts, mixes, or unrelated uploads as a song stream.
+  assert.equal(
+    scoreAuthenticTrackCandidate({
+      itemTitle: 'Sapphire',
+      itemArtist: 'Ed Sheeran',
+      requestedTitle: 'Sapphire',
+      requestedArtist: 'Ed Sheeran',
+      itemDurationSec: 55 * 60,
+      targetDurationSec: 210,
+    }),
+    null
+  );
+  assert.equal(
+    scoreAuthenticTrackCandidate({
+      itemTitle: 'Roots',
+      itemArtist: 'Bintu Pabra',
+      requestedTitle: 'Roots',
+      requestedArtist: 'Bintu Pabra',
+      itemDurationSec: 900,
+      targetDurationSec: 210,
+    }),
+    null
+  );
+  assert.equal(
+    scoreAuthenticTrackCandidate({
+      itemTitle: 'Sapphire',
+      itemArtist: 'Ed Sheeran',
+      requestedTitle: 'Sapphire',
+      requestedArtist: 'Ed Sheeran',
+      itemDurationSec: 550,
+      targetDurationSec: 210,
+    }),
+    null
+  );
 });
 
