@@ -8,6 +8,7 @@ import {
   isPlausibleSongDuration,
   isRemixOrKnockoff,
   scoreAuthenticTrackCandidate,
+  selectSaavnArtistForMatch,
 } from './src/utils/playerEngine.ts';
 
 const SAAVN_BASE = 'https://saavn.sumit.co';
