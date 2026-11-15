@@ -136,6 +136,13 @@ interface NavEntry {
 
 const STORAGE_KEY = 'harmonia_spotify_state_v2';
 
+function withoutPersistedProviderAudio(track: Track): Track {
+  if (track.sourceProvider !== 'Jamendo') return track;
+  // Jamendo terms permit online playback through the API but prohibit building
+  // offline copies. Keep user library metadata, not provider stream URLs.
+  return { ...track, streamUrls: undefined, previewUrl: undefined, offlineAvailable: false };
+}
+
 function loadLocalSnapshot(): {
   displayName?: string;
   region?: MusicRegion;
@@ -437,14 +444,21 @@ export default function App() {
           favoriteArtists,
           preferredMoods,
           prioritizeLyrics,
-          likedMap,
-          playlists: userPlaylists,
-          recentlyPlayed: recentlyPlayed.slice(0, 20),
+          likedMap: Object.fromEntries(
+            Object.entries(likedMap).map(([id, track]) => [id, withoutPersistedProviderAudio(track)])
+          ),
+          playlists: userPlaylists.map((playlist) => ({
+            ...playlist,
+            tracks: playlist.tracks.map(withoutPersistedProviderAudio),
+          })),
+          recentlyPlayed: recentlyPlayed.slice(0, 20).map(withoutPersistedProviderAudio),
           artistAffinity,
           languageAffinity,
           genreAffinity,
           playCounts,
-          playedTracks,
+          playedTracks: Object.fromEntries(
+            Object.entries(playedTracks).map(([id, track]) => [id, withoutPersistedProviderAudio(track)])
+          ),
           volume,
           quality,
           eqPreset,
@@ -850,6 +864,13 @@ export default function App() {
                               alternates: refreshed.alternates || [],
                               youtubeId: refreshed.youtubeId || item.youtubeId,
                               youtubeAlternates: refreshed.youtubeAlternates || item.youtubeAlternates,
+                              sourceProvider: refreshed.sourceProvider || item.sourceProvider,
+                              sourceAvailability: refreshed.sourceAvailability || item.sourceAvailability,
+                              sourcePageUrl: refreshed.sourcePageUrl || item.sourcePageUrl,
+                              sourceLicense: refreshed.sourceLicense || item.sourceLicense,
+                              offlineAvailable: typeof refreshed.offlineAvailable === 'boolean'
+                                ? refreshed.offlineAvailable
+                                : item.offlineAvailable,
                             } as Track
                           : item
                       )
@@ -929,7 +950,21 @@ export default function App() {
                     ...qItem,
                     streamUrls: resolved.streamUrls || qItem.streamUrls,
                     previewUrl: resolved.previewUrl || qItem.previewUrl,
+                    sourceProvider: resolved.sourceProvider || qItem.sourceProvider,
+                    sourceAvailability: resolved.sourceAvailability || qItem.sourceAvailability,
+                    sourcePageUrl: resolved.sourcePageUrl || qItem.sourcePageUrl,
+                    sourceLicense: resolved.sourceLicense || qItem.sourceLicense,
+                    offlineAvailable: typeof resolved.offlineAvailable === 'boolean'
+                      ? resolved.offlineAvailable
+                      : qItem.offlineAvailable,
                     youtubeAlternates: resolved.youtubeAlternates || qItem.youtubeAlternates,
+                    sourceProvider: resolved.sourceProvider || qItem.sourceProvider,
+                    sourceAvailability: resolved.sourceAvailability || qItem.sourceAvailability,
+                    sourcePageUrl: resolved.sourcePageUrl || qItem.sourcePageUrl,
+                    sourceLicense: resolved.sourceLicense || qItem.sourceLicense,
+                    offlineAvailable: typeof resolved.offlineAvailable === 'boolean'
+                      ? resolved.offlineAvailable
+                      : qItem.offlineAvailable,
                   }
                 : qItem
             )
@@ -1108,6 +1143,13 @@ export default function App() {
                       streamUrls: refreshed.streamUrls,
                       previewUrl: refreshed.previewUrl,
                       youtubeId: refreshed.youtubeId,
+                      sourceProvider: refreshed.sourceProvider || item.sourceProvider,
+                      sourceAvailability: refreshed.sourceAvailability || item.sourceAvailability,
+                      sourcePageUrl: refreshed.sourcePageUrl || item.sourcePageUrl,
+                      sourceLicense: refreshed.sourceLicense || item.sourceLicense,
+                      offlineAvailable: typeof refreshed.offlineAvailable === 'boolean'
+                        ? refreshed.offlineAvailable
+                        : item.offlineAvailable,
                     }
                   : item
               )
