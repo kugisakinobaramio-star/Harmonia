@@ -578,15 +578,14 @@ export function filterAndRankTracks(
   if (languageFilter !== 'All') {
     pool = pool.filter((t) => t.language === languageFilter);
   }
-  if (prioritizeLyrics) {
-    const withLyrics = pool.filter((t) => !isUnnecessaryNoLyricsTrack(t));
-    if (withLyrics.length > 0) {
-      pool = withLyrics;
-    }
-  }
-
+  // Lyrics are a ranking preference, not a hard filter: valid tracks without
+  // lyric metadata must remain discoverable.
   const q = query.trim().toLowerCase();
-  if (!q) return pool;
+  if (!q) {
+    return prioritizeLyrics
+      ? pool.sort((a, b) => Number(isUnnecessaryNoLyricsTrack(a)) - Number(isUnnecessaryNoLyricsTrack(b)))
+      : pool;
+  }
 
   pool = pool.filter((track) => isRelevantTrackTitle(track.name, q));
   if (pool.length === 0) return [];
@@ -616,11 +615,13 @@ export function filterAndRankTracks(
     }
 
     if (score > 0) {
-      if (track.hasLyrics || (track.lyrics && track.lyrics.length > 0)) {
-        score += 20;
-      }
-      if (isUnnecessaryNoLyricsTrack(track)) {
-        score -= 80;
+      if (prioritizeLyrics) {
+        if (track.hasLyrics || (track.lyrics && track.lyrics.length > 0)) {
+          score += 20;
+        }
+        if (isUnnecessaryNoLyricsTrack(track)) {
+          score -= 80;
+        }
       }
       const popBoost = track.playCount ? Math.min(10, Math.log10(track.playCount)) : 0;
       scored.push({ track, score: score + popBoost });
