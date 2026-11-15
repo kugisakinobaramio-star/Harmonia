@@ -31,6 +31,8 @@ export interface Track {
   genre?: string;
   bpm?: number;
   hasLyrics?: boolean;
+  /** Catalogue-only entries; playback must be resolved through a separate audio provider. */
+  metadataOnly?: boolean;
   synthMood?: 'synthwave' | 'sunset' | 'lofi' | 'energetic' | 'ambient' | 'pop' | 'hindi' | 'jpop';
   previewUrl?: string;
   streamUrls?: Partial<Record<'320kbps' | '160kbps' | '96kbps' | '48kbps' | '12kbps', string>>;
