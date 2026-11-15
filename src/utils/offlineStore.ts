@@ -9,7 +9,7 @@ import {
   sanitizeDownloadFilename,
   type OfflineTrackRecord,
 } from './offlineHelpers';
-import { hasFullAudioStream } from './playerEngine';
+import { hasFullAudioStream, isShortPreviewUrl } from './playerEngine';
 
 export {
   collectDownloadCandidateUrls,
@@ -176,12 +176,12 @@ export async function downloadTrackForOffline(
   quality: AudioQuality = '320kbps'
 ): Promise<OfflineTrackRecord> {
   let workingTrack: Track & { alternates?: string[] } = track;
-  let candidates = collectDownloadCandidateUrls(workingTrack, quality);
+  let candidates = collectDownloadCandidateUrls(workingTrack, quality).filter((url) => !isShortPreviewUrl(url));
 
   if (!hasFullAudioStream(workingTrack) || candidates.length === 0) {
     const resolved = await resolveTrackStreams(track, { forceRefresh: candidates.length === 0 });
     workingTrack = { ...track, ...resolved, alternates: resolved.alternates };
-    candidates = collectDownloadCandidateUrls(workingTrack, quality);
+    candidates = collectDownloadCandidateUrls(workingTrack, quality).filter((url) => !isShortPreviewUrl(url));
   }
 
   if (!candidates.length) {
