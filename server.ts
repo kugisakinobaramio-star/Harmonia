@@ -1335,19 +1335,6 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
         resolveFunkwhaleStream(cleanTitle, primaryArtist, targetDurationSec),
       ]);
 
-    if (jamendoSettled.status === 'fulfilled' && jamendoSettled.value) {
-      const jamUrl = jamendoSettled.value;
-      if (!streamUrls['160kbps']) streamUrls['160kbps'] = jamUrl;
-      fullAlternates.push(jamUrl);
-    }
-
-    if (funkwhaleSettled.status === 'fulfilled' && funkwhaleSettled.value) {
-      const funkwhaleUrl = funkwhaleSettled.value;
-      if (!streamUrls['160kbps']) streamUrls['160kbps'] = funkwhaleUrl;
-      fullAlternates.push(funkwhaleUrl);
-    }
-
-
     if (saavnSettled.status === 'fulfilled' && saavnSettled.value?.data?.results?.length) {
       const results = saavnSettled.value.data.results as SaavnCandidateRaw[];
       const bestSaavn = results
@@ -1397,6 +1384,19 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
         streamUrls['160kbps'] = archiveUrl;
         fullAlternates.push(archiveUrl);
         internetArchiveSelected = true;
+      }
+    }
+
+    if (!Object.values(streamUrls).some(Boolean)) {
+      // Jamendo/Funkwhale are fallback sources. Do not mix their 160kbps
+      // stream into a track that already has an exact primary-catalogue match:
+      // otherwise quality selection can accidentally play a different version.
+      const fallbackUrl =
+        (jamendoSettled.status === 'fulfilled' ? jamendoSettled.value : undefined) ||
+        (funkwhaleSettled.status === 'fulfilled' ? funkwhaleSettled.value : undefined);
+      if (fallbackUrl) {
+        streamUrls['160kbps'] = fallbackUrl;
+        fullAlternates.push(fallbackUrl);
       }
     }
 
