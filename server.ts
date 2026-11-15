@@ -30,6 +30,7 @@ interface StoredTrack {
   region?: string;
   genre?: string;
   hasLyrics?: boolean;
+  metadataOnly?: boolean;
   previewUrl?: string;
   streamUrls?: Record<string, string>;
   lyrics?: StoredLyricLine[];
@@ -110,6 +111,69 @@ async function fetchWithTimeout(url: string, timeoutMs = 5000, headers: Record<s
   } finally {
     clearTimeout(timer);
   }
+}
+
+// MusicBrainz is a metadata catalogue, not an audio host. Cache and pace
+// requests to respect its public one-request-per-second guideline.
+let musicBrainzQueue: Promise<void> = Promise.resolve();
+let musicBrainzLastRequestAt = 0;
+const musicBrainzCache = new Map<string, { expiresAt: number; value: any }>();
+
+async function fetchMusicBrainzJson(url: string): Promise<any | null> {
+  const cached = musicBrainzCache.get(url);
+  if (cached && cached.expiresAt > Date.now()) return cached.value;
+  const request = musicBrainzQueue.then(async () => {
+    const secondCache = musicBrainzCache.get(url);
+    if (secondCache && secondCache.expiresAt > Date.now()) return secondCache.value;
+    const waitMs = Math.max(0, 1100 - (Date.now() - musicBrainzLastRequestAt));
+    if (waitMs) await new Promise((resolve) => setTimeout(resolve, waitMs));
+    musicBrainzLastRequestAt = Date.now();
+    const response = await fetchWithTimeout(url, 5000, {
+      Accept: 'application/json',
+      'User-Agent': 'Harmonia/1.0 (https://github.com/kugisakinobaramio-star/Harmonia)',
+    });
+    if (!response.ok) return null;
+    const value = await response.json();
+    musicBrainzCache.set(url, { expiresAt: Date.now() + 10 * 60_000, value });
+    if (musicBrainzCache.size > 250) {
+      for (const [key, entry] of musicBrainzCache) {
+        if (entry.expiresAt <= Date.now()) musicBrainzCache.delete(key);
+        if (musicBrainzCache.size <= 200) break;
+      }
+    }
+    return value;
+  });
+  musicBrainzQueue = request.then(() => undefined, () => undefined);
+  try { return await request; } catch { return null; }
+}
+
+interface MusicBrainzRecordingRaw {
+  id?: string;
+  title?: string;
+  length?: number;
+  'artist-credit'?: Array<string | { name?: string; artist?: { name?: string } }>;
+  releases?: Array<{ title?: string; date?: string }>;
+}
+
+function mapMusicBrainzRecording(raw: MusicBrainzRecordingRaw): StoredTrack {
+  const credits = (raw['artist-credit'] || [])
+    .map((entry) => typeof entry === 'string' ? entry : entry.name || entry.artist?.name || '')
+    .filter(Boolean);
+  const release = raw.releases?.[0];
+  return {
+    id: 'mb-' + (raw.id || Math.random().toString(36).slice(2, 9)),
+    name: raw.title || 'Untitled Recording',
+    artist: credits.join(', ') || 'Unknown Artist',
+    albumName: release?.title || 'Recording',
+    year: release?.date?.slice(0, 4),
+    duration: raw.length ? Math.round(raw.length / 1000) : 195,
+    image: '',
+    language: 'Other',
+    region: 'GLOBAL',
+    genre: 'MusicBrainz metadata',
+    hasLyrics: true,
+    metadataOnly: true,
+  };
 }
 
 async function readResponseBodyWithLimit(response: Response, maxBytes: number): Promise<Buffer> {
@@ -1700,7 +1764,7 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
 
     if (type === 'songs') {
       const country = region === 'JP' ? 'JP' : region === 'US' ? 'US' : region === 'GB' ? 'GB' : 'IN';
-      const [saavnResult, itunesResult, deezerResult, audiusResult] = await Promise.allSettled([
+      const [saavnResult, itunesResult, deezerResult, audiusResult, musicBrainzResult] = await Promise.allSettled([
         fetchWithTimeout(
           `${SAAVN_BASE}/api/search/songs?query=${encodeURIComponent(query)}&page=${page}&limit=${limit}`,
           4500
@@ -1717,6 +1781,9 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
           `https://discoveryprovider.audius.co/v1/tracks/search?query=${encodeURIComponent(query)}&limit=6`,
           4500
         ).then((r) => (r.ok ? r.json() : null)),
+        fetchMusicBrainzJson(
+          'https://musicbrainz.org/ws/2/recording/?query=' + encodeURIComponent(query) + '&fmt=json&limit=8'
+        ),
       ]);
 
       const saavnRaw = (
@@ -1744,6 +1811,10 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
       const audiusRaw =
         audiusResult.status === 'fulfilled' && audiusResult.value
           ? ((audiusResult.value.data || []) as AudiusTrackRaw[])
+          : [];
+      const musicBrainzRecordings =
+        musicBrainzResult.status === 'fulfilled' && musicBrainzResult.value
+          ? ((musicBrainzResult.value.recordings || []) as MusicBrainzRecordingRaw[])
           : [];
 
       const itunesTracks = itunesRaw
@@ -1777,8 +1848,9 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
           saavnRaw.length > 0 ||
           itunesTracks.length > 0 ||
           deezerTracks.length > 0 ||
-          audiusTracks.length > 0,
-        data: { results: saavnRaw, itunesTracks, deezerTracks, audiusTracks },
+          audiusTracks.length > 0 ||
+          musicBrainzRecordings.length > 0,
+        data: { results: saavnRaw, itunesTracks, deezerTracks, audiusTracks, musicBrainzRecordings },
       });
       return;
     }
@@ -1788,7 +1860,7 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
     const dzEndpoint =
       safeType === 'artists' ? 'artist' : safeType === 'playlists' ? 'playlist' : 'album';
 
-    const [saavnSettled, deezerSettled] = await Promise.allSettled([
+    const [saavnSettled, deezerSettled, musicBrainzSettled] = await Promise.allSettled([
       fetchWithTimeout(
         `${SAAVN_BASE}/api/search/${safeType}?query=${encodeURIComponent(query)}&page=${page}&limit=${limit}`,
         4500
@@ -1797,6 +1869,9 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
         `https://api.deezer.com/search/${dzEndpoint}?q=${encodeURIComponent(query)}&limit=8`,
         4000
       ).then((r) => (r.ok ? r.json() : null)),
+      safeType === 'artists'
+        ? fetchMusicBrainzJson('https://musicbrainz.org/ws/2/artist/?query=' + encodeURIComponent(query) + '&fmt=json&limit=8')
+        : Promise.resolve(null),
     ]);
 
     const saavnData =
@@ -1819,12 +1894,16 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
           }>)
         : [];
 
+    const musicBrainzArtists =
+      musicBrainzSettled.status === 'fulfilled' && musicBrainzSettled.value
+        ? ((musicBrainzSettled.value.artists || []) as Array<{
+            id?: string; name?: string; disambiguation?: string; country?: string;
+          }>)
+        : [];
+
     res.json({
-      ok: Boolean((saavnData?.results?.length || 0) > 0 || deezerItems.length > 0),
-      data: {
-        ...saavnData,
-        deezerItems,
-      },
+      ok: Boolean((saavnData?.results?.length || 0) > 0 || deezerItems.length > 0 || musicBrainzArtists.length > 0),
+      data: { ...saavnData, deezerItems, musicBrainzArtists },
     });
   });
 
@@ -1938,6 +2017,26 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
     const limit = Math.min(50, Math.max(1, Number(req.query.limit || 30)));
     if (!id) {
       res.status(400).json({ ok: false, error: 'Missing id parameter' });
+      return;
+    }
+
+    if (id.startsWith('mb-art:') && type === 'artists') {
+      const mbid = id.slice('mb-art:'.length);
+      if (!/^[0-9a-f-]{36}$/i.test(mbid)) {
+        res.status(400).json({ ok: false, error: 'Invalid MusicBrainz artist id.' });
+        return;
+      }
+      const mbJson = await fetchMusicBrainzJson(
+        'https://musicbrainz.org/ws/2/recording/?query=' + encodeURIComponent('arid:' + mbid) + '&fmt=json&limit=' + limit
+      );
+      const recordings = (mbJson?.recordings || []) as MusicBrainzRecordingRaw[];
+      const tracks = recordings.map(mapMusicBrainzRecording)
+        .filter((track) => !isInstrumentalOrSpam(track.name, track.albumName));
+      res.json({
+        ok: tracks.length > 0,
+        source: 'musicbrainz',
+        data: { name: tracks[0]?.artist || 'Artist', image: '', tracks },
+      });
       return;
     }
 
