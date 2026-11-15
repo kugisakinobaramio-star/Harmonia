@@ -1,4 +1,5 @@
 import { Compass, Home, Library, Search } from 'lucide-react';
+import { apiUrl } from './utils/apiUrl';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CollectionView } from './components/CollectionView';
 import { DiscoverView } from './components/DiscoverView';
@@ -117,7 +118,7 @@ function buildStreamCandidates(
     if (raw.startsWith('/') || raw.startsWith('data:') || raw.startsWith('blob:')) {
       pushUnique(raw);
     } else if (/^https?:\/\//i.test(raw)) {
-      pushUnique(`/api/music/audio?url=${encodeURIComponent(raw)}`);
+      pushUnique(apiUrl(`/api/music/audio?url=${encodeURIComponent(raw)}`));
       if (raw.startsWith('https://')) pushUnique(raw);
     }
   }
