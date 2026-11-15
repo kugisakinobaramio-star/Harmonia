@@ -569,7 +569,11 @@ export default function App() {
       const incoming = activeAudioSlotRef.current === 1 ? a2 : a1;
       activeAudioSlotRef.current = activeAudioSlotRef.current === 1 ? 2 : 1;
 
-      incoming.crossOrigin = 'anonymous';
+      // Keep native HTMLAudioElement playback outside the Web Audio CORS security
+      // boundary. Cross-origin media can play normally without CORS, but setting
+      // crossOrigin='anonymous' and routing it through MediaElementAudioSourceNode
+      // makes browsers output silence when the host omits Access-Control-Allow-Origin.
+      incoming.removeAttribute('crossOrigin');
       incoming.src = url;
       incoming.volume = 0;
       incoming.muted = volume === 0;
@@ -580,10 +584,8 @@ export default function App() {
       let candidateFailed = false;
       let hasStartedPlaying = false;
       let startupTimer = 0;
-      let silenceTimer = 0;
       const clearCandidateWatch = () => {
         if (startupTimer) window.clearTimeout(startupTimer);
-        if (silenceTimer) window.clearTimeout(silenceTimer);
         incoming.removeEventListener('playing', onCandidatePlaying);
         incoming.removeEventListener('error', onCandidateError);
       };
@@ -591,19 +593,8 @@ export default function App() {
         hasStartedPlaying = true;
         if (startupTimer) window.clearTimeout(startupTimer);
         startupTimer = 0;
-        // Some providers return HTTP 200 and trigger `playing` while their
-        // cross-origin media is silent inside the Web Audio graph. Check the
-        // actual output signal after allowing quiet intros to pass.
-        silenceTimer = window.setTimeout(() => {
-          if (
-            playSeq !== playbackSeqRef.current ||
-            activeAudioSlotRef.current !== candidateSlot ||
-            candidateIdxRef.current !== idx
-          ) return;
-          const signal = audioEngine.getSignalLevel();
-          if (signal !== null && signal < 0.0015) onCandidateError();
-          else clearCandidateWatch();
-        }, 9_000);
+        setIsPlaying(true);
+        clearCandidateWatch();
       };
       const onCandidateError = () => {
         if (candidateFailed) return;
@@ -988,7 +979,9 @@ export default function App() {
       setCurrentTime(0);
       synthTimeRef.current = 0;
       setDuration(track.duration || 200);
-      setIsPlaying(true);
+      // Do not label a native track as playing until the active media element
+      // emits its actual playing event. YouTube paths set this when started.
+      setIsPlaying(false);
 
       let didForceRefresh = false;
       const playNativeAudioCandidates = (urls: string[]) => {
@@ -1193,11 +1186,9 @@ export default function App() {
   );
   advanceTrackRef.current = advanceTrack;
 
-  // Attach both crossfade audio slots to the shared EQ/analyser graph.
-  useEffect(() => {
-    if (audioRef.current) audioEngine.attachMediaElement(audioRef.current);
-    if (audioRef2.current) audioEngine.attachMediaElement(audioRef2.current);
-  }, []);
+  // External streams remain native HTMLAudioElements. Routing cross-origin media
+  // through Web Audio can silently mute playback when a provider omits CORS headers.
+  // Keep the shared Web Audio graph for generated audio/visualisation only.
 
   // Listen to both crossfade slots, but only the currently active slot may
   // update playback state or advance the queue.
