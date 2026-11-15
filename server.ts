@@ -941,16 +941,10 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
             return scored[0].id;
           }
 
-          for (const item of data.items) {
-            const rawId = item.url?.replace('/watch?v=', '') || '';
-            if (
-              rawId &&
-              rawId.length === 11 &&
-              !isRemixOrKnockoff(item.title || '', '', item.uploaderName || '', '')
-            ) {
-              return rawId;
-            }
-          }
+          // Do not fall back to the first merely plausible video when every
+          // candidate failed title/artist/duration validation. Returning an
+          // unscored result can select podcasts or unrelated long-form uploads.
+
         }
       } catch {
         // Try next endpoint
