@@ -1704,7 +1704,15 @@ export default function App() {
             )}
 
             {activeView === 'discover' && (
-              <DiscoverView tracks={[...regionalTracks, ...personalizedFeedTracks, ...recommendedTracks]} recentlyPlayed={recentlyPlayed} onPlayTrackList={playTrackList} />
+              <DiscoverView
+                tracks={[...regionalTracks, ...personalizedFeedTracks, ...recommendedTracks]}
+                recentlyPlayed={recentlyPlayed}
+                onPlayTrackList={playTrackList}
+                onRefresh={async () => {
+                  const freshTracks = await fetchRegionalDiscovery(region, true);
+                  setRegionalTracks(freshTracks);
+                }}
+              />
             )}
 
             {activeView === 'search' && (
