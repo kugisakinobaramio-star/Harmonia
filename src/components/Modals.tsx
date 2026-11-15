@@ -537,12 +537,12 @@ export function VideoModal({
 
 const ARTIST_PICKER_OPTIONS: Array<{ name: string; image: string; lang: string }> = [
   ...SEED_ARTISTS.map((a) => ({ name: a.name, image: a.image, lang: a.language || 'Global' })),
-  { name: 'Pritam', image: apiUrl('/api/music/image?title=Kesariya+Pritam', lang: 'Hindi' },
-  { name: 'Shreya Ghoshal', image: apiUrl('/api/music/image?title=Shreya+Ghoshal', lang: 'Hindi' },
-  { name: 'Diljit Dosanjh', image: apiUrl('/api/music/image?title=Diljit+Dosanjh', lang: 'Hindi' },
-  { name: 'Fujii Kaze', image: apiUrl('/api/music/image?title=Shinunoga+E-Wa+Fujii+Kaze', lang: 'J-Pop' },
-  { name: 'Billie Eilish', image: apiUrl('/api/music/image?title=Birds+Of+A+Feather+Billie+Eilish', lang: 'English' },
-  { name: 'Glass Animals', image: apiUrl('/api/music/image?title=Heat+Waves+Glass+Animals', lang: 'English' },
+  { name: 'Pritam', image: apiUrl('/api/music/image?title=Kesariya+Pritam'), lang: 'Hindi' },
+  { name: 'Shreya Ghoshal', image: apiUrl('/api/music/image?title=Shreya+Ghoshal'), lang: 'Hindi' },
+  { name: 'Diljit Dosanjh', image: apiUrl('/api/music/image?title=Diljit+Dosanjh'), lang: 'Hindi' },
+  { name: 'Fujii Kaze', image: apiUrl('/api/music/image?title=Shinunoga+E-Wa+Fujii+Kaze'), lang: 'J-Pop' },
+  { name: 'Billie Eilish', image: apiUrl('/api/music/image?title=Birds+Of+A+Feather+Billie+Eilish'), lang: 'English' },
+  { name: 'Glass Animals', image: apiUrl('/api/music/image?title=Heat+Waves+Glass+Animals'), lang: 'English' },
 ];
 
 const MOOD_OPTIONS = [
