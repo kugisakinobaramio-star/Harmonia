@@ -376,10 +376,10 @@ interface ItunesTrackRaw {
 function isSearchCandidateMatch(itemTitle: string, itemArtist: string, query: string): boolean {
   const normalize = (value: string) =>
     value.toLowerCase().normalize('NFKD')
-      .replace(/[\\u0300-\\u036f]/g, '')
+      .replace(/[\u0300-\u036f]/g, '')
       .replace(/[^a-z0-9]+/g, ' ')
       .trim()
-      .split(/\\s+/)
+      .split(/\s+/)
       .filter((token) => token.length > 1);
   const queryTokens = [...new Set(normalize(query))];
   const titleTokens = new Set(normalize(itemTitle));
