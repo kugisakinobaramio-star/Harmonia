@@ -1983,7 +1983,7 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
           )
       ]));
 
-      const byGenre: Track[][] = settled.map((result) =>
+      const byGenre: StoredTrack[][] = settled.map((result) =>
         result.status === 'fulfilled' ? result.value : []
       );
       const seenTracks = new Set<string>();
@@ -1997,8 +1997,8 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
         seenTracks.add(key);
         return true;
       });
-      const firstPass: Track[] = [];
-      const repeats: Track[] = [];
+      const firstPass: StoredTrack[] = [];
+      const repeats: StoredTrack[] = [];
       for (const track of unique) {
         const artist = track.artist.split(/,|&| feat\.? | ft\.? /i)[0].trim().toLowerCase();
         if (!seenArtists.has(artist)) {
