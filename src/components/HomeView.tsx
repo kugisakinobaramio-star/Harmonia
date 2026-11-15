@@ -286,18 +286,7 @@ export function HomeView({
       {randomDiscoverTracks.length > 0 &&
         renderTrackShelf('A Little Outside Your Usual', 'A rotating mix to help you discover something different', randomDiscoverTracks)}
 
-      {/* Dynamic Language Affinity Shelf */}
-      {tasteHighlights?.topLanguage &&
-        languageFilter === 'All' &&
-        renderTrackShelf(
-          `Your ${tasteHighlights.topLanguage} Mix`,
-          `Because you listen to ${tasteHighlights.topLanguage} music repeatedly`,
-          allCatalogTracks.filter((t) => t.language === tasteHighlights.topLanguage)
-        )}
-
-
-
-      {/* Spotify Free — Ad-Free Live Editorial Playlists */}
+      {/* Spotify Playlist Discovery */}
       {spotifyPlaylists.length > 0 && (
         <section className="space-y-3">
           <div className="flex items-baseline justify-between gap-2">
@@ -306,7 +295,7 @@ export function HomeView({
                 Spotify Free Mixes
               </h2>
               <p className="text-xs text-zinc-400">
-                Live Spotify charts & playlists · No API key · Ad-free streaming
+                Public Spotify playlist discovery · Playback uses available licensed audio sources
               </p>
             </div>
           </div>
@@ -358,7 +347,7 @@ export function HomeView({
       {renderTrackShelf(
         `Popular in ${REGION_LABELS[region]}`,
         'Location-tuned vocal tracks with verified lyrics',
-        visibleRegional.length ? visibleRegional : regionalTracks
+        visibleRegional
       )}
 
 
