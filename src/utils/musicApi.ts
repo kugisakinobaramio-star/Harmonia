@@ -158,7 +158,7 @@ export async function fetchRegionalDiscovery(region: MusicRegion): Promise<Track
   } catch {
     // Fallback to curated catalog
   }
-  return SEED_TRACKS;
+  return [];
 }
 
 export async function searchSongs(
