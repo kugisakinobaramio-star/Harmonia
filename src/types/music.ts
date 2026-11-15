@@ -1,4 +1,4 @@
-export type ViewName = 'home' | 'search' | 'library' | 'lyrics' | 'collection';
+export type ViewName = 'home' | 'search' | 'library' | 'downloads' | 'lyrics' | 'collection';
 export type SearchTab = 'songs' | 'albums' | 'playlists' | 'artists' | 'videos';
 export type AudioQuality = '320kbps' | '160kbps' | '96kbps' | 'auto';
 export type RepeatMode = 0 | 1 | 2; // 0 = off, 1 = all, 2 = one
