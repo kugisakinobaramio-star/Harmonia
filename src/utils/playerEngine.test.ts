@@ -14,6 +14,7 @@ import {
   isMatchingLyricsCandidate,
   getSearchFallbackQueries,
   isRelevantSongSearchCandidate,
+  isAllowedJamendoNonCommercialLicense,
   isPlausibleSongDuration,
   isRelevantTrackTitle,
   isShortPreviewUrl,
@@ -556,4 +557,12 @@ test('song search candidate matching uses title and artist tokens for both query
   assert.equal(isRelevantSongSearchCandidate('Maharani', 'Arpit Bala', 'Arpit Bala Maharani'), true);
   assert.equal(isRelevantSongSearchCandidate('Birds of a Feather', 'Billie Eilish', 'Billie Eilish Birds of a Feather'), true);
   assert.equal(isRelevantSongSearchCandidate('A Different Song', 'Another Artist', 'Maharani Arpit Bala'), false);
+});
+
+test('Jamendo candidate licensing accepts only recognized Creative Commons non-commercial URLs', () => {
+  assert.equal(isAllowedJamendoNonCommercialLicense('http://creativecommons.org/licenses/by-nc-nd/3.0/'), true);
+  assert.equal(isAllowedJamendoNonCommercialLicense('https://creativecommons.org/licenses/by-nc/4.0/'), true);
+  assert.equal(isAllowedJamendoNonCommercialLicense('https://creativecommons.org/licenses/by/4.0/'), false);
+  assert.equal(isAllowedJamendoNonCommercialLicense('https://example.com/license'), false);
+  assert.equal(isAllowedJamendoNonCommercialLicense('javascript:alert(1)'), false);
 });
