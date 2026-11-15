@@ -594,7 +594,9 @@ export default function App() {
         if (startupTimer) window.clearTimeout(startupTimer);
         startupTimer = 0;
         setIsPlaying(true);
-        clearCandidateWatch();
+        // Keep the error listener attached after startup so a later decode/network
+        // failure can still advance to the next candidate.
+        incoming.removeEventListener('playing', onCandidatePlaying);
       };
       const onCandidateError = () => {
         if (candidateFailed) return;
