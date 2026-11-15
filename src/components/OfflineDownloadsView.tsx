@@ -46,7 +46,10 @@ export function OfflineDownloadsView({ onPlayList, onToast }: { onPlayList: (tra
   const [loading, setLoading] = useState(true);
   const [urls] = useState(() => new Map<string, string>());
   const refresh = async () => {
-    try { setItems(await allItems()); } catch { onToast('Offline storage is unavailable in this browser.'); }
+    try {
+      setItems(await allItems());
+      window.dispatchEvent(new Event('harmonia-offline-library-change'));
+    } catch { onToast('Offline storage is unavailable in this browser.'); }
     setLoading(false);
   };
   useEffect(() => { void refresh(); return () => { urls.forEach((url) => URL.revokeObjectURL(url)); }; }, []);
