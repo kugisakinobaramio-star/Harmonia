@@ -75,12 +75,19 @@ function pickSaavnImage(images?: SaavnImage[], fallback = ARTWORK.englishVinyl):
 }
 
 function mapSaavnLanguage(rawLang?: string): Track['language'] {
-  const low = (rawLang || '').toLowerCase();
-  if (low.includes('punjabi')) return 'Punjabi';
-  if (low.includes('hindi')) return 'Hindi';
-  if (low.includes('japanese') || low.includes('j-pop')) return 'J-Pop';
-  if (low.includes('english')) return 'English';
-  return 'Other';
+  const low = (rawLang || '').toLowerCase().trim();
+  const aliases: Array<[RegExp, MusicLanguage]> = [
+    [/punjabi/, 'Punjabi'], [/haryanvi/, 'Haryanvi'], [/marathi/, 'Marathi'],
+    [/bengali|bangla/, 'Bengali'], [/tamil/, 'Tamil'], [/telugu/, 'Telugu'],
+    [/kannada/, 'Kannada'], [/malayalam/, 'Malayalam'], [/gujarati/, 'Gujarati'],
+    [/bhojpuri/, 'Bhojpuri'], [/urdu/, 'Urdu'], [/hindi/, 'Hindi'],
+    [/french/, 'French'], [/spanish|español/, 'Spanish'], [/korean/, 'Korean'],
+    [/japanese/, 'Japanese'], [/j-?pop/, 'J-Pop'], [/chinese|mandarin|cantonese/, 'Chinese'],
+    [/arabic/, 'Arabic'], [/portuguese/, 'Portuguese'], [/german/, 'German'],
+    [/italian/, 'Italian'], [/turkish/, 'Turkish'], [/thai/, 'Thai'],
+    [/indonesian|bahasa/, 'Indonesian'], [/english/, 'English'],
+  ];
+  return aliases.find(([pattern]) => pattern.test(low))?.[1] || 'Other';
 }
 
 function mapSaavnSong(raw: SaavnSongRaw): Track {
