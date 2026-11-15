@@ -106,7 +106,7 @@ export function TrackRow({
 
       <div className="flex items-center gap-1 sm:gap-1.5">
         <span className="mr-1 hidden font-mono-num text-xs text-zinc-400 sm:inline">
-          {formatTime(track.duration)}
+          {track.duration > 0 ? formatTime(track.duration) : '—'}
         </span>
 
         <DownloadButton
