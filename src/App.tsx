@@ -722,6 +722,33 @@ export default function App() {
                   : currentTrackRef.current;
               if (!cur) return;
 
+              // A verified result can still reject embedding (101/150) or be unavailable.
+              // Try the next independently matched video before refreshing audio providers.
+              const nextYoutubeId = (cur.youtubeAlternates || []).find(
+                (candidate) => Boolean(candidate) && candidate !== cur.youtubeId
+              );
+              if (nextYoutubeId && ytPlayerRef.current) {
+                const remainingYoutubeIds = (cur.youtubeAlternates || []).filter(
+                  (candidate) => candidate !== nextYoutubeId && candidate !== cur.youtubeId
+                );
+                const nextTrack = {
+                  ...cur,
+                  youtubeId: nextYoutubeId,
+                  youtubeAlternates: remainingYoutubeIds,
+                };
+                currentTrackRef.current = nextTrack;
+                resolvedPlaybackTrackRef.current = nextTrack;
+                setQueue((prev) => prev.map((item) => item.id === cur.id ? nextTrack : item));
+                try {
+                  ytPlayerRef.current.loadVideoById(nextYoutubeId);
+                  ytPlayerRef.current.playVideo();
+                  setIsPlaying(true);
+                  return;
+                } catch {
+                  // Continue to independent audio fallback below.
+                }
+              }
+
               const playRefreshedAudio = (failedUrls: Set<string>) => {
                 resolveTrackStreams(cur, { forceRefresh: true })
                   .then((refreshed) => {
@@ -741,6 +768,8 @@ export default function App() {
                               streamUrls: refreshed.streamUrls || item.streamUrls,
                               previewUrl: refreshed.previewUrl || item.previewUrl,
                               alternates: refreshed.alternates || [],
+                              youtubeId: refreshed.youtubeId || item.youtubeId,
+                              youtubeAlternates: refreshed.youtubeAlternates || item.youtubeAlternates,
                             } as Track
                           : item
                       )
@@ -822,6 +851,7 @@ export default function App() {
                     streamUrls: resolved.streamUrls || qItem.streamUrls,
                     previewUrl: resolved.previewUrl || qItem.previewUrl,
                     youtubeId: resolved.youtubeId || qItem.youtubeId,
+                    youtubeAlternates: resolved.youtubeAlternates || qItem.youtubeAlternates,
                   }
                 : qItem
             )
