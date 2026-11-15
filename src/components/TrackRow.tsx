@@ -1,6 +1,6 @@
 import { Heart, ListPlus, Play, Plus, Video } from 'lucide-react';
 import type { Track } from '../types/music';
-import { formatPlayCount, formatTime } from '../utils/playerEngine';
+import { formatPlayCount, formatTime, hasFullAudioStream } from '../utils/playerEngine';
 import { CoverImage } from './CoverImage';
 import { DownloadButton } from './DownloadButton';
 
@@ -36,6 +36,17 @@ export function TrackRow({
   onOpenVideo,
 }: TrackRowProps) {
   const playLabel = formatPlayCount(track.playCount);
+  const sourceLabel =
+    track.sourceAvailability === 'metadata' || track.metadataOnly
+      ? 'Catalogue info only · source not confirmed'
+      : track.sourceAvailability === 'preview'
+        ? 'Preview only'
+        : track.sourceAvailability === 'full' || hasFullAudioStream(track)
+          ? 'Full stream listed'
+          : 'Checks more sources when played';
+  const sourceText = track.sourceProvider
+    ? sourceLabel + ' · ' + track.sourceProvider
+    : sourceLabel;
   const metaParts = [
     track.artist,
     track.albumName,
@@ -84,6 +95,13 @@ export function TrackRow({
           {track.name}
         </div>
         <div className="truncate text-xs text-zinc-400">{metaParts.join(' · ')}</div>
+        <div
+          className="truncate text-[10px] text-zinc-500"
+          title={sourceText}
+          aria-label={sourceText}
+        >
+          {sourceText}
+        </div>
       </button>
 
       <div className="flex items-center gap-1 sm:gap-1.5">
