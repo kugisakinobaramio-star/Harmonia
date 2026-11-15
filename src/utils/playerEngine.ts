@@ -92,6 +92,7 @@ export function isFastImageCdn(url: string): boolean {
 
 export function toProxiedImageUrl(url?: string): string {
   if (!url) return '';
+  if (url.startsWith('/api/')) return apiUrl(url);
   if (
     url.startsWith('/') ||
     url.startsWith('data:') ||
