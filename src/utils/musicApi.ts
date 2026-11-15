@@ -758,22 +758,43 @@ export function getArtistProfileById(id: string): ArtistProfile | undefined {
   return SEED_ARTISTS.find((a) => a.id === id);
 }
 
+type ResolvedTrackCacheValue = Partial<
+  Pick<Track, 'streamUrls' | 'previewUrl' | 'youtubeId' | 'youtubeAlternates'>
+> & { alternates?: string[] };
+
 const resolvedTrackCache = new Map<
   string,
-  Partial<Pick<Track, 'streamUrls' | 'previewUrl' | 'youtubeId' | 'youtubeAlternates'>> & { alternates?: string[] }
+  { value: ResolvedTrackCacheValue; expiresAt: number }
 >();
+const resolvedTrackInflight = new Map<string, Promise<Track & { alternates?: string[] }>>();
+const failedResolveUntil = new Map<string, number>();
 
 export async function resolveTrackStreams(
   track: Track,
   options: { forceRefresh?: boolean } = {}
 ): Promise<Track & { alternates?: string[] }> {
-  const cached = resolvedTrackCache.get(track.id);
-  if (options.forceRefresh) resolvedTrackCache.delete(track.id);
-  if (!options.forceRefresh && hasFullAudioStream(track)) {
-    return { ...track, alternates: cached?.alternates, youtubeId: cached?.youtubeId || track.youtubeId, youtubeAlternates: cached?.youtubeAlternates || track.youtubeAlternates };
+  const forceRefresh = Boolean(options.forceRefresh);
+  const cachedEntry = resolvedTrackCache.get(track.id);
+  if (cachedEntry && cachedEntry.expiresAt <= Date.now()) {
+    resolvedTrackCache.delete(track.id);
+  }
+  const cached = cachedEntry && cachedEntry.expiresAt > Date.now()
+    ? cachedEntry.value
+    : undefined;
+  if (forceRefresh) {
+    resolvedTrackCache.delete(track.id);
+    failedResolveUntil.delete(track.id);
+  }
+  if (!forceRefresh && hasFullAudioStream(track)) {
+    return {
+      ...track,
+      alternates: cached?.alternates,
+      youtubeId: cached?.youtubeId || track.youtubeId,
+      youtubeAlternates: cached?.youtubeAlternates || track.youtubeAlternates,
+    };
   }
   if (
-    !options.forceRefresh &&
+    !forceRefresh &&
     cached &&
     ((cached.streamUrls && Object.keys(cached.streamUrls).length > 0) ||
       cached.previewUrl ||
@@ -788,55 +809,87 @@ export async function resolveTrackStreams(
       youtubeAlternates: cached.youtubeAlternates || track.youtubeAlternates,
     };
   }
-  try {
-    const res = await fetch(
-      `/api/music/resolve?title=${encodeURIComponent(track.name)}&artist=${encodeURIComponent(
-        track.artist
-      )}&duration=${Math.round(track.duration || 0)}&forceRefresh=${options.forceRefresh ? '1' : '0'}`
-    );
-    if (res.ok) {
-      const json = (await res.json()) as {
-        ok?: boolean;
-        streamUrls?: Track['streamUrls'];
-        previewUrl?: string;
-        alternates?: string[];
-        youtubeId?: string;
-        youtubeAlternates?: string[];
-      };
-      if (
-        json.ok &&
-        ((json.streamUrls && Object.keys(json.streamUrls).length > 0) ||
-          json.previewUrl ||
-          json.youtubeId)
-      ) {
-        const entry = {
-          streamUrls:
-            json.streamUrls && Object.keys(json.streamUrls).length > 0
-              ? json.streamUrls
-              : track.streamUrls,
-          previewUrl: json.previewUrl || track.previewUrl,
-          alternates: json.alternates,
-          youtubeId: json.youtubeId || track.youtubeId,
-          youtubeAlternates: json.youtubeAlternates || track.youtubeAlternates,
+
+  const failedUntil = failedResolveUntil.get(track.id) || 0;
+  if (!forceRefresh && failedUntil > Date.now()) return track;
+  if (failedUntil) failedResolveUntil.delete(track.id);
+
+  const pending = !forceRefresh ? resolvedTrackInflight.get(track.id) : undefined;
+  if (pending) return pending;
+
+  const request = (async (): Promise<Track & { alternates?: string[] }> => {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 12_000);
+    try {
+      const res = await fetch(
+        `/api/music/resolve?title=${encodeURIComponent(track.name)}&artist=${encodeURIComponent(
+          track.artist
+        )}&duration=${Math.round(track.duration || 0)}&forceRefresh=${forceRefresh ? '1' : '0'}`,
+        { signal: controller.signal }
+      );
+      if (res.ok) {
+        const json = (await res.json()) as {
+          ok?: boolean;
+          streamUrls?: Track['streamUrls'];
+          previewUrl?: string;
+          alternates?: string[];
+          youtubeId?: string;
+          youtubeAlternates?: string[];
         };
-        resolvedTrackCache.set(track.id, entry);
-        return { ...track, ...entry };
+        if (
+          json.ok &&
+          ((json.streamUrls && Object.keys(json.streamUrls).length > 0) ||
+            json.previewUrl ||
+            json.youtubeId)
+        ) {
+          const entry = {
+            streamUrls:
+              json.streamUrls && Object.keys(json.streamUrls).length > 0
+                ? json.streamUrls
+                : track.streamUrls,
+            previewUrl: json.previewUrl || track.previewUrl,
+            alternates: json.alternates,
+            youtubeId: json.youtubeId || track.youtubeId,
+            youtubeAlternates: json.youtubeAlternates || track.youtubeAlternates,
+          };
+          resolvedTrackCache.set(track.id, {
+            value: entry,
+            expiresAt: Date.now() + 5 * 60_000,
+          });
+          failedResolveUntil.delete(track.id);
+          return { ...track, ...entry };
+        }
       }
+    } catch {
+      // A timed-out or unavailable resolver must not block the player.
+    } finally {
+      clearTimeout(timeout);
     }
-  } catch {
-    // Fallback gracefully
+
+    // Avoid hammering every provider on repeated renders when no source was found.
+    // Explicit retries bypass this short negative cache.
+    failedResolveUntil.set(track.id, Date.now() + 20_000);
+    if (forceRefresh) {
+      return {
+        ...track,
+        streamUrls: undefined,
+        previewUrl: undefined,
+        youtubeId: undefined,
+        youtubeAlternates: [],
+        alternates: [],
+      };
+    }
+    return track;
+  })();
+
+  if (!forceRefresh) resolvedTrackInflight.set(track.id, request);
+  try {
+    return await request;
+  } finally {
+    if (resolvedTrackInflight.get(track.id) === request) {
+      resolvedTrackInflight.delete(track.id);
+    }
   }
-  if (options.forceRefresh) {
-    return {
-      ...track,
-      streamUrls: undefined,
-      previewUrl: undefined,
-      youtubeId: undefined,
-      youtubeAlternates: [],
-      alternates: [],
-    };
-  }
-  return track;
 }
 
 export async function fetchSpotifyPlaylists(): Promise<CuratedPlaylist[]> {
