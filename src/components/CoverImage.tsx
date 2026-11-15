@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ARTWORK } from '../data/catalog';
+import { apiUrl } from '../utils/apiUrl';
 import { toProxiedImageUrl } from '../utils/playerEngine';
 
 interface CoverImageProps {
@@ -31,7 +32,7 @@ export function CoverImage({
       onError={() => {
         if (src && /^https?:\/\//i.test(src) && imgSrc === src) {
           setImgSrc(
-            `/api/music/image?url=${encodeURIComponent(src)}${alt ? `&title=${encodeURIComponent(alt)}` : ''}`
+            apiUrl(`/api/music/image?url=${encodeURIComponent(src)}${alt ? `&title=${encodeURIComponent(alt)}` : ''}`)
           );
         } else if (imgSrc !== fallbackSrc) {
           setImgSrc(fallbackSrc);
