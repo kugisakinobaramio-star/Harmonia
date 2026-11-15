@@ -627,7 +627,7 @@ export function scoreTrackForUser(track: Track, profile: UserTasteProfile): numb
     score += 40;
   }
 
-  // Preferred languages boost (Hindi, English, J-Pop prioritized)
+  // Preferred languages are ranked from the listener's own settings and history.
   if (track.language && track.language !== 'Other') {
     const prefIdx = profile.preferredLanguages.indexOf(track.language);
     if (prefIdx >= 0) {
@@ -718,7 +718,7 @@ export function deriveDynamicTasteHighlights(profile: UserTasteProfile): {
     topArtistEntry && topArtistEntry[1] >= 2 ? topArtistEntry[0] : null;
 
   const langEntries = Object.entries(profile.languageAffinity)
-    .filter(([k, w]) => w > 0 && (k === 'Hindi' || k === 'English' || k === 'J-Pop'))
+    .filter(([k, w]) => w > 0 && k !== 'Other')
     .sort((a, b) => b[1] - a[1]);
   const topLanguage =
     (langEntries[0]?.[0] as MusicLanguage | undefined) ||

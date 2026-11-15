@@ -491,7 +491,12 @@ const MOOD_OPTIONS = [
 ];
 
 const REGION_OPTIONS: MusicRegion[] = ['IN', 'JP', 'US', 'GB', 'GLOBAL'];
-const LANGUAGE_OPTIONS: MusicLanguage[] = ['Hindi', 'English', 'J-Pop'];
+const LANGUAGE_OPTIONS: MusicLanguage[] = [
+  'Hindi', 'Punjabi', 'Haryanvi', 'Marathi', 'Bengali', 'Tamil', 'Telugu', 'Kannada',
+  'Malayalam', 'Gujarati', 'Bhojpuri', 'Urdu', 'English', 'French', 'Spanish', 'Korean',
+  'Japanese', 'Chinese', 'Arabic', 'Portuguese', 'German', 'Italian', 'Turkish', 'Thai',
+  'Indonesian', 'J-Pop',
+];
 
 interface PersonaliseModalProps {
   open: boolean;

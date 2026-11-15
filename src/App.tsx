@@ -580,14 +580,30 @@ export default function App() {
       let candidateFailed = false;
       let hasStartedPlaying = false;
       let startupTimer = 0;
+      let silenceTimer = 0;
       const clearCandidateWatch = () => {
         if (startupTimer) window.clearTimeout(startupTimer);
+        if (silenceTimer) window.clearTimeout(silenceTimer);
         incoming.removeEventListener('playing', onCandidatePlaying);
         incoming.removeEventListener('error', onCandidateError);
       };
       const onCandidatePlaying = () => {
         hasStartedPlaying = true;
-        clearCandidateWatch();
+        if (startupTimer) window.clearTimeout(startupTimer);
+        startupTimer = 0;
+        // Some providers return HTTP 200 and trigger `playing` while their
+        // cross-origin media is silent inside the Web Audio graph. Check the
+        // actual output signal after allowing quiet intros to pass.
+        silenceTimer = window.setTimeout(() => {
+          if (
+            playSeq !== playbackSeqRef.current ||
+            activeAudioSlotRef.current !== candidateSlot ||
+            candidateIdxRef.current !== idx
+          ) return;
+          const signal = audioEngine.getSignalLevel();
+          if (signal !== null && signal < 0.0015) onCandidateError();
+          else clearCandidateWatch();
+        }, 9_000);
       };
       const onCandidateError = () => {
         if (candidateFailed) return;

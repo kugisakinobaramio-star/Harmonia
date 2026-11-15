@@ -45,7 +45,12 @@ interface HeaderProps {
 }
 
 const REGIONS: MusicRegion[] = ['IN', 'JP', 'US', 'GB', 'GLOBAL'];
-const LANGS: MusicLanguage[] = ['Hindi', 'English', 'J-Pop'];
+const LANGS: MusicLanguage[] = [
+  'Hindi', 'Punjabi', 'Haryanvi', 'Marathi', 'Bengali', 'Tamil', 'Telugu', 'Kannada',
+  'Malayalam', 'Gujarati', 'Bhojpuri', 'Urdu', 'English', 'French', 'Spanish', 'Korean',
+  'Japanese', 'Chinese', 'Arabic', 'Portuguese', 'German', 'Italian', 'Turkish', 'Thai',
+  'Indonesian', 'J-Pop',
+];
 
 export function Header({
   activeView,

@@ -19,6 +19,7 @@ class HarmoniaAudioEngine {
   private volume = 0.85;
   private eqPreset: EqPreset = 'flat';
   private freqBuffer: Uint8Array<ArrayBuffer> | null = null;
+  private timeBuffer: Uint8Array<ArrayBuffer> | null = null;
 
   public ensureContext(): AudioContext | null {
     if (typeof window === 'undefined') return null;
@@ -60,6 +61,7 @@ class HarmoniaAudioEngine {
       this.analyser.connect(this.ctx.destination);
 
       this.freqBuffer = new Uint8Array(new ArrayBuffer(this.analyser.frequencyBinCount));
+      this.timeBuffer = new Uint8Array(new ArrayBuffer(this.analyser.fftSize));
       this.applyEqPreset(this.eqPreset);
     }
     if (this.ctx.state === 'suspended') {
@@ -231,6 +233,18 @@ class HarmoniaAudioEngine {
     if (!this.analyser || !this.freqBuffer) return null;
     this.analyser.getByteFrequencyData(this.freqBuffer);
     return this.freqBuffer;
+  }
+
+  /** RMS signal level from the shared output graph; near-zero means a silent stream. */
+  public getSignalLevel(): number | null {
+    if (!this.analyser || !this.timeBuffer || !this.ctx || this.ctx.state !== 'running') return null;
+    this.analyser.getByteTimeDomainData(this.timeBuffer);
+    let sumSquares = 0;
+    for (const sample of this.timeBuffer) {
+      const centered = (sample - 128) / 128;
+      sumSquares += centered * centered;
+    }
+    return Math.sqrt(sumSquares / this.timeBuffer.length);
   }
 }
 

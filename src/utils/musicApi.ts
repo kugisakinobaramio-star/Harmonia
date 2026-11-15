@@ -54,6 +54,35 @@ interface SaavnSongRaw {
   image?: SaavnImage[];
   downloadUrl?: SaavnDownload[];
 }
+interface MusicBrainzRecordingRaw {
+  id?: string;
+  title?: string;
+  length?: number;
+  'artist-credit'?: Array<string | { name?: string; artist?: { name?: string } }>;
+  releases?: Array<{ title?: string; date?: string }>;
+}
+
+interface MusicBrainzArtistRaw { id?: string; name?: string; disambiguation?: string; country?: string; }
+
+function mapMusicBrainzRecording(raw: MusicBrainzRecordingRaw): Track {
+  const credits = (raw['artist-credit'] || [])
+    .map((entry) => typeof entry === 'string' ? entry : entry.name || entry.artist?.name || '')
+    .filter(Boolean);
+  return {
+    id: 'mb-rec:' + (raw.id || Math.random().toString(36).slice(2, 9)),
+    name: decodeHtmlEntities(raw.title || 'Untitled Recording'),
+    artist: credits.join(', ') || 'Unknown Artist',
+    albumName: decodeHtmlEntities(raw.releases?.[0]?.title || 'Recording'),
+    year: raw.releases?.[0]?.date?.slice(0, 4),
+    duration: raw.length ? Math.round(raw.length / 1000) : 195,
+    image: ARTWORK.englishVinyl,
+    language: 'Other',
+    region: 'GLOBAL',
+    genre: 'MusicBrainz metadata',
+    hasLyrics: true,
+    metadataOnly: true,
+  };
+}
 
 function pickSaavnImage(images?: SaavnImage[], fallback = ARTWORK.englishVinyl): string {
   if (!images?.length) return fallback;
@@ -75,11 +104,19 @@ function pickSaavnImage(images?: SaavnImage[], fallback = ARTWORK.englishVinyl):
 }
 
 function mapSaavnLanguage(rawLang?: string): Track['language'] {
-  const low = (rawLang || '').toLowerCase();
-  if (low.includes('hindi') || low.includes('punjabi')) return 'Hindi';
-  if (low.includes('japanese') || low.includes('j-pop')) return 'J-Pop';
-  if (low.includes('english')) return 'English';
-  return 'Other';
+  const low = (rawLang || '').toLowerCase().trim();
+  const aliases: Array<[RegExp, MusicLanguage]> = [
+    [/punjabi/, 'Punjabi'], [/haryanvi/, 'Haryanvi'], [/marathi/, 'Marathi'],
+    [/bengali|bangla/, 'Bengali'], [/tamil/, 'Tamil'], [/telugu/, 'Telugu'],
+    [/kannada/, 'Kannada'], [/malayalam/, 'Malayalam'], [/gujarati/, 'Gujarati'],
+    [/bhojpuri/, 'Bhojpuri'], [/urdu/, 'Urdu'], [/hindi/, 'Hindi'],
+    [/french/, 'French'], [/spanish|español/, 'Spanish'], [/korean/, 'Korean'],
+    [/japanese/, 'Japanese'], [/j-?pop/, 'J-Pop'], [/chinese|mandarin|cantonese/, 'Chinese'],
+    [/arabic/, 'Arabic'], [/portuguese/, 'Portuguese'], [/german/, 'German'],
+    [/italian/, 'Italian'], [/turkish/, 'Turkish'], [/thai/, 'Thai'],
+    [/indonesian|bahasa/, 'Indonesian'], [/english/, 'English'],
+  ];
+  return aliases.find(([pattern]) => pattern.test(low))?.[1] || 'Other';
 }
 
 function mapSaavnSong(raw: SaavnSongRaw): Track {
@@ -191,6 +228,7 @@ export async function searchSongs(
           itunesTracks?: Track[];
           deezerTracks?: Track[];
           audiusTracks?: Track[];
+          musicBrainzRecordings?: MusicBrainzRecordingRaw[];
         };
       };
       const saavnRaw = json.data?.results || [];
@@ -209,12 +247,18 @@ export async function searchSongs(
             !isRemixOrKnockoff(`${t.name} ${t.albumName}`, trimmed, t.artist, trimmed)
         );
 
-      const combinedRemote = [...deezerRaw, ...itunesRaw, ...mappedSaavn, ...audiusRaw]
+      const musicBrainzTracks = languageFilter === 'All'
+        ? (json.data?.musicBrainzRecordings || [])
+            .map(mapMusicBrainzRecording)
+            .filter((t) => isPlausibleSongDuration(t.duration) && isRelevantTrackTitle(t.name, trimmed))
+        : [];
+
+      const combinedRemote = [...deezerRaw, ...itunesRaw, ...mappedSaavn, ...audiusRaw, ...musicBrainzTracks]
         .filter(
           (t) =>
             isPlausibleSongDuration(t.duration) &&
             isRelevantTrackTitle(t.name, trimmed) &&
-            (languageFilter === 'All' ? true : t.language === languageFilter) &&
+            (languageFilter === 'All' || t.language === languageFilter) &&
             !isRemixOrKnockoff(`${t.name} ${t.albumName}`, trimmed, t.artist, trimmed)
         )
         .sort((a, b) => (b.playCount || 0) - (a.playCount || 0));
@@ -392,11 +436,13 @@ export async function searchArtists(query: string): Promise<{
             picture_medium?: string;
             nb_fan?: number;
           }>;
+          musicBrainzArtists?: MusicBrainzArtistRaw[];
         };
       };
       const saavnRaw = json.data?.results || [];
       const dzRaw = json.data?.deezerItems || [];
-      if (json.ok && (saavnRaw.length > 0 || dzRaw.length > 0)) {
+      const mbRaw = json.data?.musicBrainzArtists || [];
+      if (json.ok && (saavnRaw.length > 0 || dzRaw.length > 0 || mbRaw.length > 0)) {
         const dzMapped = dzRaw.map((a) => ({
           id: `dz-art:${a.id}`,
           name: decodeHtmlEntities(a.name || 'Artist'),
@@ -411,7 +457,23 @@ export async function searchArtists(query: string): Promise<{
           image: pickSaavnImage(a.image, ARTWORK.popArtist),
           isLocal: false,
         }));
-        return { artists: [...localArtists, ...dzMapped, ...remote].slice(0, 18) };
+        const musicBrainzMapped = mbRaw
+          .filter((artist) => artist.id && artist.name)
+          .map((artist) => ({
+            id: 'mb-art:' + artist.id,
+            name: decodeHtmlEntities(artist.name || 'Artist'),
+            subtitle: ['MusicBrainz', artist.disambiguation, artist.country].filter(Boolean).join(' · '),
+            image: ARTWORK.popArtist,
+            isLocal: false,
+          }));
+        const seenArtists = new Set<string>();
+        const mergedArtists = [...localArtists, ...dzMapped, ...remote, ...musicBrainzMapped].filter((artist) => {
+          const key = artist.name.toLowerCase();
+          if (seenArtists.has(key)) return false;
+          seenArtists.add(key);
+          return true;
+        });
+        return { artists: mergedArtists.slice(0, 24) };
       }
     }
   } catch {
@@ -465,7 +527,7 @@ export async function loadCollectionTracks(
     }
   }
 
-  const detailId = id.startsWith('dz-') ? id : id.replace(/^saavn-(alb|pl|art):/, '');
+  const detailId = id.startsWith('dz-') || id.startsWith('mb-art:') ? id : id.replace(/^saavn-(alb|pl|art):/, '');
   try {
     const res = await fetch(`/api/music/detail?type=${kind}&id=${encodeURIComponent(detailId)}&limit=30`);
     if (res.ok) {

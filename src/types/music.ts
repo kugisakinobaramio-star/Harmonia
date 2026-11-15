@@ -3,7 +3,12 @@ export type SearchTab = 'songs' | 'albums' | 'playlists' | 'artists' | 'videos';
 export type AudioQuality = '320kbps' | '160kbps' | '96kbps' | 'auto';
 export type RepeatMode = 0 | 1 | 2; // 0 = off, 1 = all, 2 = one
 export type MusicRegion = 'IN' | 'JP' | 'US' | 'GB' | 'GLOBAL';
-export type MusicLanguage = 'Hindi' | 'English' | 'J-Pop';
+export type MusicLanguage =
+  | 'Hindi' | 'Punjabi' | 'Haryanvi' | 'Marathi' | 'Bengali' | 'Tamil' | 'Telugu'
+  | 'Kannada' | 'Malayalam' | 'Gujarati' | 'Bhojpuri' | 'Urdu'
+  | 'English' | 'French' | 'Spanish' | 'Korean' | 'Japanese' | 'J-Pop'
+  | 'Chinese' | 'Arabic' | 'Portuguese' | 'German' | 'Italian' | 'Turkish'
+  | 'Thai' | 'Indonesian';
 export type EqPreset = 'flat' | 'bass' | 'vocal' | 'latenight';
 export type RightPanelMode = 'closed' | 'nowplaying' | 'queue';
 
@@ -26,6 +31,8 @@ export interface Track {
   genre?: string;
   bpm?: number;
   hasLyrics?: boolean;
+  /** Catalogue-only entries; playback must be resolved through a separate audio provider. */
+  metadataOnly?: boolean;
   synthMood?: 'synthwave' | 'sunset' | 'lofi' | 'energetic' | 'ambient' | 'pop' | 'hindi' | 'jpop';
   previewUrl?: string;
   streamUrls?: Partial<Record<'320kbps' | '160kbps' | '96kbps' | '48kbps' | '12kbps', string>>;
