@@ -855,8 +855,7 @@ export default function App() {
         if (cancelled) return;
         if (
           (resolved.streamUrls && Object.keys(resolved.streamUrls).length > 0) ||
-          resolved.previewUrl ||
-          resolved.youtubeId
+          resolved.previewUrl
         ) {
           setQueue((prev) =>
             prev.map((qItem) =>
@@ -865,7 +864,6 @@ export default function App() {
                     ...qItem,
                     streamUrls: resolved.streamUrls || qItem.streamUrls,
                     previewUrl: resolved.previewUrl || qItem.previewUrl,
-                    youtubeId: resolved.youtubeId || qItem.youtubeId,
                     youtubeAlternates: resolved.youtubeAlternates || qItem.youtubeAlternates,
                   }
                 : qItem
@@ -1052,8 +1050,6 @@ export default function App() {
             ).filter((url) => !failedUrls.has(url));
             if (freshCandidates.length) {
               playNativeAudioCandidates(freshCandidates);
-            } else if (refreshed.youtubeId) {
-              playYouTubeAudio(refreshed.youtubeId);
             } else {
               setIsPlaying(false);
               showToast('No playable audio source found for this track');
@@ -1099,13 +1095,7 @@ export default function App() {
         }
       }
 
-      // 2. Full-length studio track via official YouTube audio ID
-      if (track.youtubeId) {
-        playYouTubeAudio(track.youtubeId);
-        return;
-      }
-
-      // 3. User gesture preservation while resolving
+      // Preserve the user gesture while authorized audio sources resolve.
       if (audio) {
         audio.src = SILENT_WAV_DATA_URI;
         audio.play().catch(() => {});
@@ -1148,8 +1138,6 @@ export default function App() {
             resolved.alternates || []
           );
           playNativeAudioCandidates(resolvedCandidates);
-        } else if (resolved.youtubeId) {
-          playYouTubeAudio(resolved.youtubeId);
         } else {
           const resolvedCandidates = buildStreamCandidates(
             resolved,
