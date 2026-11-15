@@ -22,6 +22,8 @@ interface HomeViewProps {
   spotifyPlaylists: CuratedPlaylist[];
   recentlyPlayed: Track[];
   likedCount: number;
+  likedTracks: Track[];
+  playCounts: Record<string, number>;
   tasteHighlights?: {
     topArtists: string[];
     topLanguage: MusicLanguage | null;
@@ -48,6 +50,8 @@ export function HomeView({
   spotifyPlaylists,
   recentlyPlayed,
   likedCount,
+  likedTracks,
+  playCounts,
   tasteHighlights,
   onPlayTrackList,
   onOpenPlaylist,
@@ -78,6 +82,37 @@ export function HomeView({
     }
     return pool.slice(0, 5);
   }, [regionalTracks, recommendedTracks, recentlyPlayed]);
+
+  const smartTrackPool = useMemo(() => {
+    const seen = new Set<string>();
+    return [...likedTracks, ...recentlyPlayed, ...recommendedTracks, ...personalizedFeedTracks, ...regionalTracks]
+      .filter((track) => {
+        if (seen.has(track.id)) return false;
+        seen.add(track.id);
+        return true;
+      });
+  }, [likedTracks, recentlyPlayed, recommendedTracks, personalizedFeedTracks, regionalTracks]);
+
+  const allTimeFavorites = useMemo(
+    () => smartTrackPool
+      .filter((track) => (playCounts[track.id] || 0) > 0)
+      .sort((a, b) => (playCounts[b.id] || 0) - (playCounts[a.id] || 0))
+      .slice(0, 10),
+    [smartTrackPool, playCounts]
+  );
+
+  const repeatedLoves = useMemo(
+    () => smartTrackPool
+      .filter((track) => (playCounts[track.id] || 0) >= 2)
+      .sort((a, b) => (playCounts[b.id] || 0) - (playCounts[a.id] || 0))
+      .slice(0, 10),
+    [smartTrackPool, playCounts]
+  );
+
+  const rediscoverLikes = useMemo(() => {
+    const recentIds = new Set(recentlyPlayed.slice(0, 8).map((track) => track.id));
+    return likedTracks.filter((track) => !recentIds.has(track.id)).slice(0, 10);
+  }, [likedTracks, recentlyPlayed]);
 
   const repeatFocusedArtist = tasteHighlights?.repeatFocusedArtist;
   const repeatArtistTracks = useMemo(() => {
@@ -270,6 +305,14 @@ export function HomeView({
           ))}
         </div>
       </div>
+
+      {/* Smart mixes generated from this listener's real play history */}
+      {allTimeFavorites.length > 0 &&
+        renderTrackShelf('All-Time Favourites', 'Your most-played tracks, ranked by your listening history', allTimeFavorites)}
+      {repeatedLoves.length > 0 &&
+        renderTrackShelf('Repeated Loves', 'Tracks you keep coming back to', repeatedLoves)}
+      {rediscoverLikes.length > 0 &&
+        renderTrackShelf('Rediscover Your Likes', 'Saved favourites you have not played lately', rediscoverLikes)}
 
       {/* Dynamic Repeat-Listening Shelf: Heavy Rotation */}
       {repeatFocusedArtist && repeatArtistTracks.length > 0 &&
