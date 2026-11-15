@@ -76,7 +76,8 @@ function pickSaavnImage(images?: SaavnImage[], fallback = ARTWORK.englishVinyl):
 
 function mapSaavnLanguage(rawLang?: string): Track['language'] {
   const low = (rawLang || '').toLowerCase();
-  if (low.includes('hindi') || low.includes('punjabi')) return 'Hindi';
+  if (low.includes('punjabi')) return 'Punjabi';
+  if (low.includes('hindi')) return 'Hindi';
   if (low.includes('japanese') || low.includes('j-pop')) return 'J-Pop';
   if (low.includes('english')) return 'English';
   return 'Other';
