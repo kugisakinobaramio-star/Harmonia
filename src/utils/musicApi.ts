@@ -25,6 +25,7 @@ import {
   hasFullAudioStream,
   isRemixOrKnockoff,
   isPlausibleSongDuration,
+  isSearchableTrackDuration,
   isRelevantTrackTitle,
   isUnnecessaryNoLyricsTrack,
   toProxiedImageUrl,
@@ -162,7 +163,7 @@ function mapSaavnSong(raw: SaavnSongRaw): Track {
     artist: names.slice(0, 3).join(', ') || 'Unknown Artist',
     albumName,
     year: raw.year,
-    duration: Number(raw.duration) || 195,
+    duration: Number(raw.duration) || 0,
     playCount: Number(raw.playCount) || undefined,
     image: pickSaavnImage(raw.image),
     language: mapSaavnLanguage(raw.language),
@@ -305,7 +306,7 @@ export async function searchSongs(
         .map(mapSaavnSong)
         .filter(
           (track) =>
-            isPlausibleSongDuration(track.duration) &&
+            isSearchableTrackDuration(track) &&
             !isRemixOrKnockoff(
               track.name + ' ' + track.albumName,
               trimmed,
@@ -319,7 +320,7 @@ export async function searchSongs(
             .map(mapMusicBrainzRecording)
             .filter(
               (track) =>
-                (isPlausibleSongDuration(track.duration) || (track.metadataOnly && track.duration === 0)) &&
+                isSearchableTrackDuration(track) &&
                 isRelevantSearchCandidate(track, trimmed)
             )
         : [];
