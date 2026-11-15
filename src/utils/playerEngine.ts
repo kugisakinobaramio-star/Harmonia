@@ -541,7 +541,7 @@ export function isUnnecessaryNoLyricsTrack(track: Track): boolean {
   return bannedPatterns.some((pat) => hay.includes(pat));
 }
 
-export function isRelevantTrackTitle(itemTitle: string, query: string): boolean {
+export function isRelevantTrackTitle(itemTitle: string, query: string, itemArtist = ''): boolean {
   const normalize = (value: string) =>
     decodeHtmlEntities(value)
       .toLowerCase()
@@ -552,16 +552,21 @@ export function isRelevantTrackTitle(itemTitle: string, query: string): boolean 
       .filter((token) => token.length > 1);
 
   const titleTokens = normalize(itemTitle);
+  const artistTokens = normalize(itemArtist);
   const queryTokens = normalize(query);
   if (titleTokens.length === 0 || queryTokens.length === 0) return false;
 
   const querySet = new Set(queryTokens);
-  const overlap = titleTokens.filter((token) => querySet.has(token)).length;
-  const titleCoverage = overlap / titleTokens.length;
-  const queryCoverage = overlap / queryTokens.length;
+  const titleOverlap = titleTokens.filter((token) => querySet.has(token)).length;
+  const titleCoverage = titleOverlap / titleTokens.length;
+  const matchedTokens = new Set([
+    ...titleTokens.filter((token) => querySet.has(token)),
+    ...artistTokens.filter((token) => querySet.has(token)),
+  ]);
+  const queryCoverage = matchedTokens.size / queryTokens.length;
 
-  // Artist names may be included in the query, but a result must still
-  // substantially match the requested track title.
+  // The title must remain a strong match, while artist tokens may complete
+  // a title-plus-artist query such as "Maharani Arpit Bala".
   return titleCoverage >= 0.6 && queryCoverage >= 0.5;
 }
 
@@ -587,7 +592,7 @@ export function filterAndRankTracks(
       : pool;
   }
 
-  pool = pool.filter((track) => isRelevantTrackTitle(track.name, q));
+  pool = pool.filter((track) => isRelevantTrackTitle(track.name, q, track.artist));
   if (pool.length === 0) return [];
 
   const terms = q.split(/\s+/).filter(Boolean);
