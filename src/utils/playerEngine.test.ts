@@ -12,6 +12,7 @@ import {
   hasFullAudioStream,
   isRemixOrKnockoff,
   isMatchingLyricsCandidate,
+  getTitleOnlySearchFallback,
   isPlausibleSongDuration,
   isRelevantTrackTitle,
   isShortPreviewUrl,
@@ -537,4 +538,12 @@ test('removeQueueItem preserves the current track index and reports when playbac
   const invalid = removeQueueItem(sampleTracks, 1, 99);
   assert.strictEqual(invalid.queue, sampleTracks);
   assert.equal(invalid.removedCurrent, false);
+});
+
+test('title-only search fallback removes a trailing artist pair without changing short queries', () => {
+  assert.equal(getTitleOnlySearchFallback('Maharani Arpit Bala'), 'Maharani');
+  assert.equal(getTitleOnlySearchFallback('lovely Billie Eilish'), 'lovely');
+  assert.equal(getTitleOnlySearchFallback('A Sky Full of Stars Coldplay'), 'A Sky Full of Stars');
+  assert.equal(getTitleOnlySearchFallback('Billie Eilish'), '');
+  assert.equal(getTitleOnlySearchFallback('Maharani'), '');
 });
