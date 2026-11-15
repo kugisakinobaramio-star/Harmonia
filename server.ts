@@ -683,7 +683,16 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
     res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
     next();
   });
-  app.use(express.json({ limit: '1mb' }));
+  // The current API does not consume JSON request bodies. Avoid Express's body-parser
+  // dependency here because its iconv-lite Node stream shim is incompatible with Workers.
+  app.use((req, res, next) => {
+    const contentLength = Number(req.get('content-length') || 0);
+    if (Number.isFinite(contentLength) && contentLength > 1024 * 1024) {
+      res.status(413).json({ ok: false, error: 'Request body too large.' });
+      return;
+    }
+    next();
+  });
 
   // Bound expensive user-controlled media proxy requests per client IP.
   // Keep the map bounded so spoofed clients cannot grow it indefinitely.
