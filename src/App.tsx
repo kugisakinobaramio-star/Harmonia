@@ -631,7 +631,7 @@ export default function App() {
           candidateFailed ||
           playSeq !== playbackSeqRef.current ||
           activeAudioSlotRef.current !== candidateSlot ||
-          incoming.src !== url
+          incoming.getAttribute('src') !== url
         ) return;
         const targetVol = volume / 100;
         const steps = 15;
