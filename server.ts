@@ -1716,7 +1716,7 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
       output: diagnostics.output,
       cache: diagnostics.cache,
     }));
-    if (Object.keys(streamUrls).length > 0) {
+    if (Object.keys(streamUrls).length > 0 && resolvedSourceProvider !== 'Jamendo') {
       if (streamResolveCache.size >= 300) {
         const first = streamResolveCache.keys().next().value;
         if (first) streamResolveCache.delete(first);
@@ -2184,7 +2184,7 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
         })
         .filter((track): track is StoredTrack => track !== null);
 
-      res.setHeader('Cache-Control', 'public, max-age=20, s-maxage=20');
+      res.setHeader('Cache-Control', 'no-store');
       res.json({
         ok:
           saavnRaw.length > 0 ||
