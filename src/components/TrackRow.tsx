@@ -110,7 +110,7 @@ export function TrackRow({
           onClick={onAddToPlaylist}
           aria-label={`Add ${track.name} to playlist`}
           title="Add to playlist"
-          className="hidden h-8 w-8 place-items-center rounded-full text-zinc-400 transition-colors hover:bg-white/10 hover:text-white sm:grid"
+          className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-zinc-400 transition-colors hover:bg-white/10 hover:text-white"
         >
           <Plus className="h-4 w-4" />
         </button>
