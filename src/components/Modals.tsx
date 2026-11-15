@@ -1,4 +1,4 @@
-import { Check, Crosshair, ExternalLink, Loader2, Play, Plus, RotateCcw, Sparkles, UserRound, X } from 'lucide-react';
+import { Check, Crosshair, ExternalLink, Loader2, Play, Plus, RotateCcw, Search, Sparkles, UserRound, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { SEED_ARTISTS } from '../data/catalog';
 import type {
@@ -380,6 +380,10 @@ interface VideoModalProps {
   open: boolean;
   videos: VideoResult[];
   selectedId: string | null;
+  query: string;
+  loading: boolean;
+  error: string;
+  onSearch: (query: string) => void;
   onSelectVideo: (id: string) => void;
   onClose: () => void;
 }
@@ -388,9 +392,19 @@ export function VideoModal({
   open,
   videos,
   selectedId,
+  query,
+  loading,
+  error,
+  onSearch,
   onSelectVideo,
   onClose,
 }: VideoModalProps) {
+  const [draftQuery, setDraftQuery] = useState(query);
+
+  useEffect(() => {
+    if (open) setDraftQuery(query);
+  }, [open, query]);
+
   if (!open) return null;
 
   const activeVideo = videos.find((v) => v.id === selectedId) || videos[0] || null;
@@ -400,71 +414,119 @@ export function VideoModal({
       role="dialog"
       aria-modal="true"
       aria-label="Music video player"
-      className="fixed inset-0 z-50 grid place-items-center bg-black/85 p-4 backdrop-blur-xs"
+      className="fixed inset-0 z-50 grid place-items-center bg-black/90 p-2 backdrop-blur-xs sm:p-4"
     >
-      <div className="w-full max-w-4xl overflow-hidden rounded-xl border border-white/10 bg-[#18181b] shadow-2xl">
-        <div className="flex items-center justify-between border-b border-white/[0.08] px-4 py-3">
-          <h2 className="truncate text-base font-extrabold text-white">
-            {activeVideo?.title || 'Music Video'}
+      <div className="flex max-h-[96dvh] w-full max-w-5xl flex-col overflow-hidden rounded-xl border border-white/10 bg-[#18181b] shadow-2xl">
+        <div className="flex items-center justify-between gap-3 border-b border-white/[0.08] px-4 py-3">
+          <h2 className="truncate text-sm font-extrabold text-white sm:text-base">
+            {activeVideo?.title || 'Harmonia Video Search'}
           </h2>
           <button
             type="button"
             onClick={onClose}
             aria-label="Close video player"
-            className="rounded-full bg-[#242429] px-3 py-1 text-xs font-bold text-white hover:bg-[#303036]"
+            className="shrink-0 rounded-full bg-[#242429] px-3 py-1.5 text-xs font-bold text-white hover:bg-[#303036]"
           >
             Close
           </button>
         </div>
 
-        <div className="aspect-video w-full bg-black">
-          {activeVideo ? (
-            <iframe
-              key={activeVideo.id}
-              title={activeVideo.title}
-              src={`https://www.youtube-nocookie.com/embed/${activeVideo.id}?autoplay=1&rel=0`}
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-              allowFullScreen
-              className="h-full w-full border-0"
-            />
-          ) : (
-            <div className="grid h-full place-items-center text-sm text-zinc-400">
-              Pick a video below
+        <form
+          className="flex gap-2 border-b border-white/[0.08] p-3"
+          onSubmit={(event) => {
+            event.preventDefault();
+            onSearch(draftQuery);
+          }}
+        >
+          <input
+            value={draftQuery}
+            onChange={(event) => setDraftQuery(event.target.value)}
+            placeholder="Search song, artist, music video, live, cover..."
+            aria-label="Search music videos"
+            className="min-w-0 flex-1 rounded-lg border border-white/10 bg-black/40 px-3 py-2.5 text-sm text-white outline-none placeholder:text-zinc-500 focus:border-[#1DB954]"
+          />
+          <button
+            type="submit"
+            disabled={loading || !draftQuery.trim()}
+            className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-[#1DB954] px-3 py-2 text-xs font-extrabold text-black disabled:opacity-50 sm:px-4"
+          >
+            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+            <span className="hidden sm:inline">{loading ? 'Searching' : 'Search'}</span>
+          </button>
+        </form>
+
+        <div className="min-h-0 overflow-y-auto">
+          <div className="aspect-video w-full bg-black">
+            {activeVideo ? (
+              <iframe
+                key={activeVideo.id}
+                title={activeVideo.title}
+                src={`https://www.youtube-nocookie.com/embed/${activeVideo.id}?autoplay=1&playsinline=1&rel=0`}
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                referrerPolicy="strict-origin-when-cross-origin"
+                allowFullScreen
+                className="h-full w-full border-0"
+              />
+            ) : (
+              <div className="grid h-full place-items-center px-5 text-center text-sm text-zinc-400">
+                {loading ? 'Searching YouTube videos…' : 'Search for a song or artist to start watching'}
+              </div>
+            )}
+          </div>
+
+          {activeVideo && (
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.08] px-3 py-2.5">
+              <div className="min-w-0">
+                <p className="truncate text-xs font-bold text-white">{activeVideo.title}</p>
+                <p className="truncate text-[11px] text-zinc-400">{activeVideo.channel}</p>
+              </div>
+              <a
+                href={`https://www.youtube.com/watch?v=${activeVideo.id}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="shrink-0 rounded-full bg-white/10 px-3 py-1.5 text-[11px] font-bold text-white hover:bg-white/15"
+              >
+                Open on YouTube
+              </a>
             </div>
           )}
-        </div>
 
-        <div className="max-h-56 space-y-2 overflow-y-auto p-3">
-          {videos.map((v) => {
-            const active = activeVideo?.id === v.id;
-            return (
-              <button
-                key={v.id}
-                type="button"
-                onClick={() => onSelectVideo(v.id)}
-                className={`flex w-full items-center gap-3 rounded-lg p-2 text-left transition-colors ${
-                  active ? 'bg-white/10' : 'hover:bg-white/[0.05]'
-                }`}
-              >
-                <CoverImage
-                  src={v.thumbnail || `https://i.ytimg.com/vi/${v.id}/hqdefault.jpg`}
-                  alt={v.title}
-                  className="h-12 w-20 shrink-0 rounded object-cover"
-                />
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-xs font-bold text-white">{v.title}</div>
-                  <div className="truncate text-[11px] text-zinc-400">
-                    {v.channel}
-                    {v.dur ? ` · ${v.dur}` : ''}
-                  </div>
-                </div>
-                <span className="inline-flex items-center gap-1 rounded-full bg-[#1DB954] px-3 py-1 text-[11px] font-extrabold text-black">
-                  <Play className="h-3 w-3 fill-current" />
-                  Play
-                </span>
-              </button>
-            );
-          })}
+          {error && <p role="status" className="px-4 py-3 text-xs text-amber-300">{error}</p>}
+          {videos.length > 0 && (
+            <div className="space-y-1 p-2 sm:p-3">
+              <p className="px-1 pb-1 text-[11px] font-bold uppercase tracking-wider text-zinc-500">
+                Search results · {videos.length}
+              </p>
+              {videos.map((v) => {
+                const active = activeVideo?.id === v.id;
+                return (
+                  <button
+                    key={v.id}
+                    type="button"
+                    onClick={() => onSelectVideo(v.id)}
+                    className={`flex w-full items-center gap-3 rounded-lg p-2 text-left transition-colors ${
+                      active ? 'bg-white/10' : 'hover:bg-white/[0.05]'
+                    }`}
+                  >
+                    <CoverImage
+                      src={v.thumbnail || `https://i.ytimg.com/vi/${v.id}/hqdefault.jpg`}
+                      alt={v.title}
+                      className="h-12 w-20 shrink-0 rounded object-cover sm:h-14 sm:w-24"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="line-clamp-2 text-xs font-bold text-white">{v.title}</div>
+                      <div className="truncate text-[11px] text-zinc-400">
+                        {v.channel}{v.dur ? ` · ${v.dur}` : ''}
+                      </div>
+                    </div>
+                    <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-[#1DB954] px-2.5 py-1.5 text-[10px] font-extrabold text-black">
+                      <Play className="h-3 w-3 fill-current" /> Play
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
     </div>
