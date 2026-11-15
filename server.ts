@@ -267,22 +267,26 @@ function isInstrumentalOrSpam(name: string, album = ''): boolean {
   ].some((p) => hay.includes(p));
 }
 
-function inferLanguage(text: string, hintLang?: string): 'Hindi' | 'Punjabi' | 'English' | 'J-Pop' | 'Other' {
-  if (hintLang === 'Punjabi') return 'Punjabi';
-  if (hintLang === 'Hindi' || hintLang === 'English' || hintLang === 'J-Pop') return hintLang;
+function inferLanguage(text: string, hintLang?: string): 'Hindi' | 'Punjabi' | 'Haryanvi' | 'Marathi' | 'Bengali' | 'Tamil' | 'Telugu' | 'Kannada' | 'Malayalam' | 'Gujarati' | 'Bhojpuri' | 'Urdu' | 'English' | 'French' | 'Spanish' | 'Korean' | 'Japanese' | 'J-Pop' | 'Chinese' | 'Arabic' | 'Portuguese' | 'German' | 'Italian' | 'Turkish' | 'Thai' | 'Indonesian' | 'Other' {
+  const supported = new Set(['Hindi', 'Punjabi', 'Haryanvi', 'Marathi', 'Bengali', 'Tamil', 'Telugu', 'Kannada', 'Malayalam', 'Gujarati', 'Bhojpuri', 'Urdu', 'English', 'French', 'Spanish', 'Korean', 'Japanese', 'J-Pop', 'Chinese', 'Arabic', 'Portuguese', 'German', 'Italian', 'Turkish', 'Thai', 'Indonesian']);
+  if (hintLang && supported.has(hintLang)) return hintLang as ReturnType<typeof inferLanguage>;
   if (/[\u0a00-\u0a7f]/.test(text)) return 'Punjabi';
-  if (/[\u3040-\u30ff\u4e00-\u9faf]/.test(text)) return 'J-Pop';
+  if (/[\u0980-\u09ff]/.test(text)) return 'Bengali';
+  if (/[\u0b80-\u0bff]/.test(text)) return 'Tamil';
+  if (/[\u0c00-\u0c7f]/.test(text)) return 'Telugu';
+  if (/[\u0c80-\u0cff]/.test(text)) return 'Kannada';
+  if (/[\u0d00-\u0d7f]/.test(text)) return 'Malayalam';
+  if (/[\u0a80-\u0aff]/.test(text)) return 'Gujarati';
+  if (/[\u0600-\u06ff]/.test(text)) return 'Urdu';
+  if (/[\uac00-\ud7af]/.test(text)) return 'Korean';
+  if (/[\u3040-\u30ff]/.test(text)) return 'Japanese';
+  if (/[\u4e00-\u9fff]/.test(text)) return 'Chinese';
   const low = text.toLowerCase();
-  if (
-    /arijit|pritam|bollywood|hindi|shreya|jubin|atif|sonu|badshah|diljit|kesariya|pasoori|sachin-jigar/.test(
-      low
-    )
-  ) {
-    return 'Hindi';
-  }
-  if (/yoasobi|kenshi|yonezu|fujii kaze|hige|ado|lisa|aimyon|radwimps|j-pop|tokyo/.test(low)) {
-    return 'J-Pop';
-  }
+  if (/arijit|pritam|bollywood|hindi|shreya|jubin|atif|sonu|badshah|kesariya|sachin-jigar/.test(low)) return 'Hindi';
+  if (/diljit|sidhu|punjabi|gurdas maan/.test(low)) return 'Punjabi';
+  if (/haryanvi|masoom sharma|gulzaar chhaniwala/.test(low)) return 'Haryanvi';
+  if (/marathi|ajay-atul/.test(low)) return 'Marathi';
+  if (/yoasobi|kenshi|yonezu|fujii kaze|hige|ado|lisa|aimyon|radwimps|j-pop|tokyo/.test(low)) return 'J-Pop';
   return 'English';
 }
 
