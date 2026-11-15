@@ -1031,6 +1031,11 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
     alternates: string[];
     youtubeId?: string;
     youtubeAlternates?: string[];
+    sourceProvider?: string;
+    sourceAvailability?: 'full' | 'preview' | 'lookup';
+    sourcePageUrl?: string;
+    sourceLicense?: string;
+    offlineAvailable?: boolean;
   };
 
   // Resolved stream URLs can expire or be withdrawn. Keep this cache short-lived
@@ -1075,6 +1080,11 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
     const fullAlternates: string[] = [];
     const previewAlternates: string[] = [];
     let previewUrl: string | undefined;
+    let resolvedSourceProvider: string | undefined;
+    let previewSourceProvider: string | undefined;
+    let resolvedSourcePageUrl: string | undefined;
+    let resolvedSourceLicense: string | undefined;
+    let resolvedOfflineAvailable: boolean | undefined;
 
   interface JamendoTrackRaw {
     id?: string;
@@ -1082,6 +1092,15 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
     artist_name?: string;
     audio?: string;
     duration?: number;
+    shareurl?: string;
+    license_ccurl?: string;
+    audiodownload_allowed?: boolean;
+  }
+
+  interface JamendoResolvedStream {
+    url: string;
+    sourcePageUrl: string;
+    sourceLicense: string;
   }
 
   interface InternetArchiveSearchDoc {
@@ -1206,13 +1225,11 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
     cleanTitle: string,
     primaryArtist: string,
     targetDurationSec = 0
-  ): Promise<string | undefined> {
+  ): Promise<JamendoResolvedStream | undefined> {
     try {
       const q = `${cleanTitle} ${primaryArtist}`.trim();
       const res = await fetchWithTimeout(
-        `https://api.jamendo.com/v3.0/tracks/?client_id=5c361a6b&format=json&limit=6&search=${encodeURIComponent(
-          q
-        )}`,
+        `https://api.jamendo.com/v3.0/tracks/?client_id=5c361a6b&format=json&limit=6&audioformat=mp32&include=licenses&ccnc=true&search=${encodeURIComponent(q)}`,
         3500
       );
       if (!res.ok) return undefined;
@@ -1221,22 +1238,59 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
 
       const scored = json.results
         .map((item) => {
-          if (!item.audio) return null;
-          const dur = Number(item.duration || 0);
+          const audio = String(item.audio || '').trim();
+          const sourcePageUrl = String(item.shareurl || '').trim().replace(/^http:/i, 'https:');
+          const sourceLicense = String(item.license_ccurl || '').trim().replace(/^http:/i, 'https:');
+          if (
+            !audio ||
+            !isAllowedJamendoNonCommercialLicense(sourceLicense)
+          ) return null;
+
+          let safeAudioUrl = '';
+          let safePageUrl = '';
+          try {
+            const audioTarget = new URL(audio);
+            const page = new URL(sourcePageUrl);
+            if (
+              audioTarget.protocol !== 'https:' ||
+              !audioTarget.hostname.toLowerCase().endsWith('.jamendo.com') ||
+              page.protocol !== 'https:' ||
+              page.hostname !== 'www.jamendo.com' ||
+              !page.pathname.startsWith('/track/')
+            ) return null;
+            safeAudioUrl = audioTarget.toString();
+            safePageUrl = page.toString();
+          } catch {
+            return null;
+          }
+
+          const duration = Number(item.duration || 0);
           const score = scoreAuthenticTrackCandidate({
             itemTitle: item.name || '',
-            itemArtist: item.artist_name || primaryArtist,
+            itemArtist: item.artist_name || '',
             requestedTitle: cleanTitle,
             requestedArtist: primaryArtist,
-            itemDurationSec: dur,
+            itemDurationSec: duration,
             targetDurationSec,
           });
-          return { audio: item.audio, score };
+          if (score === null) return null;
+          return {
+            url: safeAudioUrl,
+            sourcePageUrl: safePageUrl,
+            sourceLicense,
+            score,
+          };
         })
-        .filter((x): x is { audio: string; score: number } => x !== null && x.score !== null)
+        .filter((item): item is JamendoResolvedStream & { score: number } => item !== null)
         .sort((a, b) => b.score - a.score);
 
-      return scored[0]?.audio;
+      return scored[0]
+        ? {
+            url: scored[0].url,
+            sourcePageUrl: scored[0].sourcePageUrl,
+            sourceLicense: scored[0].sourceLicense,
+          }
+        : undefined;
     } catch {
       return undefined;
     }
