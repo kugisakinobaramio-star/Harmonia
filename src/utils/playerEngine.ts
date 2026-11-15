@@ -218,7 +218,7 @@ export function resolveNextTrackIndex(params: {
 }
 
 export function getTitleOnlySearchFallback(query: string): string {
-  const tokens = query.trim().split(/\\s+/).filter(Boolean);
+  const tokens = query.trim().split(/\s+/).filter(Boolean);
   if (tokens.length < 3) return '';
   return tokens.slice(0, -2).join(' ');
 }
