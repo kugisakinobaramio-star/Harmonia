@@ -76,12 +76,11 @@ function mapMusicBrainzRecording(raw: MusicBrainzRecordingRaw): Track {
     artist: credits.join(', ') || 'Unknown Artist',
     albumName: decodeHtmlEntities(raw.releases?.[0]?.title || 'Recording'),
     year: raw.releases?.[0]?.date?.slice(0, 4),
-    duration: raw.length ? Math.round(raw.length / 1000) : 195,
+    duration: raw.length ? Math.round(raw.length / 1000) : 0,
     image: ARTWORK.englishVinyl,
     language: 'Other',
     region: 'GLOBAL',
     genre: 'MusicBrainz metadata',
-    hasLyrics: true,
     metadataOnly: true,
     sourceProvider: 'MusicBrainz',
     sourceAvailability: 'metadata',
@@ -339,7 +338,7 @@ export async function searchSongs(
     const combinedRemote = remoteCandidates
       .filter(
         (track) =>
-          isPlausibleSongDuration(track.duration) &&
+          (isPlausibleSongDuration(track.duration) || (track.metadataOnly && track.duration === 0)) &&
           isRelevantSearchCandidate(track, trimmed) &&
           (languageFilter === 'All' || track.language === languageFilter) &&
           !isRemixOrKnockoff(
