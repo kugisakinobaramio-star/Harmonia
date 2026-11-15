@@ -231,15 +231,39 @@ export function getSearchFallbackQueries(query: string): string[] {
   const tokens = trimmed.split(/\s+/).filter(Boolean);
   if (tokens.length < 3) return [];
 
-  // Free-text searches have no dependable title/artist boundary. Try a
-  // shorter prefix and suffix; the client still validates every result
-  // against the complete original query before displaying it.
+  // Free-text searches have no dependable title/artist boundary. Try
+  // prefixes and suffixes so title-first and artist-first input both work.
   return [
     tokens.slice(0, -1).join(' '),
     tokens.slice(0, -2).join(' '),
-    tokens.slice(-2).join(' '),
     tokens.slice(-1).join(' '),
+    tokens.slice(-2).join(' '),
   ].filter((candidate, index, all) => Boolean(candidate) && all.indexOf(candidate) === index);
+}
+
+export function isRelevantSongSearchCandidate(
+  itemTitle: string,
+  itemArtist: string,
+  query: string
+): boolean {
+  const normalize = (value: string) =>
+    decodeHtmlEntities(value)
+      .toLowerCase()
+      .normalize('NFKD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, ' ')
+      .trim()
+      .split(/\s+/)
+      .filter((token) => token.length > 1);
+  const queryTokens = [...new Set(normalize(query))];
+  const titleTokens = new Set(normalize(itemTitle));
+  const artistTokens = new Set(normalize(itemArtist));
+  if (!queryTokens.length) return false;
+  const titleHits = queryTokens.filter((token) => titleTokens.has(token));
+  const artistHits = queryTokens.filter((token) => artistTokens.has(token));
+  const totalHits = new Set([...titleHits, ...artistHits]).size;
+  const minimumHits = queryTokens.length <= 2 ? queryTokens.length : Math.ceil(queryTokens.length * 0.65);
+  return totalHits >= minimumHits && (titleHits.length > 0 || artistHits.length > 0);
 }
 
 export function isMatchingLyricsCandidate(
