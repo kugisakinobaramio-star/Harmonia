@@ -801,7 +801,11 @@ export default function App() {
       setDuration(track.duration || 200);
       setIsPlaying(true);
 
-      const playNativeAudioCandidates = (urls: string[]) => {
+      const playNativeAudioCandidates = (
+        urls: string[],
+        fallbackYoutubeId?: string,
+        allowFreshResolve = true
+      ) => {
         if (playSeq !== playbackSeqRef.current || !audio) return;
         activeEngineRef.current = 'audio';
         try {
@@ -809,16 +813,61 @@ export default function App() {
         } catch {}
         candidateUrlsRef.current = urls;
         candidateIdxRef.current = 0;
-        if (!urls.length) {
-          setIsPlaying(false);
-          showToast(`No stream found for "${track.name}" — try another track`);
-          return;
-        }
         usingSynthRef.current = false;
+
+        const finishPlayback = () => {
+          if (playSeq !== playbackSeqRef.current) return;
+          setIsPlaying(false);
+          showToast(`Couldn't play "${track.name}" — its available audio sources failed.`);
+        };
+
         loadAndPlayCandidate(0, playSeq, () => {
-          if (playSeq === playbackSeqRef.current) {
-            setIsPlaying(false);
-            showToast('Click Play once more to start audio');
+          if (playSeq !== playbackSeqRef.current) return;
+
+          // A track can have a URL recorded as a full stream even after that
+          // provider has expired or stopped serving it. Resolve once more only
+          // after every current candidate has failed, then try only new URLs.
+          if (allowFreshResolve) {
+            resolveTrackStreams(track, { forceRefresh: true })
+              .then((fresh) => {
+                if (playSeq !== playbackSeqRef.current) return;
+
+                setQueue((prev) =>
+                  prev.map((qItem) =>
+                    qItem.id === track.id
+                      ? {
+                          ...qItem,
+                          streamUrls: fresh.streamUrls,
+                          previewUrl: fresh.previewUrl,
+                          youtubeId: fresh.youtubeId,
+                        }
+                      : qItem
+                  )
+                );
+
+                const alreadyTried = new Set(urls);
+                const freshCandidates = buildStreamCandidates(
+                  fresh,
+                  quality,
+                  fresh.alternates || []
+                ).filter((url) => !alreadyTried.has(url));
+
+                if (freshCandidates.length > 0) {
+                  playNativeAudioCandidates(freshCandidates, fresh.youtubeId, false);
+                } else if (fresh.youtubeId || fallbackYoutubeId) {
+                  playYouTubeAudio(fresh.youtubeId || fallbackYoutubeId || '');
+                } else {
+                  finishPlayback();
+                }
+              })
+              .catch(finishPlayback);
+            return;
+          }
+
+          if (fallbackYoutubeId) {
+            playYouTubeAudio(fallbackYoutubeId);
+          } else {
+            finishPlayback();
           }
         });
       };
