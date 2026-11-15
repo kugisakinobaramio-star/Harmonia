@@ -1193,6 +1193,58 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
       alternates: Array.from(new Set([...fullAlternates, ...previewAlternates])),
       youtubeId,
     };
+
+    // Safe playback diagnostics: never log search terms, stream URLs, or user data.
+    // Promise status distinguishes provider timeouts/errors from fulfilled requests;
+    // candidate counts and selected-source flags show where resolution stopped.
+    const diagnostics = {
+      providers: {
+        saavn: {
+          request: saavnSettled.status,
+          candidates: saavnSettled.status === 'fulfilled'
+            ? Number(saavnSettled.value?.data?.results?.length || 0)
+            : 0,
+          selected: Boolean(streamUrls['320kbps'] || streamUrls['96kbps']),
+        },
+        audius: {
+          request: audiusSettled.status,
+          candidates: audiusSettled.status === 'fulfilled'
+            ? Number(audiusSettled.value?.data?.length || 0)
+            : 0,
+          selected: fullAlternates.some((url) => url.includes('discoveryprovider.audius.co')),
+        },
+        deezer: {
+          request: deezerSettled.status,
+          candidates: deezerSettled.status === 'fulfilled'
+            ? Number(deezerSettled.value?.data?.length || 0)
+            : 0,
+          previewSelected: Boolean(previewUrl && previewUrl.includes('deezer')),
+        },
+        itunes: {
+          request: itunesSettled.status,
+          candidates: itunesSettled.status === 'fulfilled'
+            ? Number(itunesSettled.value?.results?.length || 0)
+            : 0,
+          previewSelected: Boolean(previewAlternates.some((url) => url.includes('apple.com'))),
+        },
+        jamendo: {
+          request: jamendoSettled.status,
+          candidateSelected: Boolean(jamendoSettled.status === 'fulfilled' && jamendoSettled.value),
+        },
+        youtube: { attempted: !streamUrls['320kbps'] || forceRefresh, matched: Boolean(youtubeId) },
+      },
+      output: {
+        has320kbps: Boolean(streamUrls['320kbps']),
+        has160kbps: Boolean(streamUrls['160kbps']),
+        has96kbps: Boolean(streamUrls['96kbps']),
+        hasPreview: Boolean(previewUrl),
+        alternateCount: payload.alternates.length,
+        hasYoutubeId: Boolean(youtubeId),
+        ok: Object.keys(streamUrls).length > 0 || Boolean(previewUrl) || Boolean(youtubeId),
+      },
+      cache: { forceRefresh, bypassed: forceRefresh },
+    };
+    console.log('[music-resolve-diagnostics]', JSON.stringify(diagnostics));
     if (Object.keys(streamUrls).length > 0 || youtubeId) {
       if (streamResolveCache.size >= 300) {
         const first = streamResolveCache.keys().next().value;
@@ -1204,6 +1256,7 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
     res.json({
       ok: Object.keys(streamUrls).length > 0 || Boolean(previewUrl) || Boolean(youtubeId),
       ...payload,
+      ...(String(req.query.diagnostics || '') === '1' ? { diagnostics } : {}),
     });
   });
 
