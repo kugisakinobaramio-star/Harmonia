@@ -1728,26 +1728,26 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
 
     if (type === 'songs') {
       const country = region === 'JP' ? 'JP' : region === 'US' ? 'US' : region === 'GB' ? 'GB' : 'IN';
-      const [saavnResult, itunesResult, deezerResult, audiusResult, musicBrainzResult] = await Promise.allSettled([
+      // MusicBrainz is a metadata-only catalogue with a strict global rate limit.
+      // Keep it out of the interactive song-search critical path so it cannot
+      // delay playable results from the audio catalogues.
+      const [saavnResult, itunesResult, deezerResult, audiusResult] = await Promise.allSettled([
         fetchWithTimeout(
           `${SAAVN_BASE}/api/search/songs?query=${encodeURIComponent(query)}&page=${page}&limit=${limit}`,
-          4500
+          3200
         ).then((r) => (r.ok ? r.json() : null)),
         fetchWithTimeout(
           `https://itunes.apple.com/search?term=${encodeURIComponent(query)}&country=${country}&media=music&entity=song&limit=10`,
-          4500
+          3200
         ).then((r) => (r.ok ? r.json() : null)),
         fetchWithTimeout(
           `https://api.deezer.com/search?q=${encodeURIComponent(query)}&limit=10`,
-          4500
+          3200
         ).then((r) => (r.ok ? r.json() : null)),
         fetchWithTimeout(
           `https://discoveryprovider.audius.co/v1/tracks/search?query=${encodeURIComponent(query)}&limit=6`,
-          4500
+          3200
         ).then((r) => (r.ok ? r.json() : null)),
-        fetchMusicBrainzJson(
-          'https://musicbrainz.org/ws/2/recording/?query=' + encodeURIComponent(query) + '&fmt=json&limit=8'
-        ),
       ]);
 
       const saavnRaw = (
@@ -1776,10 +1776,7 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
         audiusResult.status === 'fulfilled' && audiusResult.value
           ? ((audiusResult.value.data || []) as AudiusTrackRaw[])
           : [];
-      const musicBrainzRecordings =
-        musicBrainzResult.status === 'fulfilled' && musicBrainzResult.value
-          ? ((musicBrainzResult.value.recordings || []) as MusicBrainzRecordingRaw[])
-          : [];
+      const musicBrainzRecordings: MusicBrainzRecordingRaw[] = [];
 
       const itunesTracks = itunesRaw
         .map((r) => mapItunesTrack(r, country))
@@ -1807,15 +1804,16 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
             !isRemixOrKnockoff(`${t.name} ${t.albumName}`, query, t.artist, query)
         );
 
-      res.json({
+      const payload = {
         ok:
           saavnRaw.length > 0 ||
           itunesTracks.length > 0 ||
           deezerTracks.length > 0 ||
-          audiusTracks.length > 0 ||
-          musicBrainzRecordings.length > 0,
+          audiusTracks.length > 0,
         data: { results: saavnRaw, itunesTracks, deezerTracks, audiusTracks, musicBrainzRecordings },
-      });
+      };
+      res.setHeader('Cache-Control', 'public, max-age=20, s-maxage=20');
+      res.json(payload);
       return;
     }
 
