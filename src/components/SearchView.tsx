@@ -166,24 +166,20 @@ export function SearchView({
       });
       if (requestSeq !== seqRef.current) return;
 
-      setSongs((previous) => {
-        const seen = new Set(
-          previous.map((track) =>
-            track.name.toLowerCase().trim() + '::' + track.artist.toLowerCase().trim()
-          )
-        );
-        const next = [...previous];
-        for (const track of result.tracks) {
-          const key = track.name.toLowerCase().trim() + '::' + track.artist.toLowerCase().trim();
-          if (!seen.has(key)) {
-            seen.add(key);
-            next.push(track);
-          }
-        }
-        return next;
+      const existingKeys = new Set(
+        songs.map((track) =>
+          track.name.toLowerCase().trim() + '::' + track.artist.toLowerCase().trim()
+        )
+      );
+      const newTracks = result.tracks.filter((track) => {
+        const key = track.name.toLowerCase().trim() + '::' + track.artist.toLowerCase().trim();
+        if (existingKeys.has(key)) return false;
+        existingKeys.add(key);
+        return true;
       });
+      setSongs((previous) => [...previous, ...newTracks]);
       setSongPage(nextPage);
-      setCanLoadMoreSongs(result.tracks.length > 0);
+      setCanLoadMoreSongs(newTracks.length > 0);
     } finally {
       if (requestSeq === seqRef.current) setLoadingMoreSongs(false);
     }
