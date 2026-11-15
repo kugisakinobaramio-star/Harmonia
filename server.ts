@@ -989,8 +989,9 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
     }
 
     const cacheKey = `${title.toLowerCase()}::${artist.toLowerCase()}`;
+    const forceRefresh = String(req.query.forceRefresh || '') === '1';
     const cached = streamResolveCache.get(cacheKey);
-    if (cached && (Object.keys(cached.streamUrls).length > 0 || cached.youtubeId)) {
+    if (!forceRefresh && cached && (Object.keys(cached.streamUrls).length > 0 || cached.youtubeId)) {
       res.json({ ok: true, ...cached });
       return;
     }
