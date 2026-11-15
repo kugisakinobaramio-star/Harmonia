@@ -12,6 +12,7 @@ import {
   hasFullAudioStream,
   isRemixOrKnockoff,
   isPlausibleSongDuration,
+  isRelevantTrackTitle,
   isShortPreviewUrl,
   isSpotifyLinkOrUri,
   isUnnecessaryNoLyricsTrack,
@@ -363,4 +364,14 @@ test('isPlausibleSongDuration rejects long-form and invalid catalogue results', 
   assert.equal(isPlausibleSongDuration(16 * 60), false);
   assert.equal(isPlausibleSongDuration(0), false);
   assert.equal(isPlausibleSongDuration(Number.NaN), false);
+});
+
+
+test('isRelevantTrackTitle blocks unrelated search results while allowing title-plus-artist queries', () => {
+  assert.equal(isRelevantTrackTitle('Pasoori', 'Training Season'), false);
+  assert.equal(isRelevantTrackTitle('Training Season', 'Training Season'), true);
+  assert.equal(isRelevantTrackTitle('Training Season (Official Audio)', 'Training Season'), true);
+  assert.equal(isRelevantTrackTitle('Training Season', 'Dua Lipa Training Season'), true);
+  assert.equal(isRelevantTrackTitle('Training Season - Dua Lipa', 'Dua Lipa Training Season'), true);
+  assert.equal(isRelevantTrackTitle('Sapphire', 'Training Season'), false);
 });
