@@ -672,7 +672,7 @@ export async function resolveTrackStreams(
     const res = await fetch(
       `/api/music/resolve?title=${encodeURIComponent(track.name)}&artist=${encodeURIComponent(
         track.artist
-      )}&duration=${Math.round(track.duration || 0)}`
+      )}&duration=${Math.round(track.duration || 0)}&forceRefresh=${options.forceRefresh ? '1' : '0'}`
     );
     if (res.ok) {
       const json = (await res.json()) as {
