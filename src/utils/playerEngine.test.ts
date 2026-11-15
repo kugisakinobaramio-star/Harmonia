@@ -392,7 +392,7 @@ test('rankDiscoverTracks uses local taste signals and suppresses recently played
     playCounts: {},
     artistAffinity: { YOASOBI: 8 },
     genreAffinity: { 'J-Pop': 5 },
-    preferredLanguages: ['J-Pop', 'Hindi'] as const,
+    preferredLanguages: ['J-Pop', 'Hindi'] as ['J-Pop', 'Hindi'],
     favoriteArtists: ['YOASOBI'],
     preferredMoods: ['Anime'],
   };
@@ -415,7 +415,7 @@ test('rankDiscoverTracks diversifies artists, preserves a fallback when everythi
     playCounts: {},
     artistAffinity: {},
     genreAffinity: {},
-    preferredLanguages: [] as const,
+    preferredLanguages: [] as [],
     favoriteArtists: [],
     preferredMoods: [],
   };
