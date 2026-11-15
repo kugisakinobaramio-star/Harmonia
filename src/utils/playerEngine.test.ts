@@ -11,6 +11,7 @@ import {
   getGreetingForHour,
   hasFullAudioStream,
   isRemixOrKnockoff,
+  isMatchingLyricsCandidate,
   isPlausibleSongDuration,
   isRelevantTrackTitle,
   isShortPreviewUrl,
@@ -482,4 +483,36 @@ test('recommendations keep ordinary tracks without lyrics when lyrics are not pr
   assert.ok(neutralScore > preferredScore);
   assert.ok(neutralScore > -500);
   assert.equal(scoreTrackForUser(sampleTracks[3], { ...baseProfile, prioritizeLyrics: false }), -500);
+});
+
+test('lyrics lookup candidates must match both title and artist, with compatible duration', () => {
+  const requested = { title: 'Maharani', artist: 'Arpit Bala', duration: 182 };
+  assert.equal(
+    isMatchingLyricsCandidate(
+      { trackName: 'Maharani', artistName: 'Arpit Bala', duration: 180 },
+      requested.title, requested.artist, requested.duration
+    ),
+    true
+  );
+  assert.equal(
+    isMatchingLyricsCandidate(
+      { trackName: 'Maharani', artistName: 'Another Artist', duration: 180 },
+      requested.title, requested.artist, requested.duration
+    ),
+    false
+  );
+  assert.equal(
+    isMatchingLyricsCandidate(
+      { trackName: 'Maharani Remix', artistName: 'Arpit Bala', duration: 180 },
+      requested.title, requested.artist, requested.duration
+    ),
+    false
+  );
+  assert.equal(
+    isMatchingLyricsCandidate(
+      { trackName: 'Maharani', artistName: 'Arpit Bala', duration: 250 },
+      requested.title, requested.artist, requested.duration
+    ),
+    false
+  );
 });
