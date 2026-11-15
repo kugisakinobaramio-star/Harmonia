@@ -21,6 +21,7 @@ import {
   filterAndRankTracks,
   hasFullAudioStream,
   isRemixOrKnockoff,
+  isPlausibleSongDuration,
   isUnnecessaryNoLyricsTrack,
   parsePlainLyricsToLines,
   toProxiedImageUrl,
@@ -203,6 +204,7 @@ export async function searchSongs(
             typeof t.playCount === 'number' &&
             t.playCount >= 5000 &&
             (!prioritizeLyrics || !isUnnecessaryNoLyricsTrack(t)) &&
+            isPlausibleSongDuration(t.duration) &&
             !isRemixOrKnockoff(`${t.name} ${t.albumName}`, trimmed, t.artist, trimmed)
         );
 

@@ -26,6 +26,10 @@ export const REGION_LABELS: Record<MusicRegion, string> = {
   GLOBAL: 'Global Mix',
 };
 
+export function isPlausibleSongDuration(seconds: number): boolean {
+  return Number.isFinite(seconds) && seconds >= 45 && seconds <= 15 * 60;
+}
+
 export function formatTime(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds < 0) return '0:00';
   const total = Math.floor(seconds);

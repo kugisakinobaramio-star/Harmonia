@@ -11,6 +11,7 @@ import {
   getGreetingForHour,
   hasFullAudioStream,
   isRemixOrKnockoff,
+  isPlausibleSongDuration,
   isShortPreviewUrl,
   isSpotifyLinkOrUri,
   isUnnecessaryNoLyricsTrack,
@@ -354,3 +355,12 @@ test('isRemixOrKnockoff and scoreAuthenticTrackCandidate enforce original-artist
   );
 });
 
+
+test('isPlausibleSongDuration rejects long-form and invalid catalogue results', () => {
+  assert.equal(isPlausibleSongDuration(210), true);
+  assert.equal(isPlausibleSongDuration(45), true);
+  assert.equal(isPlausibleSongDuration(55 * 60), false);
+  assert.equal(isPlausibleSongDuration(16 * 60), false);
+  assert.equal(isPlausibleSongDuration(0), false);
+  assert.equal(isPlausibleSongDuration(Number.NaN), false);
+});

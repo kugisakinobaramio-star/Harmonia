@@ -989,7 +989,7 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
       return;
     }
 
-    const cacheKey = `${title.toLowerCase()}::${artist.toLowerCase()}`;
+    const cacheKey = `${title.toLowerCase()}::${artist.toLowerCase()}::${Math.round(targetDurationSec || 0)}`;
     const forceRefresh = String(req.query.forceRefresh || '') === '1';
     const cached = streamResolveCache.get(cacheKey);
     if (!forceRefresh && cached && (Object.keys(cached.streamUrls).length > 0 || cached.youtubeId)) {
@@ -1054,53 +1054,7 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
     }
   }
 
-  async function resolveArchiveAudioStream(
-    cleanTitle: string,
-    primaryArtist: string
-  ): Promise<string | undefined> {
-    try {
-      const q = `${cleanTitle} ${primaryArtist}`.trim();
-      const searchRes = await fetchWithTimeout(
-        `https://archive.org/advancedsearch.php?q=${encodeURIComponent(
-          q
-        )}%20AND%20mediatype:(audio)&fl[]=identifier,title,creator&rows=3&output=json`,
-        3500
-      );
-      if (!searchRes.ok) return undefined;
-      const data = (await searchRes.json()) as {
-        response?: { docs?: Array<{ identifier?: string }> };
-      };
-      const docs = data.response?.docs;
-      if (!Array.isArray(docs) || docs.length === 0) return undefined;
-
-      for (const doc of docs) {
-        const identifier = doc.identifier;
-        if (!identifier) continue;
-        const metaRes = await fetchWithTimeout(`https://archive.org/metadata/${identifier}`, 3000);
-        if (!metaRes.ok) continue;
-        const meta = (await metaRes.json()) as {
-          files?: Array<{ name?: string; format?: string }>;
-        };
-        const files = meta.files;
-        if (!Array.isArray(files)) continue;
-
-        const mp3File = files.find(
-          (f) =>
-            f.name &&
-            (f.name.endsWith('.mp3') || f.name.endsWith('.flac')) &&
-            !f.name.toLowerCase().includes('thumb')
-        );
-        if (mp3File?.name) {
-          return `https://archive.org/download/${identifier}/${mp3File.name}`;
-        }
-      }
-    } catch {
-      return undefined;
-    }
-    return undefined;
-  }
-
-    const [saavnSettled, audiusSettled, deezerSettled, itunesSettled, jamendoSettled, archiveSettled] =
+    const [saavnSettled, audiusSettled, deezerSettled, itunesSettled, jamendoSettled] =
       await Promise.allSettled([
         fetchWithTimeout(
           `${SAAVN_BASE}/api/search/songs?query=${encodeURIComponent(query)}&page=0&limit=12`,
@@ -1119,7 +1073,6 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
           4000
         ).then((r) => (r.ok ? r.json() : null)),
         resolveJamendoStream(cleanTitle, primaryArtist, targetDurationSec),
-        resolveArchiveAudioStream(cleanTitle, primaryArtist),
       ]);
 
     if (jamendoSettled.status === 'fulfilled' && jamendoSettled.value) {
@@ -1128,11 +1081,6 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
       fullAlternates.push(jamUrl);
     }
 
-    if (archiveSettled.status === 'fulfilled' && archiveSettled.value) {
-      const arcUrl = archiveSettled.value;
-      if (!streamUrls['160kbps']) streamUrls['160kbps'] = arcUrl;
-      fullAlternates.push(arcUrl);
-    }
 
     if (saavnSettled.status === 'fulfilled' && saavnSettled.value?.data?.results?.length) {
       const results = saavnSettled.value.data.results as SaavnCandidateRaw[];
