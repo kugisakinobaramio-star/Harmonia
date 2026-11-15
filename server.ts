@@ -347,7 +347,7 @@ function inferLanguage(text: string, hintLang?: string): 'Hindi' | 'Punjabi' | '
   if (/[\u3040-\u30ff]/.test(text)) return 'Japanese';
   if (/[\u4e00-\u9fff]/.test(text)) return 'Chinese';
   const low = text.toLowerCase();
-  if (/arijit|pritam|bollywood|hindi|shreya|jubin|atif|sonu|badshah|kesariya|sachin-jigar/.test(low)) return 'Hindi';
+  if (/arijit|pritam|bollywood|hindi|shreya|jubin|atif|sonu|badshah|kesariya|sachin-jigar|afusic/.test(low)) return 'Hindi';
   if (/diljit|sidhu|punjabi|gurdas maan/.test(low)) return 'Punjabi';
   if (/haryanvi|masoom sharma|gulzaar chhaniwala/.test(low)) return 'Haryanvi';
   if (/marathi|ajay-atul/.test(low)) return 'Marathi';
