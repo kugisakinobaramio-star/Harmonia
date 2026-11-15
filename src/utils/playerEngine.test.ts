@@ -24,6 +24,7 @@ import {
   resolveActiveLyricPair,
   resolveNextTrackIndex,
   scoreAuthenticTrackCandidate,
+  selectSaavnArtistForMatch,
   scoreTrackForUser,
   selectStreamUrl,
   sortTracks,
@@ -423,4 +424,23 @@ test('rankDiscoverTracks diversifies artists, preserves a fallback when everythi
   assert.equal(ranked.length, pool.length);
   assert.equal(ranked[0].id === 'artist-a1' && ranked[1].id === 'artist-a2', false);
   assert.deepEqual(pool.map((track) => track.id), originalIds);
+});
+
+test('selectSaavnArtistForMatch uses primary credits and only an unambiguous exact all-credit fallback', () => {
+  assert.equal(
+    selectSaavnArtistForMatch([{ name: 'Primary Singer' }], [{ name: 'Composer' }], 'Composer'),
+    'Primary Singer'
+  );
+  assert.equal(
+    selectSaavnArtistForMatch(undefined, [{ name: 'Arpit Bala' }], 'Arpit Bala'),
+    'Arpit Bala'
+  );
+  assert.equal(
+    selectSaavnArtistForMatch(undefined, [{ name: 'Arpit Bala' }, { name: 'Producer' }], 'Arpit Bala'),
+    ''
+  );
+  assert.equal(
+    selectSaavnArtistForMatch(undefined, [{ name: 'Arpit Bala' }], 'Arpit'),
+    ''
+  );
 });
