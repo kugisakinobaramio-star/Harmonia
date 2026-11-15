@@ -549,6 +549,7 @@ export default function App() {
       // error. Move on when playback has not advanced after the startup window.
       const candidateSlot: 1 | 2 = incoming === a1 ? 1 : 2;
       let candidateFailed = false;
+      let stallTimer: number;
       const clearCandidateWatch = () => {
         window.clearTimeout(stallTimer);
         incoming.removeEventListener('playing', onCandidateProgress);
@@ -560,7 +561,7 @@ export default function App() {
         candidateFailed = true;
         clearCandidateWatch();
       };
-      const stallTimer = window.setTimeout(() => {
+      stallTimer = window.setTimeout(() => {
         if (playSeq !== playbackSeqRef.current || activeAudioSlotRef.current !== candidateSlot) {
           clearCandidateWatch();
           return;
