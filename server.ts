@@ -673,8 +673,8 @@ async function fetchSpotifyEmbedEntity(
   }
 }
 
-export async function createApp(options: { mode?: 'development' | 'node-production' | 'worker' } = {}) {
-  const mode = options.mode ?? (process.env.NODE_ENV !== 'production' ? 'development' : 'node-production');
+export async function createApp(options: { mode?: 'node-development' | 'node-production' | 'worker' } = {}) {
+  const mode = options.mode ?? (process.env.NODE_ENV === 'production' ? 'node-production' : 'node-development');
   cloudflareWorkerRuntime = mode === 'worker';
   const app = express();
   app.disable('x-powered-by');
@@ -1776,14 +1776,7 @@ export async function createApp(options: { mode?: 'development' | 'node-producti
     res.status(410).json({ ok: false, error: 'User data is stored locally in this browser.' });
   });
 
-  if (mode === 'development') {
-    const { createServer: createViteServer } = await import('vite');
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: 'spa',
-    });
-    app.use(vite.middlewares);
-  } else if (mode === 'node-production') {
+  if (mode === 'node-production') {
     const distDir = path.join(__dirname, 'dist');
     app.use(express.static(distDir));
     app.get('*', (_req, res) => {
