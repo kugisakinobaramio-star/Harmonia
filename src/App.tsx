@@ -1009,7 +1009,7 @@ export default function App() {
         candidateIdxRef.current = 0;
         if (!urls.length) {
           setIsPlaying(false);
-          showToast(`No stream found for "${track.name}" — try another track`);
+          showToast(`No playable audio source found for "${track.name}" — try another track`);
           return;
         }
         usingSynthRef.current = false;
@@ -1087,8 +1087,7 @@ export default function App() {
           (resolved.streamUrls && Object.keys(resolved.streamUrls).length > 0) ||
           resolved.previewUrl
         ) {
-          // Update synchronously before starting YouTube: its iframe may emit onError
-          // before the queue state update commits and the ref-sync effect runs.
+          // Keep the resolved track in sync before native audio starts.
           const resolvedTrack = {
             ...track,
             ...resolved,
@@ -1124,6 +1123,10 @@ export default function App() {
           );
           playNativeAudioCandidates(resolvedCandidates);
         }
+      }).catch(() => {
+        if (playSeq !== playbackSeqRef.current) return;
+        setIsPlaying(false);
+        showToast('Could not resolve an authorized audio source for this recording. Try another match.');
       });
     },
     [quality, showToast, loadAndPlayCandidate, volume]
