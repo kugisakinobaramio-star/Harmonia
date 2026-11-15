@@ -21,6 +21,7 @@ import type {
 import {
   decodeHtmlEntities,
   filterAndRankTracks,
+  getTitleOnlySearchFallback,
   hasFullAudioStream,
   isRemixOrKnockoff,
   isPlausibleSongDuration,
@@ -248,10 +249,14 @@ export async function searchSongs(
   });
 
   try {
-    const res = await fetch(
-      apiUrl(`/api/music/search?type=songs&query=${encodeURIComponent(trimmed)}&region=${encodeURIComponent(region)}&limit=16`)
-    );
-    if (res.ok) {
+    const fallbackQuery = getTitleOnlySearchFallback(trimmed);
+    const providerQueries = [...new Set([trimmed, fallbackQuery].filter(Boolean))];
+
+    for (const providerQuery of providerQueries) {
+      const res = await fetch(
+        apiUrl(`/api/music/search?type=songs&query=${encodeURIComponent(providerQuery)}&region=${encodeURIComponent(region)}&limit=16`)
+      );
+      if (!res.ok) continue;
       const json = (await res.json()) as {
         ok?: boolean;
         data?: {
@@ -310,18 +315,19 @@ export async function searchSongs(
         }
       }
 
-      // Prefer live catalogue matches; keep local catalogue matches as a fallback,
-      // not as a fixed block that crowds out the user's actual query.
-      const lyricsPreference = (track: Track) =>
-        prioritizeLyrics ? (isUnnecessaryNoLyricsTrack(track) ? -80 : 20) : 0;
-      const merged = [...dedupedRemote, ...localMatches]
-        .sort(
-          (a, b) =>
-            scoreSearchCandidate(b, trimmed) + lyricsPreference(b) -
-            scoreSearchCandidate(a, trimmed) - lyricsPreference(a)
-        )
-        .slice(0, 30);
-      if (merged.length > 0) {
+      // Retry a title-plus-artist query as title-only only when the first provider
+      // pass produced no relevant remote match. All returned results are still
+      // checked against the complete original query before being shown.
+      if (dedupedRemote.length > 0) {
+        const lyricsPreference = (track: Track) =>
+          prioritizeLyrics ? (isUnnecessaryNoLyricsTrack(track) ? -80 : 20) : 0;
+        const merged = [...dedupedRemote, ...localMatches]
+          .sort(
+            (a, b) =>
+              scoreSearchCandidate(b, trimmed) + lyricsPreference(b) -
+              scoreSearchCandidate(a, trimmed) - lyricsPreference(a)
+          )
+          .slice(0, 30);
         return { tracks: merged, source: 'live' };
       }
     }
