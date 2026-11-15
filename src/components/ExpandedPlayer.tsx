@@ -249,6 +249,8 @@ export function ExpandedPlayer({
                 downloaded={isDownloaded}
                 downloading={isDownloading}
                 onClick={onToggleDownload}
+                disabled={track.offlineAvailable === false}
+                disabledReason="This provider supports online listening only"
                 variant="pill"
               />
               <button
