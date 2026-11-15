@@ -24,7 +24,7 @@ Harmonia combines a React interface, a small Express API and a Cloudflare Worker
 
 **🌐 Live app:** https://harmonia.kugisakinobaramio.workers.dev  
 **💻 Source:** https://github.com/kugisakinobaramio-star/Harmonia  
-**📱 Android build:** [Latest debug APK workflow artifact](https://github.com/kugisakinobaramio-star/Harmonia/actions/runs/43725868017) *(testing build; temporary artifact)*
+**📱 Android build:** [Latest debug APK workflow artifact](https://github.com/kugisakinobaramio-star/Harmonia/actions/workflows/android.yml) *(testing build; temporary artifact)*
 
 ---
 
