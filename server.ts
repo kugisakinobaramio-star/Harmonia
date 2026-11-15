@@ -1077,10 +1077,33 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
           `${SAAVN_BASE}/api/search/songs?query=${encodeURIComponent(query)}&page=0&limit=12`,
           5000
         ).then((r) => (r.ok ? r.json() : null)),
-        fetchWithTimeout(
-          `https://discoveryprovider.audius.co/v1/tracks/search?query=${encodeURIComponent(query)}&limit=8`,
-          4000
-        ).then((r) => (r.ok ? r.json() : null)),
+        (async () => {
+          // Audius' public API is the canonical read endpoint; keep a discovery
+          // provider as a resilient mirror. Read-only search/streaming is public.
+          const responses = await Promise.allSettled([
+            fetchWithTimeout(
+              `https://api.audius.co/v1/tracks/search?query=${encodeURIComponent(query)}&limit=8`,
+              4000
+            ).then((r) => (r.ok ? r.json() : null)),
+            fetchWithTimeout(
+              `https://discoveryprovider.audius.co/v1/tracks/search?query=${encodeURIComponent(query)}&limit=8`,
+              4000
+            ).then((r) => (r.ok ? r.json() : null)),
+          ]);
+          const seen = new Set<string>();
+          const data: AudiusTrackRaw[] = [];
+          for (const response of responses) {
+            if (response.status !== 'fulfilled' || !Array.isArray(response.value?.data)) continue;
+            for (const track of response.value.data as AudiusTrackRaw[]) {
+              const id = String(track.id || '');
+              if (id && !seen.has(id)) {
+                seen.add(id);
+                data.push(track);
+              }
+            }
+          }
+          return { data };
+        })(),
         fetchWithTimeout(
           `https://api.deezer.com/search?q=${encodeURIComponent(query)}&limit=6`,
           4000
@@ -1125,12 +1148,13 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
         .filter((x): x is { a: AudiusTrackRaw; score: number } => x.score !== null)
         .sort((x, y) => y.score - x.score)[0]?.a;
       if (bestAud?.id) {
-        const audStream = `https://discoveryprovider.audius.co/v1/tracks/${encodeURIComponent(
-          bestAud.id
-        )}/stream`;
-        if (!streamUrls['160kbps']) streamUrls['160kbps'] = audStream;
-        if (!streamUrls['96kbps']) streamUrls['96kbps'] = audStream;
-        fullAlternates.push(audStream);
+        const audStreams = [
+          `https://api.audius.co/v1/tracks/${encodeURIComponent(bestAud.id)}/stream`,
+          `https://discoveryprovider.audius.co/v1/tracks/${encodeURIComponent(bestAud.id)}/stream`,
+        ];
+        if (!streamUrls['160kbps']) streamUrls['160kbps'] = audStreams[0];
+        if (!streamUrls['96kbps']) streamUrls['96kbps'] = audStreams[1];
+        fullAlternates.push(...audStreams);
       }
     }
 
