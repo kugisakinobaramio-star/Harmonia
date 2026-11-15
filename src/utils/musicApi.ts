@@ -84,6 +84,7 @@ function mapMusicBrainzRecording(raw: MusicBrainzRecordingRaw): Track {
     metadataOnly: true,
     sourceProvider: 'MusicBrainz',
     sourceAvailability: 'metadata',
+    offlineAvailable: false,
   };
 }
 
