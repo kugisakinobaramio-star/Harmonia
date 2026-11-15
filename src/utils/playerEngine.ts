@@ -31,6 +31,16 @@ export function isPlausibleSongDuration(seconds: number): boolean {
   return Number.isFinite(seconds) && seconds >= 45 && seconds <= 15 * 60;
 }
 
+export function isSearchableTrackDuration(track: Pick<Track, 'duration' | 'metadataOnly' | 'previewUrl' | 'streamUrls'>): boolean {
+  if (isPlausibleSongDuration(track.duration)) return true;
+  if (track.duration !== 0) return false;
+  return Boolean(
+    track.metadataOnly ||
+    track.previewUrl ||
+    (track.streamUrls && Object.values(track.streamUrls).some(Boolean))
+  );
+}
+
 export function formatTime(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds < 0) return '0:00';
   const total = Math.floor(seconds);
