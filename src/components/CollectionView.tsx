@@ -75,10 +75,30 @@ export function CollectionView({
         </div>
       </div>
 
+      {collection.spotifyEmbedUrl && (
+        <div className="mt-5 rounded-lg border border-white/10 bg-[#181818] p-3 sm:p-4">
+          <div className="mb-2 text-sm font-semibold text-white">Listen on Spotify</div>
+          <p className="mb-3 text-xs leading-relaxed text-zinc-400">
+            Playback is handled by Spotify here. Sign in to Spotify in this browser if the player only offers previews. Full playback availability is controlled by Spotify and your account.
+          </p>
+          <iframe
+            title={`Spotify player for ${collection.title}`}
+            src={collection.spotifyEmbedUrl}
+            width="100%"
+            height="352"
+            frameBorder="0"
+            allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
+            allowFullScreen
+            loading="lazy"
+            className="w-full rounded-md"
+          />
+        </div>
+      )}
+
       {/* Action bar: Emerald Play, Shuffle, Filter & Sort */}
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3 px-1">
         <div className="flex items-center gap-3">
-          {sorted.length > 0 && (
+          {sorted.length > 0 && !collection.spotifyEmbedUrl && (
             <>
               <button
                 type="button"
@@ -159,7 +179,8 @@ export function CollectionView({
                 >
                   <button
                     type="button"
-                    onClick={() => onPlayList(sorted, idx)}
+                    onClick={() => { if (!collection.spotifyEmbedUrl) onPlayList(sorted, idx); }}
+                    disabled={Boolean(collection.spotifyEmbedUrl)}
                     className="font-mono-num text-center text-xs text-zinc-400 group-hover:text-white"
                     aria-label={`Play ${track.name}`}
                   >
@@ -172,7 +193,8 @@ export function CollectionView({
 
                   <button
                     type="button"
-                    onClick={() => onPlayList(sorted, idx)}
+                    onClick={() => { if (!collection.spotifyEmbedUrl) onPlayList(sorted, idx); }}
+                    disabled={Boolean(collection.spotifyEmbedUrl)}
                     className="flex min-w-0 items-center gap-3 text-left"
                   >
                     <CoverImage
