@@ -864,9 +864,9 @@ export function rankDiscoverTracks(
   rotation = 0
 ): Track[] {
   const normalize = (value: string) =>
-    value.toLocaleLowerCase().normalize('NFKD').replace(/[\\u0300-\\u036f]/g, '').trim();
+    value.toLocaleLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '').trim();
   const artistKey = (track: Track) =>
-    normalize(track.artist.split(/,|&|\\bfeat\\.?\\b|\\bft\\.?\\b|\\bwith\\b/i)[0] || track.artist);
+    normalize(track.artist.split(/,|&|\bfeat\\.?\b|\bft\\.?\b|\bwith\b/i)[0] || track.artist);
   const genreKey = (track: Track) => normalize((track.genre || '').split(/[,/&]/)[0] || '');
   const recentIds = new Set(recentlyPlayed.slice(0, 8).map((track) => track.id));
   const likedArtists = new Set(taste.likedTracks.map(artistKey));
@@ -900,7 +900,7 @@ export function rankDiscoverTracks(
     }
     const languageIndex = preferredLanguages.indexOf(language);
     if (languageIndex >= 0) value += Math.max(0.8, 2.8 - languageIndex * 0.35);
-    if (preferredMoods.some((mood) => mood.split(/[\\s&/]+/).filter((token) => token.length > 2).some((token) => context.includes(token)))) value += 1.6;
+    if (preferredMoods.some((mood) => mood.split(/[\s&/]+/).filter((token) => token.length > 2).some((token) => context.includes(token)))) value += 1.6;
     const plays = Math.max(0, taste.playCounts[track.id] || 0);
     value -= Math.min(2.8, Math.log1p(plays) * 0.9);
     if (recentIds.has(track.id)) value -= 5;
