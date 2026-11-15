@@ -95,6 +95,12 @@ function buildStreamCandidates(
     pushClassified(alt);
   }
   pushClassified(track.previewUrl);
+  // The resolver returns alternates alongside previewUrl/streamUrls. Keep these
+  // attached to the Track object usable by the iframe error handler too.
+  const trackAlternates = (track as Track & { alternates?: string[] }).alternates || [];
+  for (const alt of trackAlternates) {
+    pushClassified(alt);
+  }
 
   const out: string[] = [];
   const seen = new Set<string>();
@@ -263,6 +269,9 @@ export default function App() {
   const isPlayingRef = useRef<boolean>(false);
   const currentTrack = queue[currentIndex] || queue[0] || SEED_TRACKS[0] || null;
   const currentTrackRef = useRef<Track | null>(currentTrack);
+  // Retain the latest resolved object separately: queue state/effects can briefly
+  // expose the pre-resolution track while the YouTube iframe reports an error.
+  const resolvedPlaybackTrackRef = useRef<Track | null>(null);
   const activeEngineRef = useRef<'audio' | 'yt'>('audio');
   const ytPlayerRef = useRef<any>(null);
   const isYtReadyRef = useRef<boolean>(false);
@@ -642,7 +651,10 @@ export default function App() {
               // Keep the provider error code visible so embedding/availability failures
               // can be distinguished from native-audio candidate failures.
               if (activeEngineRef.current !== 'yt') return;
-              const cur = currentTrackRef.current;
+              const cur =
+                resolvedPlaybackTrackRef.current?.id === currentTrackRef.current?.id
+                  ? resolvedPlaybackTrackRef.current
+                  : currentTrackRef.current;
               if (!cur) return;
               const candidates = buildStreamCandidates(cur, quality);
               if (candidates.length > 0) {
@@ -785,6 +797,7 @@ export default function App() {
       // YouTube can fail before the queue update effect runs, and its fallback needs this
       // track's freshly resolved preview/alternate URLs.
       currentTrackRef.current = track;
+      resolvedPlaybackTrackRef.current = track;
       audioEngine.stopSynthLoop();
       usingSynthRef.current = false;
 
@@ -929,7 +942,13 @@ export default function App() {
         ) {
           // Update synchronously before starting YouTube: its iframe may emit onError
           // before the queue state update commits and the ref-sync effect runs.
-          currentTrackRef.current = { ...track, ...resolved };
+          const resolvedTrack = {
+            ...track,
+            ...resolved,
+            alternates: resolved.alternates || [],
+          } as Track;
+          currentTrackRef.current = resolvedTrack;
+          resolvedPlaybackTrackRef.current = resolvedTrack;
           setQueue((prev) =>
             prev.map((qItem) =>
               qItem.id === track.id
