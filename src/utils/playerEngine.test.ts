@@ -14,6 +14,7 @@ import {
   isShortPreviewUrl,
   isSpotifyLinkOrUri,
   isUnnecessaryNoLyricsTrack,
+  mergeResolvedTrackSources,
   mapCoordsToRegion,
   parseLrcLyrics,
   parsePlainLyricsToLines,
@@ -240,6 +241,31 @@ test('isShortPreviewUrl and hasFullAudioStream distinguish 30s previews from ful
   };
   assert.equal(hasFullAudioStream(fullStreamTrack), true);
   assert.equal(hasFullAudioStream(sampleTracks[1]), true);
+});
+
+test('mergeResolvedTrackSources replaces stale provider URLs during forced refresh', () => {
+  const refreshed = mergeResolvedTrackSources(
+    sampleTracks[1],
+    {
+      streamUrls: { '160kbps': 'https://fresh.example.com/audio.mp3' },
+      previewUrl: 'https://fresh.example.com/preview.m4a',
+      youtubeId: 'abcdefghijk',
+      alternates: ['https://fresh.example.com/alternate.mp3'],
+    },
+    true
+  );
+
+  assert.equal(refreshed.streamUrls?.['320kbps'], undefined);
+  assert.equal(refreshed.streamUrls?.['160kbps'], 'https://fresh.example.com/audio.mp3');
+  assert.equal(refreshed.youtubeId, 'abcdefghijk');
+  assert.deepEqual(refreshed.alternates, ['https://fresh.example.com/alternate.mp3']);
+});
+
+test('mergeResolvedTrackSources clears stale URLs when forced refresh finds no replacement', () => {
+  const cleared = mergeResolvedTrackSources(sampleTracks[1], {}, true);
+  assert.equal(cleared.streamUrls, undefined);
+  assert.equal(cleared.previewUrl, undefined);
+  assert.equal(cleared.youtubeId, undefined);
 });
 
 test('scoreTrackForUser boosts tracks matching explicit favoriteArtists and preferredMoods', () => {
