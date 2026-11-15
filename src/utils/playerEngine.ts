@@ -718,7 +718,7 @@ export function deriveDynamicTasteHighlights(profile: UserTasteProfile): {
     topArtistEntry && topArtistEntry[1] >= 2 ? topArtistEntry[0] : null;
 
   const langEntries = Object.entries(profile.languageAffinity)
-    .filter(([k, w]) => w > 0 && (k === 'Hindi' || k === 'English' || k === 'J-Pop'))
+    .filter(([k, w]) => w > 0 && (k === 'Hindi' || k === 'Punjabi' || k === 'English' || k === 'J-Pop'))
     .sort((a, b) => b[1] - a[1]);
   const topLanguage =
     (langEntries[0]?.[0] as MusicLanguage | undefined) ||
