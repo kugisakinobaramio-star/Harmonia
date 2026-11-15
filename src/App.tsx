@@ -20,7 +20,7 @@ import { PlayerBar } from './components/PlayerBar';
 import { RightPanel } from './components/RightPanel';
 import { SearchView } from './components/SearchView';
 import { Sidebar } from './components/Sidebar';
-import { ARTWORK, SEED_ARTISTS, SEED_PLAYLISTS, SEED_TRACKS, SEED_VIDEOS } from './data/catalog';
+import { ARTWORK, SEED_ARTISTS, SEED_PLAYLISTS, SEED_TRACKS } from './data/catalog';
 import type {
   ArtistProfile,
   AudioQuality,
