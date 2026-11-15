@@ -45,19 +45,15 @@ function buildVariedList(tracks: Track[], recentlyPlayed: Track[], rotation: num
     const key = `${track.name.toLowerCase()}::${primaryArtist(track)}`;
     if (!recent.has(track.id) && !unique.has(key)) unique.set(key, track);
   }
-  const pool = [...unique.values()].sort((a, b) => {
-    const difference = score(b) - score(a);
-    if (Math.abs(difference) > 0.25) return difference;
-    // Deterministic tie-breaking changes after refresh without allowing
-    // source order alone to dominate the discovery feed.
-    const hash = (track: Track) => {
-      const value = track.name + '::' + primaryArtist(track) + '::' + rotation;
-      let result = 0;
-      for (let index = 0; index < value.length; index += 1) result = (result * 31 + value.charCodeAt(index)) >>> 0;
-      return result;
-    };
-    return hash(a) - hash(b);
-  });
+  const rotationJitter = (track: Track) => {
+    const value = track.name + '::' + primaryArtist(track) + '::' + rotation;
+    let result = 0;
+    for (let index = 0; index < value.length; index += 1) result = (result * 31 + value.charCodeAt(index)) >>> 0;
+    return (result / 0xffffffff) * 0.2;
+  };
+  const pool = [...unique.values()].sort(
+    (a, b) => (score(b) + rotationJitter(b)) - (score(a) + rotationJitter(a))
+  );
   if (!pool.length) return [];
 
   // Rotate the source order, then prioritise a mix of artists and genres.
