@@ -5,6 +5,9 @@ import {defineConfig} from 'vite';
 
 export default defineConfig(() => {
   return {
+    // GitHub Pages serves this project from /Harmonia/, while Cloudflare
+    // serves it from the worker root.
+    base: process.env.GITHUB_PAGES === 'true' ? '/Harmonia/' : '/',
     plugins: [react(), tailwindcss()],
     resolve: {
       alias: {
