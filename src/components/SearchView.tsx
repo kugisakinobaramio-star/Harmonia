@@ -74,6 +74,10 @@ export function SearchView({
   const seqRef = useRef(0);
 
   const [prioritizeLyrics, setPrioritizeLyrics] = useState(true);
+  const [includeCatalogue, setIncludeCatalogue] = useState(false);
+  const [songPage, setSongPage] = useState(0);
+  const [canLoadMoreSongs, setCanLoadMoreSongs] = useState(false);
+  const [loadingMoreSongs, setLoadingMoreSongs] = useState(false);
   const [loading, setLoading] = useState(false);
   const [songs, setSongs] = useState<Track[]>([]);
   const [albums, setAlbums] = useState<
@@ -112,9 +116,14 @@ export function SearchView({
               region,
               prioritizeLyrics,
               languageFilter,
+              includeCatalogue,
+              page: 0,
             });
             if (seq !== seqRef.current) return;
             setSongs(res.tracks);
+            setSongPage(0);
+            setCanLoadMoreSongs(Boolean(rawQuery) && res.tracks.length > 0);
+            setLoadingMoreSongs(false);
           } else if (activeTab === 'albums') {
             const res = await searchAlbums(rawQuery);
             if (seq !== seqRef.current) return;
@@ -139,7 +148,46 @@ export function SearchView({
     }, 180);
 
     return () => window.clearTimeout(timer);
-  }, [query, activeTab, drillCollection, region, prioritizeLyrics, languageFilter]);
+  }, [query, activeTab, drillCollection, region, prioritizeLyrics, languageFilter, includeCatalogue]);
+
+  const handleLoadMoreSongs = async () => {
+    const rawQuery = query.trim();
+    if (!rawQuery || loadingMoreSongs || !canLoadMoreSongs || drillCollection) return;
+    const requestSeq = seqRef.current;
+    const nextPage = songPage + 1;
+    setLoadingMoreSongs(true);
+    try {
+      const result = await searchSongs(rawQuery, {
+        region,
+        prioritizeLyrics,
+        languageFilter,
+        includeCatalogue,
+        page: nextPage,
+      });
+      if (requestSeq !== seqRef.current) return;
+
+      setSongs((previous) => {
+        const seen = new Set(
+          previous.map((track) =>
+            track.name.toLowerCase().trim() + '::' + track.artist.toLowerCase().trim()
+          )
+        );
+        const next = [...previous];
+        for (const track of result.tracks) {
+          const key = track.name.toLowerCase().trim() + '::' + track.artist.toLowerCase().trim();
+          if (!seen.has(key)) {
+            seen.add(key);
+            next.push(track);
+          }
+        }
+        return next;
+      });
+      setSongPage(nextPage);
+      setCanLoadMoreSongs(result.tracks.length > 0);
+    } finally {
+      if (requestSeq === seqRef.current) setLoadingMoreSongs(false);
+    }
+  };
 
   return (
     <section aria-label="Search music and videos" className="space-y-4 pb-8">
@@ -235,6 +283,20 @@ export function SearchView({
             />
             <span>Lyrics priority</span>
           </label>
+          {activeTab === 'songs' && (
+            <label
+              title="Adds a broader metadata catalogue. Some entries may not have a playable stream."
+              className="ml-1 flex cursor-pointer items-center gap-1.5 rounded-full bg-[#1c1c20] px-3 py-1 text-[11px] font-semibold text-zinc-300"
+            >
+              <input
+                type="checkbox"
+                checked={includeCatalogue}
+                onChange={(event) => setIncludeCatalogue(event.target.checked)}
+                className="h-3.5 w-3.5 accent-[#1DB954]"
+              />
+              <span>Wider catalogue</span>
+            </label>
+          )}
         </div>
       </div>
 
@@ -328,6 +390,18 @@ export function SearchView({
                 }
               />
             ))}
+            {!drillCollection && canLoadMoreSongs && (
+              <div className="flex justify-center pt-4">
+                <button
+                  type="button"
+                  onClick={() => void handleLoadMoreSongs()}
+                  disabled={loadingMoreSongs}
+                  className="rounded-full border border-white/15 bg-[#202024] px-5 py-2 text-xs font-bold text-zinc-200 hover:bg-[#2a2a2f] disabled:cursor-wait disabled:opacity-60"
+                >
+                  {loadingMoreSongs ? 'Loading more songs…' : 'Load more results'}
+                </button>
+              </div>
+            )}
           </div>
         )
       ) : activeTab === 'albums' ? (
