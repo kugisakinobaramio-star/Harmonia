@@ -827,7 +827,18 @@ export function getArtistProfileById(id: string): ArtistProfile | undefined {
 }
 
 type ResolvedTrackCacheValue = Partial<
-  Pick<Track, 'streamUrls' | 'previewUrl' | 'youtubeId' | 'youtubeAlternates'>
+  Pick<
+    Track,
+    | 'streamUrls'
+    | 'previewUrl'
+    | 'youtubeId'
+    | 'youtubeAlternates'
+    | 'sourceProvider'
+    | 'sourceAvailability'
+    | 'sourcePageUrl'
+    | 'sourceLicense'
+    | 'offlineAvailable'
+  >
 > & { alternates?: string[] };
 
 const resolvedTrackCache = new Map<
@@ -903,6 +914,11 @@ export async function resolveTrackStreams(
           alternates?: string[];
           youtubeId?: string;
           youtubeAlternates?: string[];
+          sourceProvider?: string;
+          sourceAvailability?: Track['sourceAvailability'];
+          sourcePageUrl?: string;
+          sourceLicense?: string;
+          offlineAvailable?: boolean;
         };
         if (
           json.ok &&
@@ -919,6 +935,13 @@ export async function resolveTrackStreams(
             alternates: json.alternates,
             youtubeId: json.youtubeId || track.youtubeId,
             youtubeAlternates: json.youtubeAlternates || track.youtubeAlternates,
+            sourceProvider: json.sourceProvider || track.sourceProvider,
+            sourceAvailability: json.sourceAvailability || track.sourceAvailability,
+            sourcePageUrl: json.sourcePageUrl || track.sourcePageUrl,
+            sourceLicense: json.sourceLicense || track.sourceLicense,
+            offlineAvailable: typeof json.offlineAvailable === 'boolean'
+              ? json.offlineAvailable
+              : track.offlineAvailable,
           };
           resolvedTrackCache.set(track.id, {
             value: entry,
