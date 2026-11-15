@@ -548,25 +548,44 @@ export default function App() {
       // Some providers leave a media request stalled without emitting an
       // error. Move on when playback has not advanced after the startup window.
       const candidateSlot: 1 | 2 = incoming === a1 ? 1 : 2;
+      let candidateFailed = false;
+      const clearCandidateWatch = () => {
+        window.clearTimeout(stallTimer);
+        incoming.removeEventListener('playing', onCandidateProgress);
+        incoming.removeEventListener('timeupdate', onCandidateProgress);
+        incoming.removeEventListener('error', onCandidateError);
+      };
+      const onCandidateProgress = () => clearCandidateWatch();
+      const onCandidateError = () => {
+        candidateFailed = true;
+        clearCandidateWatch();
+      };
       const stallTimer = window.setTimeout(() => {
-        if (
-          playSeq !== playbackSeqRef.current ||
-          activeAudioSlotRef.current !== candidateSlot ||
-          incoming.currentTime >= 0.25
-        ) {
+        if (playSeq !== playbackSeqRef.current || activeAudioSlotRef.current !== candidateSlot) {
+          clearCandidateWatch();
           return;
         }
+        if (incoming.currentTime >= 0.25) {
+          clearCandidateWatch();
+          return;
+        }
+        candidateFailed = true;
+        clearCandidateWatch();
         incoming.pause();
         incoming.src = '';
         loadAndPlayCandidate(idx + 1, playSeq, onAllFailed);
       }, 12_000);
-      const clearStallTimer = () => window.clearTimeout(stallTimer);
-      incoming.addEventListener('playing', clearStallTimer, { once: true });
-      incoming.addEventListener('timeupdate', clearStallTimer, { once: true });
-      incoming.addEventListener('error', clearStallTimer, { once: true });
+      incoming.addEventListener('playing', onCandidateProgress, { once: true });
+      incoming.addEventListener('timeupdate', onCandidateProgress, { once: true });
+      incoming.addEventListener('error', onCandidateError, { once: true });
 
       incoming.play().then(() => {
-        if (playSeq !== playbackSeqRef.current) return;
+        if (
+          candidateFailed ||
+          playSeq !== playbackSeqRef.current ||
+          activeAudioSlotRef.current !== candidateSlot ||
+          incoming.src !== url
+        ) return;
         const targetVol = volume / 100;
         const steps = 15;
         const stepTime = 100; // 1.5 seconds total crossfade
@@ -591,9 +610,12 @@ export default function App() {
           }
         }, stepTime);
       }).catch(() => {
-        clearStallTimer();
-        if (playSeq === playbackSeqRef.current) {
-          loadAndPlayCandidate(idx + 1, playSeq, onAllFailed);
+        if (!candidateFailed) {
+          candidateFailed = true;
+          clearCandidateWatch();
+          if (playSeq === playbackSeqRef.current) {
+            loadAndPlayCandidate(idx + 1, playSeq, onAllFailed);
+          }
         }
       });
     },
