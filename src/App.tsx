@@ -1451,6 +1451,9 @@ export default function App() {
         subtitle: pl.description,
         image: pl.tracks[0]?.image || pl.image || ARTWORK.englishVinyl,
         tracks: pl.tracks,
+        spotifyEmbedUrl: pl.id.startsWith('spotify-pl-')
+          ? `https://open.spotify.com/embed/playlist/${pl.id.slice('spotify-pl-'.length)}`
+          : undefined,
       });
     },
     [navigateTo]
@@ -1508,14 +1511,16 @@ export default function App() {
           subtitle: res.subtitle || 'Ad-Free Spotify Streaming',
           image: res.image || res.tracks[0].image || ARTWORK.englishVinyl,
           tracks: res.tracks,
+          spotifyEmbedUrl: res.kind && res.id
+            ? `https://open.spotify.com/embed/${res.kind}/${res.id}`
+            : undefined,
         });
-        playTrackList(res.tracks, 0);
-        showToast(`Streaming Spotify: ${res.title || res.tracks[0].name}`);
+        showToast('Spotify player loaded. Use its Play button below to start playback.');
         return { ok: true };
       }
       return { ok: false, error: res.error || 'Could not resolve Spotify link' };
     },
-    [navigateTo, playTrackList, showToast]
+    [navigateTo, showToast]
   );
 
   // Videos
