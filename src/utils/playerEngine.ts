@@ -866,7 +866,7 @@ export function rankDiscoverTracks(
   const normalize = (value: string) =>
     value.toLocaleLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '').trim();
   const artistKey = (track: Track) =>
-    normalize(track.artist.split(/,|&|\bfeat\\.?\b|\bft\\.?\b|\bwith\b/i)[0] || track.artist);
+    normalize(track.artist.split(/,|&|\bfeat\.?\b|\bft\.?\b|\bwith\b/i)[0] || track.artist);
   const genreKey = (track: Track) => normalize((track.genre || '').split(/[,/&]/)[0] || '');
   const recentIds = new Set(recentlyPlayed.slice(0, 8).map((track) => track.id));
   const likedArtists = new Set(taste.likedTracks.map(artistKey));
