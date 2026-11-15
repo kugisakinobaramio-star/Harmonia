@@ -1712,6 +1712,13 @@ export default function App() {
                   const freshTracks = await fetchRegionalDiscovery(region, true);
                   setRegionalTracks(freshTracks);
                 }}
+                likedTracks={likedTracks}
+                playCounts={playCounts}
+                artistAffinity={artistAffinity}
+                genreAffinity={genreAffinity}
+                preferredLanguages={preferredLanguages}
+                favoriteArtists={favoriteArtists}
+                preferredMoods={preferredMoods}
               />
             )}
 
