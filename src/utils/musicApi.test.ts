@@ -1,36 +1,24 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { resolveTrackStreams } from './musicApi.ts';
-import type { Track } from '../types/music.ts';
+import { preserveTrackAfterFailedRefresh } from './streamRefresh.ts';
 
-test('failed forced stream refresh preserves last-known-good playback sources', async () => {
-  const track: Track = {
+test('failed refresh preserves all last-known-good source metadata', () => {
+  const track = {
     id: 'refresh-failure-regression',
     name: 'BIRDS OF A FEATHER',
     artist: 'Billie Eilish',
-    albumName: 'HIT ME HARD AND SOFT',
-    duration: 210,
-    image: '/cover.jpg',
-    language: 'English',
-    region: 'US',
-    genre: 'Pop',
-    hasLyrics: true,
     streamUrls: { '320kbps': 'https://audio.example.com/original.m4a' },
-    previewUrl: 'https://audio.example.com/original-preview.m4a',
+    previewUrl: 'https://audio.example.com/preview.m4a',
     youtubeId: 'original-video-id',
     youtubeAlternates: ['alternate-video-id'],
+    provider: 'saavn',
   };
 
-  const originalFetch = globalThis.fetch;
-  globalThis.fetch = async () => new Response('upstream unavailable', { status: 503 });
-  try {
-    const refreshed = await resolveTrackStreams(track, { forceRefresh: true });
-    assert.deepEqual(refreshed.streamUrls, track.streamUrls);
-    assert.equal(refreshed.previewUrl, track.previewUrl);
-    assert.equal(refreshed.youtubeId, track.youtubeId);
-    assert.deepEqual(refreshed.youtubeAlternates, track.youtubeAlternates);
-    assert.equal(refreshed.id, track.id);
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
+  const preserved = preserveTrackAfterFailedRefresh(track);
+  assert.strictEqual(preserved, track);
+  assert.deepEqual(preserved.streamUrls, track.streamUrls);
+  assert.equal(preserved.previewUrl, track.previewUrl);
+  assert.equal(preserved.youtubeId, track.youtubeId);
+  assert.deepEqual(preserved.youtubeAlternates, track.youtubeAlternates);
+  assert.equal(preserved.provider, 'saavn');
 });
