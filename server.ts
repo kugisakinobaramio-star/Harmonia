@@ -897,17 +897,26 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
     targetDurationSec = 0
   ): Promise<string | undefined> {
     const query = `${cleanTitle} ${primaryArtist}`.trim();
-    const pipedEndpoints = [
-      `https://api.piped.private.coffee/search?q=${encodeURIComponent(query)}&filter=music_songs`,
-      `https://pipedapi.kavin.rocks/search?q=${encodeURIComponent(query)}&filter=music_songs`,
-      `https://api.piped.projectsegfau.lt/search?q=${encodeURIComponent(query)}&filter=music_songs`,
+    // Piped instances are community-operated and can disappear or rate-limit requests.
+    // Keep several currently published instances so one outage does not disable fallback.
+    const pipedBases = [
+      'https://pipedapi.kavin.rocks',
+      'https://api.piped.private.coffee',
+      'https://pipedapi.in.projectsegfau.lt',
+      'https://pipedapi.leptons.xyz',
+      'https://pipedapi.nosebs.ru',
+      'https://piped-api.privacy.com.de',
+      'https://pipedapi.adminforge.de',
+      'https://api.piped.yt',
+      'https://pipedapi.drgns.space',
+      'https://pipedapi.owo.si',
     ];
-
-    for (const ep of pipedEndpoints) {
-      try {
-        const res = await fetchWithTimeout(ep, 3500);
-        if (!res.ok) continue;
-        const data = (await res.json()) as {
+    const pipedResults = await Promise.allSettled(
+      pipedBases.map(async (base) => {
+        const endpoint = `${base}/search?q=${encodeURIComponent(query)}&filter=music_songs`;
+        const response = await fetchWithTimeout(endpoint, 3500);
+        if (!response.ok) return [];
+        const data = (await response.json()) as {
           items?: Array<{
             url?: string;
             title?: string;
@@ -916,40 +925,48 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
             type?: string;
           }>;
         };
-        if (Array.isArray(data.items) && data.items.length > 0) {
-          const scored = data.items
-            .map((item) => {
-              const rawId = item.url?.replace('/watch?v=', '') || '';
-              if (!rawId || rawId.length !== 11) return null;
-              const dur = typeof item.duration === 'number' ? item.duration : 0;
-              if (dur > 0 && (dur < 45 || dur > 720)) return null;
+        return Array.isArray(data.items) ? data.items : [];
+      })
+    );
 
-              const score = scoreAuthenticTrackCandidate({
-                itemTitle: item.title || '',
-                itemArtist: item.uploaderName || primaryArtist,
-                requestedTitle: cleanTitle,
-                requestedArtist: primaryArtist,
-                itemDurationSec: dur,
-                targetDurationSec,
-              });
-              return { id: rawId, score };
-            })
-            .filter((x): x is { id: string; score: number } => x !== null && x.score !== null)
-            .sort((a, b) => b.score - a.score);
-
-          if (scored[0]?.id) {
-            return scored[0].id;
+    const candidates = pipedResults.flatMap((result) =>
+      result.status === 'fulfilled' ? result.value : []
+    );
+    const scored = candidates
+      .map((item) => {
+        const rawUrl = String(item.url || '').trim();
+        let rawId = '';
+        try {
+          const parsed = new URL(rawUrl, 'https://www.youtube.com');
+          rawId = parsed.searchParams.get('v') || '';
+          if (!rawId && /^\\/[a-zA-Z0-9_-]{11}$/.test(parsed.pathname)) {
+            rawId = parsed.pathname.slice(1);
           }
-
-          // Do not fall back to the first merely plausible video when every
-          // candidate failed title/artist/duration validation. Returning an
-          // unscored result can select podcasts or unrelated long-form uploads.
-
+        } catch {
+          return null;
         }
-      } catch {
-        // Try next endpoint
-      }
-    }
+        if (!/^[a-zA-Z0-9_-]{11}$/.test(rawId)) return null;
+        const dur = typeof item.duration === 'number' ? item.duration : 0;
+        if (dur > 0 && (dur < 45 || dur > 720)) return null;
+
+        const score = scoreAuthenticTrackCandidate({
+          itemTitle: item.title || '',
+          itemArtist: item.uploaderName || '',
+          requestedTitle: cleanTitle,
+          requestedArtist: primaryArtist,
+          itemDurationSec: dur,
+          targetDurationSec,
+        });
+        return { id: rawId, score };
+      })
+      .filter((item): item is { id: string; score: number } => item !== null && item.score !== null)
+      .sort((a, b) => b.score - a.score);
+
+    if (scored[0]?.id) return scored[0].id;
+
+    // Never fall back to an unverified result: it could be an unrelated upload,
+    // remix, podcast, or long-form mix. The direct YouTube scrape below remains
+    // the final fallback when every Piped instance is unavailable or unhelpful.
 
     // Direct scrape fallback
     try {
