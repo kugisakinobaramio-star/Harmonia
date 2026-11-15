@@ -1,3 +1,4 @@
+import { apiUrl } from './apiUrl';
 import {
   ARTWORK,
   SEED_ALBUMS,
@@ -215,7 +216,7 @@ function normalizeRemoteTrack(raw: Track): Track {
 
 export async function fetchRegionalDiscovery(region: MusicRegion, refresh = false): Promise<Track[]> {
   try {
-    const res = await fetch(`/api/music/discover?region=${encodeURIComponent(region)}${refresh ? '&refresh=1' : ''}`);
+    const res = await fetch(apiUrl(`/api/music/discover?region=${encodeURIComponent(region)}${refresh ? '&refresh=1' : ''}`));
     if (res.ok) {
       const json = (await res.json()) as { ok?: boolean; tracks?: Track[] };
       if (json.ok && json.tracks?.length) {
@@ -248,7 +249,7 @@ export async function searchSongs(
 
   try {
     const res = await fetch(
-      `/api/music/search?type=songs&query=${encodeURIComponent(trimmed)}&region=${encodeURIComponent(region)}&limit=16`
+      apiUrl(`/api/music/search?type=songs&query=${encodeURIComponent(trimmed)}&region=${encodeURIComponent(region)}&limit=16`)
     );
     if (res.ok) {
       const json = (await res.json()) as {
@@ -336,7 +337,7 @@ export async function searchAlbums(query: string): Promise<{
   if (!q) return { albums: localAlbums };
 
   try {
-    const res = await fetch(`/api/music/search?type=albums&query=${encodeURIComponent(query)}&limit=12`);
+    const res = await fetch(apiUrl(`/api/music/search?type=albums&query=${encodeURIComponent(query)}&limit=12`));
     if (res.ok) {
       const json = (await res.json()) as {
         ok?: boolean;
@@ -395,7 +396,7 @@ export async function searchPlaylists(query: string): Promise<{
   if (!q) return { playlists: localPlaylists };
 
   try {
-    const res = await fetch(`/api/music/search?type=playlists&query=${encodeURIComponent(query)}&limit=12`);
+    const res = await fetch(apiUrl(`/api/music/search?type=playlists&query=${encodeURIComponent(query)}&limit=12`));
     if (res.ok) {
       const json = (await res.json()) as {
         ok?: boolean;
@@ -454,7 +455,7 @@ export async function searchArtists(query: string): Promise<{
   if (!q) return { artists: localArtists };
 
   try {
-    const res = await fetch(`/api/music/search?type=artists&query=${encodeURIComponent(query)}&limit=12`);
+    const res = await fetch(apiUrl(`/api/music/search?type=artists&query=${encodeURIComponent(query)}&limit=12`));
     if (res.ok) {
       const json = (await res.json()) as {
         ok?: boolean;
@@ -560,7 +561,7 @@ export async function loadCollectionTracks(
 
   const detailId = id.startsWith('dz-') || id.startsWith('mb-art:') ? id : id.replace(/^saavn-(alb|pl|art):/, '');
   try {
-    const res = await fetch(`/api/music/detail?type=${kind}&id=${encodeURIComponent(detailId)}&limit=30`);
+    const res = await fetch(apiUrl(`/api/music/detail?type=${kind}&id=${encodeURIComponent(detailId)}&limit=30`));
     if (res.ok) {
       const json = (await res.json()) as {
         ok?: boolean;
@@ -616,7 +617,7 @@ export async function searchVideos(query: string): Promise<VideoResult[]> {
   if (!tokens.length) return [];
 
   try {
-    const res = await fetch(`/api/music/videos?query=${encodeURIComponent(trimmed)}&limit=16`);
+    const res = await fetch(apiUrl(`/api/music/videos?query=${encodeURIComponent(trimmed)}&limit=16`));
     if (!res.ok) return [];
     const json = (await res.json()) as { ok?: boolean; results?: VideoResult[] };
     const results = Array.isArray(json.results) ? json.results : [];
@@ -651,7 +652,7 @@ export async function fetchTrackLyrics(track: Track): Promise<{ lines: LyricLine
   const cleanTitle = track.name.split('(')[0]?.split('-')[0]?.trim() || track.name;
   try {
     const res = await fetch(
-      `/api/music/lyrics?artist=${encodeURIComponent(primaryArtist)}&title=${encodeURIComponent(cleanTitle)}&duration=${Math.round(track.duration || 195)}`
+      apiUrl(`/api/music/lyrics?artist=${encodeURIComponent(primaryArtist)}&title=${encodeURIComponent(cleanTitle)}&duration=${Math.round(track.duration || 195)}`)
     );
     if (res.ok) {
       const json = (await res.json()) as {
@@ -822,9 +823,9 @@ export async function resolveTrackStreams(
     const timeout = setTimeout(() => controller.abort(), 12_000);
     try {
       const res = await fetch(
-        `/api/music/resolve?title=${encodeURIComponent(track.name)}&artist=${encodeURIComponent(
+        apiUrl(`/api/music/resolve?title=${encodeURIComponent(track.name)}&artist=${encodeURIComponent(
           track.artist
-        )}&duration=${Math.round(track.duration || 0)}&forceRefresh=${forceRefresh ? '1' : '0'}`,
+        )}&duration=${Math.round(track.duration || 0)}&forceRefresh=${forceRefresh ? '1' : '0'}`),
         { signal: controller.signal }
       );
       if (res.ok) {
@@ -894,7 +895,7 @@ export async function resolveTrackStreams(
 
 export async function fetchSpotifyPlaylists(): Promise<CuratedPlaylist[]> {
   try {
-    const res = await fetch('/api/music/spotify/playlists');
+    const res = await fetch(apiUrl('/api/music/spotify/playlists'));
     if (res.ok) {
       const json = (await res.json()) as { ok?: boolean; playlists?: CuratedPlaylist[] };
       if (json.ok && json.playlists?.length) {
@@ -922,7 +923,7 @@ export async function resolveSpotifyUrl(urlOrUri: string): Promise<{
   error?: string;
 }> {
   try {
-    const res = await fetch(`/api/music/spotify/resolve?url=${encodeURIComponent(urlOrUri.trim())}`);
+    const res = await fetch(apiUrl(`/api/music/spotify/resolve?url=${encodeURIComponent(urlOrUri.trim())}`));
     const json = (await res.json()) as {
       ok?: boolean;
       kind?: 'track' | 'album' | 'playlist' | 'artist';

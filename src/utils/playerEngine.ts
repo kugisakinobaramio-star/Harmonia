@@ -1,3 +1,4 @@
+import { apiUrl } from './apiUrl';
 import type {
   AudioQuality,
   CuratedPlaylist,
@@ -91,11 +92,12 @@ export function isFastImageCdn(url: string): boolean {
 
 export function toProxiedImageUrl(url?: string): string {
   if (!url) return '';
+  if (url.startsWith('/api/')) return apiUrl(url);
   if (
     url.startsWith('/') ||
     url.startsWith('data:') ||
     url.startsWith('blob:') ||
-    url.startsWith('/api/music/image')
+    url.startsWith(apiUrl('/api/music/image'))
   ) {
     return url;
   }
@@ -103,7 +105,7 @@ export function toProxiedImageUrl(url?: string): string {
     if (url.startsWith('https://') && isFastImageCdn(url)) {
       return url;
     }
-    return `/api/music/image?url=${encodeURIComponent(url)}`;
+    return apiUrl(`/api/music/image?url=${encodeURIComponent(url)}`);
   }
   return url;
 }
