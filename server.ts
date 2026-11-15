@@ -1299,16 +1299,22 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
         (async () => {
           // Audius' public API is the canonical read endpoint; keep a discovery
           // provider as a resilient mirror. Read-only search/streaming is public.
-          const responses = await Promise.allSettled([
-            fetchWithTimeout(
-              `https://api.audius.co/v1/tracks/search?query=${encodeURIComponent(query)}&limit=8`,
-              4000
-            ).then((r) => (r.ok ? r.json() : null)),
-            fetchWithTimeout(
-              `https://discoveryprovider.audius.co/v1/tracks/search?query=${encodeURIComponent(query)}&limit=8`,
-              4000
-            ).then((r) => (r.ok ? r.json() : null)),
+          // Search multiple token orders: Audius indexing can rank a combined
+          // title/artist query differently from title-only discovery.
+          const audiusQueries = [...new Set([
+            query,
+            cleanTitle,
+            `${primaryArtist} ${cleanTitle}`.trim(),
+          ].filter(Boolean))];
+          const requests = audiusQueries.flatMap((term) => [
+            `https://api.audius.co/v1/tracks/search?query=${encodeURIComponent(term)}&limit=8`,
+            `https://discoveryprovider.audius.co/v1/tracks/search?query=${encodeURIComponent(term)}&limit=8`,
           ]);
+          const responses = await Promise.allSettled(
+            requests.map((url) =>
+              fetchWithTimeout(url, 4000).then((r) => (r.ok ? r.json() : null))
+            )
+          );
           const seen = new Set<string>();
           const data: AudiusTrackRaw[] = [];
           for (const response of responses) {
@@ -1356,7 +1362,10 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
       const bestAud = audList
         .map((a) => ({
           a,
-          score: scoreAuthenticAudiusMatch(a, cleanTitle, artist || primaryArtist, targetDurationSec),
+          // Audius exposes the uploader account as its artist identity. For
+          // collaborations, verify against the requested primary artist only;
+          // requiring every featured artist to match one uploader rejects valid tracks.
+          score: scoreAuthenticAudiusMatch(a, cleanTitle, primaryArtist || artist, targetDurationSec),
         }))
         .filter((x): x is { a: AudiusTrackRaw; score: number } => x.score !== null)
         .sort((x, y) => y.score - x.score)[0]?.a;
@@ -1490,6 +1499,34 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
           };
         })
       : [];
+    const audiusCandidateDiagnostics = audiusSettled.status === 'fulfilled'
+      ? ((audiusSettled.value?.data || []) as AudiusTrackRaw[]).slice(0, 12).map((candidate) => {
+          const uploader = String(candidate.user?.name || candidate.user?.handle || '');
+          const score = scoreAuthenticAudiusMatch(
+            candidate,
+            cleanTitle,
+            primaryArtist || artist,
+            targetDurationSec
+          );
+          const reason = !candidate.id || !candidate.title
+            ? 'missing_track_identity'
+            : Number(candidate.duration || 0) < 75
+              ? 'duration_too_short'
+              : candidate.user?.is_verified !== true
+                ? 'uploader_not_verified'
+                : score === null
+                  ? 'strict_match_rejected'
+                  : 'accepted';
+          return {
+            title: String(candidate.title || '').slice(0, 120),
+            uploader: uploader.slice(0, 120),
+            verified: candidate.user?.is_verified === true,
+            duration: Number(candidate.duration || 0),
+            score,
+            reason,
+          };
+        })
+      : [];
     const diagnostics = {
       providers: {
         saavn: {
@@ -1534,6 +1571,7 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
         },
       },
       saavnCandidates: saavnCandidateDiagnostics,
+      audiusCandidates: audiusCandidateDiagnostics,
       output: {
         has320kbps: Boolean(streamUrls['320kbps']),
         has160kbps: Boolean(streamUrls['160kbps']),
