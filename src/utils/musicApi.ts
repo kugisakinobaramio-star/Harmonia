@@ -22,6 +22,7 @@ import {
   hasFullAudioStream,
   isRemixOrKnockoff,
   isPlausibleSongDuration,
+  isRelevantTrackTitle,
   isUnnecessaryNoLyricsTrack,
   parsePlainLyricsToLines,
   toProxiedImageUrl,
@@ -212,6 +213,7 @@ export async function searchSongs(
         .filter(
           (t) =>
             isPlausibleSongDuration(t.duration) &&
+            isRelevantTrackTitle(t.name, trimmed) &&
             (languageFilter === 'All' ? true : t.language === languageFilter) &&
             !isRemixOrKnockoff(`${t.name} ${t.albumName}`, trimmed, t.artist, trimmed)
         )
