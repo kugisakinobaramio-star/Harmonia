@@ -122,6 +122,8 @@ export function RightPanel({
                   downloaded={downloadedIds.has(currentTrack.id)}
                   downloading={downloadingIds.has(currentTrack.id)}
                   onClick={() => onToggleDownload(currentTrack)}
+                  disabled={currentTrack.offlineAvailable === false}
+                  disabledReason="This provider supports online listening only"
                   size="sm"
                   className="mt-0.5"
                 />
@@ -249,6 +251,8 @@ export function RightPanel({
                         downloaded={downloadedIds.has(track.id)}
                         downloading={downloadingIds.has(track.id)}
                         onClick={() => onToggleDownload(track)}
+                        disabled={track.offlineAvailable === false}
+                        disabledReason="This provider supports online listening only"
                         size="xs"
                         className="mr-0.5"
                       />
