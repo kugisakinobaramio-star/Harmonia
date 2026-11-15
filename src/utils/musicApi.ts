@@ -242,10 +242,16 @@ export async function searchSongs(
     };
   }
 
-  const localMatches = filterAndRankTracks(SEED_TRACKS, trimmed, {
+  const rankedLocalMatches = filterAndRankTracks(SEED_TRACKS, trimmed, {
     prioritizeLyrics,
     languageFilter,
   });
+  // Lyrics are a ranking preference, never a reason to hide a valid song.
+  const localMatches = rankedLocalMatches.length
+    ? rankedLocalMatches
+    : prioritizeLyrics
+      ? filterAndRankTracks(SEED_TRACKS, trimmed, { prioritizeLyrics: false, languageFilter })
+      : rankedLocalMatches;
 
   try {
     const res = await fetch(
@@ -271,7 +277,6 @@ export async function searchSongs(
         .map(mapSaavnSong)
         .filter(
           (t) =>
-            (!prioritizeLyrics || !isUnnecessaryNoLyricsTrack(t)) &&
             isPlausibleSongDuration(t.duration) &&
             !isRemixOrKnockoff(`${t.name} ${t.albumName}`, trimmed, t.artist, trimmed)
         );
