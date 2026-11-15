@@ -105,6 +105,8 @@ export interface RecommendationShelf {
 }
 
 export interface CollectionTarget {
+  /** Official Spotify iframe player URL for Spotify-backed collections. */
+  spotifyEmbedUrl?: string;
   kind: 'playlist' | 'artist' | 'album' | 'liked' | 'recent' | 'recommendations';
   id: string;
   title: string;
