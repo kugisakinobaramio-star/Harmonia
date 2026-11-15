@@ -26,7 +26,6 @@ import {
   isPlausibleSongDuration,
   isRelevantTrackTitle,
   isUnnecessaryNoLyricsTrack,
-  parsePlainLyricsToLines,
   toProxiedImageUrl,
 } from './playerEngine';
 
@@ -690,11 +689,9 @@ export async function fetchTrackLyrics(track: Track): Promise<{ lines: LyricLine
     return { lines: track.lyrics, synced: true };
   }
 
-  const fallbackLines = parsePlainLyricsToLines(
-    `${track.name}\n${track.artist}\n${track.albumName}`,
-    track.duration
-  );
-  return { lines: fallbackLines, synced: false };
+  // Do not fabricate lyric lines from track metadata. An empty result lets
+  // the UI state clearly that lyrics are unavailable for this recording.
+  return { lines: [], synced: false };
 }
 
 export interface BackendUserState {
