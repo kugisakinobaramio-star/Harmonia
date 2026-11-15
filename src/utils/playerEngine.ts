@@ -217,10 +217,14 @@ export function resolveNextTrackIndex(params: {
   return Math.max(0, Math.min(queueLength - 1, next));
 }
 
-export function getTitleOnlySearchFallback(query: string): string {
+export function getSearchFallbackQueries(query: string): string[] {
   const tokens = query.trim().split(/\s+/).filter(Boolean);
-  if (tokens.length < 3) return '';
-  return tokens.slice(0, -2).join(' ');
+  if (tokens.length < 3) return [];
+  // Try removing one trailing artist token, then two. This handles both
+  // one-word and two-word artist names without assuming every artist has
+  // the same number of words.
+  return [tokens.slice(0, -1).join(' '), tokens.slice(0, -2).join(' ')]
+    .filter((candidate, index, all) => Boolean(candidate) && all.indexOf(candidate) === index);
 }
 
 export function isMatchingLyricsCandidate(
