@@ -143,6 +143,7 @@ function loadLocalSnapshot(): {
   languageAffinity?: Record<string, number>;
   genreAffinity?: Record<string, number>;
   playCounts?: Record<string, number>;
+  playedTracks?: Record<string, Track>;
   volume?: number;
   quality?: AudioQuality;
   eqPreset?: EqPreset;
@@ -226,6 +227,9 @@ export default function App() {
   );
   const [playCounts, setPlayCounts] = useState<Record<string, number>>(
     initialSnap.playCounts || {}
+  );
+  const [playedTracks, setPlayedTracks] = useState<Record<string, Track>>(
+    initialSnap.playedTracks || {}
   );
 
   // Audio playback state
@@ -367,6 +371,7 @@ export default function App() {
           languageAffinity,
           genreAffinity,
           playCounts,
+          playedTracks,
           volume,
           quality,
           eqPreset,
@@ -389,6 +394,7 @@ export default function App() {
     languageAffinity,
     genreAffinity,
     playCounts,
+    playedTracks,
     volume,
     quality,
     eqPreset,
@@ -950,6 +956,7 @@ export default function App() {
       // Update local affinity + recently played + backend event
       setRecentlyPlayed((prev) => [track, ...prev.filter((t) => t.id !== track.id)].slice(0, 20));
       setPlayCounts((prev) => ({ ...prev, [track.id]: (prev[track.id] || 0) + 1 }));
+      setPlayedTracks((prev) => ({ ...prev, [track.id]: track }));
       const primaryArtist = track.artist.split(',')[0]?.trim();
       if (primaryArtist) {
         setArtistAffinity((prev) => ({
@@ -1685,6 +1692,7 @@ export default function App() {
                 likedCount={likedTracks.length}
                 likedTracks={likedTracks}
                 playCounts={playCounts}
+                playedTracks={Object.values(playedTracks)}
                 tasteHighlights={tasteHighlights}
                 onPlayTrackList={playTrackList}
                 onOpenPlaylist={openPlaylistCollection}
