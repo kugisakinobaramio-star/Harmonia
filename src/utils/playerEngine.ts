@@ -218,13 +218,27 @@ export function resolveNextTrackIndex(params: {
 }
 
 export function getSearchFallbackQueries(query: string): string[] {
-  const tokens = query.trim().split(/\s+/).filter(Boolean);
+  const trimmed = query.trim();
+  if (!trimmed) return [];
+
+  // Explicit "title - artist", "artist - title", "title by artist", and
+  // comma-separated searches give us a reliable boundary to try both sides.
+  const parts = trimmed.split(/\s+(?:-|–|—|by)\s+|,\s*/i).map((part) => part.trim()).filter(Boolean);
+  if (parts.length === 2) {
+    return [...new Set([parts[0], parts[1], `${parts[1]} ${parts[0]}`])];
+  }
+
+  const tokens = trimmed.split(/\s+/).filter(Boolean);
   if (tokens.length < 3) return [];
-  // Try removing one trailing artist token, then two. This handles both
-  // one-word and two-word artist names without assuming every artist has
-  // the same number of words.
-  return [tokens.slice(0, -1).join(' '), tokens.slice(0, -2).join(' ')]
-    .filter((candidate, index, all) => Boolean(candidate) && all.indexOf(candidate) === index);
+
+  // Free-text searches have no dependable title/artist boundary. Try a
+  // shorter prefix and suffix; the client still validates every result
+  // against the complete original query before displaying it.
+  return [
+    tokens.slice(0, -1).join(' '),
+    tokens.slice(0, -2).join(' '),
+    tokens.slice(2).join(' '),
+  ].filter((candidate, index, all) => Boolean(candidate) && all.indexOf(candidate) === index);
 }
 
 export function isMatchingLyricsCandidate(
