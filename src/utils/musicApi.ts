@@ -943,10 +943,12 @@ export async function resolveTrackStreams(
               ? json.offlineAvailable
               : track.offlineAvailable,
           };
-          resolvedTrackCache.set(track.id, {
-            value: entry,
-            expiresAt: Date.now() + 5 * 60_000,
-          });
+          if (entry.sourceProvider !== 'Jamendo') {
+            resolvedTrackCache.set(track.id, {
+              value: entry,
+              expiresAt: Date.now() + 5 * 60_000,
+            });
+          }
           failedResolveUntil.delete(track.id);
           return { ...track, ...entry };
         }
