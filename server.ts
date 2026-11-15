@@ -1043,7 +1043,7 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
     name?: string;
     format?: string;
     size?: string;
-    private?: string;
+    private?: string | boolean;
   }
 
   function hasReusableArchiveLicense(value: string): boolean {
@@ -1114,6 +1114,7 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
             const size = Number(file.size || 0);
             return (
               /\.(?:mp3|ogg|opus|m4a|flac)$/i.test(name) &&
+              file.private !== true &&
               file.private !== 'true' &&
               (!size || size <= 150 * 1024 * 1024)
             );
