@@ -1,16 +1,22 @@
-import { Clock, Heart, ListPlus, Play, Plus, Search, Shuffle, Video } from 'lucide-react';
+import { ArrowDown, Clock, Heart, ListPlus, Loader2, Play, Plus, Search, Shuffle, Video } from 'lucide-react';
 import { useState } from 'react';
 import type { CollectionTarget, Track } from '../types/music';
+import { isCollectionFullyDownloaded } from '../utils/offlineStore';
 import { formatTime, sortTracks } from '../utils/playerEngine';
 import { CoverImage } from './CoverImage';
+import { DownloadButton } from './DownloadButton';
 
 interface CollectionViewProps {
   collection: CollectionTarget;
   currentTrackId?: string;
   isPlaying: boolean;
   likedMap: Record<string, Track>;
+  downloadedIds: Set<string>;
+  downloadingIds: Set<string>;
   onPlayList: (tracks: Track[], startIndex: number, shuffle?: boolean) => void;
   onToggleLike: (track: Track) => void;
+  onToggleDownload: (track: Track) => void;
+  onDownloadAll: (tracks: Track[]) => void;
   onEnqueue: (track: Track) => void;
   onAddToPlaylist: (track: Track) => void;
   onOpenVideo: (track: Track) => void;
@@ -21,8 +27,12 @@ export function CollectionView({
   currentTrackId,
   isPlaying,
   likedMap,
+  downloadedIds,
+  downloadingIds,
   onPlayList,
   onToggleLike,
+  onToggleDownload,
+  onDownloadAll,
   onEnqueue,
   onAddToPlaylist,
   onOpenVideo,
@@ -43,6 +53,8 @@ export function CollectionView({
   const sorted = sortTracks(filtered, sortBy);
   const totalSeconds = sorted.reduce((acc, t) => acc + (t.duration || 0), 0);
   const totalMins = Math.round(totalSeconds / 60);
+  const allDownloaded = isCollectionFullyDownloaded(sorted, downloadedIds);
+  const anyDownloading = sorted.some((t) => downloadingIds.has(t.id));
 
   return (
     <section aria-label={collection.title} className="pb-8">
@@ -116,6 +128,33 @@ export function CollectionView({
               >
                 <Shuffle className="h-4 w-4" />
               </button>
+              <button
+                type="button"
+                onClick={() => onDownloadAll(sorted)}
+                disabled={anyDownloading}
+                aria-label={
+                  anyDownloading
+                    ? `Downloading ${collection.title}`
+                    : allDownloaded
+                      ? `Remove downloaded tracks in ${collection.title}`
+                      : `Download all ${sorted.length} songs in ${collection.title}`
+                }
+                aria-pressed={allDownloaded}
+                title={allDownloaded ? 'Downloaded — click to remove' : 'Download all songs for offline listening'}
+                className={`grid h-9 w-9 place-items-center rounded-full border transition-all disabled:cursor-wait ${
+                  allDownloaded
+                    ? 'border-[#1DB954] bg-[#1DB954] text-black shadow-md'
+                    : anyDownloading
+                      ? 'border-[#1DB954] text-[#1DB954]'
+                      : 'border-white/15 text-zinc-300 hover:border-white hover:text-white'
+                }`}
+              >
+                {anyDownloading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <ArrowDown className="h-4 w-4 stroke-[2.5]" />
+                )}
+              </button>
             </>
           )}
         </div>
@@ -156,7 +195,7 @@ export function CollectionView({
         </div>
       ) : (
         <div className="mt-4">
-          <div className="grid grid-cols-[32px_1fr_auto] items-center gap-3 border-b border-white/[0.08] px-3 pb-2 text-xs font-semibold uppercase tracking-wider text-zinc-400 md:grid-cols-[32px_1.6fr_1fr_84px_124px]">
+          <div className="grid grid-cols-[32px_1fr_auto] items-center gap-3 border-b border-white/[0.08] px-3 pb-2 text-xs font-semibold uppercase tracking-wider text-zinc-400 md:grid-cols-[32px_1.6fr_1fr_76px_184px]">
             <span className="text-center">#</span>
             <span>Title</span>
             <span className="hidden md:block">Album</span>
@@ -170,10 +209,12 @@ export function CollectionView({
             {sorted.map((track, idx) => {
               const isCurrent = track.id === currentTrackId;
               const isLiked = Boolean(likedMap[track.id]);
+              const isDownloaded = downloadedIds.has(track.id);
+              const isDownloading = downloadingIds.has(track.id);
               return (
                 <div
                   key={`${collection.id}-${track.id}-${idx}`}
-                  className={`group grid grid-cols-[32px_1fr_auto] items-center gap-3 rounded-md px-3 py-2 transition-colors md:grid-cols-[32px_1.6fr_1fr_84px_124px] ${
+                  className={`group grid grid-cols-[32px_1fr_auto] items-center gap-3 rounded-md px-3 py-2 transition-colors md:grid-cols-[32px_1.6fr_1fr_76px_184px] ${
                     isCurrent ? 'bg-white/[0.1]' : 'hover:bg-white/[0.06]'
                   }`}
                 >
@@ -223,6 +264,19 @@ export function CollectionView({
                   </div>
 
                   <div className="flex items-center justify-end gap-1.5">
+                    <DownloadButton
+                      trackName={track.name}
+                      downloaded={isDownloaded}
+                      downloading={isDownloading}
+                      onClick={() => onToggleDownload(track)}
+                      size="xs"
+                      className={
+                        isDownloaded || isDownloading
+                          ? 'opacity-100'
+                          : 'opacity-100 sm:opacity-0 sm:group-hover:opacity-100'
+                      }
+                    />
+
                     <button
                       type="button"
                       onClick={() => onToggleLike(track)}
@@ -251,7 +305,7 @@ export function CollectionView({
                       onClick={() => onAddToPlaylist(track)}
                       aria-label={`Add ${track.name} to playlist`}
                       title="Add to playlist"
-                      className="hidden p-1 text-zinc-400 opacity-0 transition-opacity group-hover:opacity-100 hover:text-white sm:inline-flex"
+                      className="inline-flex shrink-0 p-1 text-zinc-400 opacity-100 transition-opacity hover:text-white sm:opacity-0 sm:group-hover:opacity-100"
                     >
                       <Plus className="h-3.5 w-3.5" />
                     </button>

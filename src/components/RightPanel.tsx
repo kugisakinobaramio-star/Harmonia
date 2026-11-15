@@ -2,6 +2,7 @@ import { ArrowDown, ArrowUp, Mic2, Play, Trash2, X } from 'lucide-react';
 import type { LyricLine, RightPanelMode, Track } from '../types/music';
 import { resolveActiveLyricPair } from '../utils/playerEngine';
 import { CoverImage } from './CoverImage';
+import { DownloadButton } from './DownloadButton';
 
 interface RightPanelProps {
   mode: RightPanelMode;
@@ -12,6 +13,9 @@ interface RightPanelProps {
   lyrics: LyricLine[];
   currentTime: number;
   duration: number;
+  downloadedIds: Set<string>;
+  downloadingIds: Set<string>;
+  onToggleDownload: (track: Track) => void;
   onOpenFullLyrics: () => void;
   onPlayIndex: (idx: number) => void;
   onRemoveIndex: (idx: number) => void;
@@ -28,6 +32,9 @@ export function RightPanel({
   lyrics,
   currentTime,
   duration,
+  downloadedIds,
+  downloadingIds,
+  onToggleDownload,
   onOpenFullLyrics,
   onPlayIndex,
   onRemoveIndex,
@@ -99,15 +106,25 @@ export function RightPanel({
                 />
               </div>
 
-              <div>
-                <h2 className="truncate text-lg font-extrabold text-white">
-                  {currentTrack.name}
-                </h2>
-                <p className="truncate text-sm text-zinc-400">{currentTrack.artist}</p>
-                <p className="mt-0.5 truncate text-xs text-zinc-500">
-                  {currentTrack.albumName}
-                  {currentTrack.language ? ` · ${currentTrack.language}` : ''}
-                </p>
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <h2 className="truncate text-lg font-extrabold text-white">
+                    {currentTrack.name}
+                  </h2>
+                  <p className="truncate text-sm text-zinc-400">{currentTrack.artist}</p>
+                  <p className="mt-0.5 truncate text-xs text-zinc-500">
+                    {currentTrack.albumName}
+                    {currentTrack.language ? ` · ${currentTrack.language}` : ''}
+                  </p>
+                </div>
+                <DownloadButton
+                  trackName={currentTrack.name}
+                  downloaded={downloadedIds.has(currentTrack.id)}
+                  downloading={downloadingIds.has(currentTrack.id)}
+                  onClick={() => onToggleDownload(currentTrack)}
+                  size="sm"
+                  className="mt-0.5"
+                />
               </div>
 
               {/* Compact Lyrics Preview Card */}
@@ -227,6 +244,14 @@ export function RightPanel({
                     </button>
 
                     <div className="flex items-center gap-0.5">
+                      <DownloadButton
+                        trackName={track.name}
+                        downloaded={downloadedIds.has(track.id)}
+                        downloading={downloadingIds.has(track.id)}
+                        onClick={() => onToggleDownload(track)}
+                        size="xs"
+                        className="mr-0.5"
+                      />
                       <button
                         type="button"
                         disabled={idx === 0}

@@ -10,10 +10,13 @@ interface LibraryViewProps {
   recentlyPlayed: Track[];
   currentTrackId?: string;
   isPlaying: boolean;
+  downloadedIds: Set<string>;
+  downloadingIds: Set<string>;
   onPlayList: (tracks: Track[], startIndex: number) => void;
   onOpenPlaylist: (pl: CuratedPlaylist) => void;
   onEnqueue: (track: Track) => void;
   onToggleLike: (track: Track) => void;
+  onToggleDownload: (track: Track) => void;
   onAddToPlaylist: (track: Track) => void;
   onOpenCreatePlaylist: () => void;
   onDeletePlaylist: (playlistId: string) => void;
@@ -26,10 +29,13 @@ export function LibraryView({
   recentlyPlayed,
   currentTrackId,
   isPlaying,
+  downloadedIds,
+  downloadingIds,
   onPlayList,
   onOpenPlaylist,
   onEnqueue,
   onToggleLike,
+  onToggleDownload,
   onAddToPlaylist,
   onOpenCreatePlaylist,
   onDeletePlaylist,
@@ -146,9 +152,12 @@ export function LibraryView({
                 isCurrent={track.id === currentTrackId}
                 isPlaying={isPlaying}
                 isLiked
+                isDownloaded={downloadedIds.has(track.id)}
+                isDownloading={downloadingIds.has(track.id)}
                 onPlay={() => onPlayList(likedTracks, idx)}
                 onEnqueue={() => onEnqueue(track)}
                 onToggleLike={() => onToggleLike(track)}
+                onToggleDownload={() => onToggleDownload(track)}
                 onAddToPlaylist={() => onAddToPlaylist(track)}
                 onOpenVideo={() =>
                   onOpenVideoQuery(`${track.name} ${track.artist} official music video`)
@@ -172,9 +181,12 @@ export function LibraryView({
                 isCurrent={track.id === currentTrackId}
                 isPlaying={isPlaying}
                 isLiked={Boolean(likedMap[track.id])}
+                isDownloaded={downloadedIds.has(track.id)}
+                isDownloading={downloadingIds.has(track.id)}
                 onPlay={() => onPlayList(recentlyPlayed, idx)}
                 onEnqueue={() => onEnqueue(track)}
                 onToggleLike={() => onToggleLike(track)}
+                onToggleDownload={() => onToggleDownload(track)}
                 onAddToPlaylist={() => onAddToPlaylist(track)}
                 onOpenVideo={() =>
                   onOpenVideoQuery(`${track.name} ${track.artist} official music video`)

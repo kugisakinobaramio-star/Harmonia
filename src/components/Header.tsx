@@ -101,7 +101,7 @@ export function Header({
   }, [openMenu]);
 
   return (
-    <header className="z-30 flex h-14 shrink-0 items-center justify-between gap-3 bg-black px-3 sm:h-16 sm:px-4">
+    <header className="z-30 flex h-14 shrink-0 items-center justify-between gap-1.5 bg-black px-2.5 sm:h-16 sm:gap-3 sm:px-4">
       {/* Left: Brand + Mobile Drawer + Spotify Back/Forward */}
       <div className="flex shrink-0 items-center gap-2">
         <button
@@ -202,7 +202,7 @@ export function Header({
       </div>
 
       {/* Right: Region selector, Audio EQ/Timer, Notifications, Profile */}
-      <div ref={rightActionsRef} className="flex shrink-0 items-center gap-2">
+      <div ref={rightActionsRef} className="flex shrink-0 items-center gap-1.5 sm:gap-2">
         {/* Location Selector */}
         <div className="relative">
           <button
@@ -210,7 +210,7 @@ export function Header({
             onClick={() => setOpenMenu((m) => (m === 'loc' ? 'none' : 'loc'))}
             aria-label="Select music location"
             aria-expanded={openMenu === 'loc'}
-            className="inline-flex h-9 items-center gap-1.5 rounded-full bg-[#1f1f1f] px-3 text-xs font-semibold text-zinc-200 transition-colors hover:bg-[#2a2a2a] hover:text-white"
+            className="inline-flex h-9 items-center gap-1 rounded-full bg-[#1f1f1f] px-2.5 text-xs font-semibold text-zinc-200 transition-colors hover:bg-[#2a2a2a] hover:text-white sm:gap-1.5 sm:px-3"
           >
             <MapPin className="h-3.5 w-3.5 text-[#1DB954]" />
             <span className="hidden md:inline">{REGION_LABELS[region]}</span>

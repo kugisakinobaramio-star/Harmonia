@@ -16,6 +16,7 @@ import {
 import type { AudioQuality, LyricLine, RepeatMode, Track } from '../types/music';
 import { formatTime, QUALITY_LABELS, resolveActiveLyricPair } from '../utils/playerEngine';
 import { CoverImage } from './CoverImage';
+import { DownloadButton } from './DownloadButton';
 
 interface ExpandedPlayerProps {
   open: boolean;
@@ -26,6 +27,8 @@ interface ExpandedPlayerProps {
   shuffle: boolean;
   repeatMode: RepeatMode;
   isLiked: boolean;
+  isDownloaded: boolean;
+  isDownloading: boolean;
   quality: AudioQuality;
   lyrics: LyricLine[];
   lyricsSynced: boolean;
@@ -36,6 +39,7 @@ interface ExpandedPlayerProps {
   onToggleShuffle: () => void;
   onCycleRepeat: () => void;
   onToggleLike: () => void;
+  onToggleDownload: () => void;
   onSeek: (seconds: number) => void;
   onOpenQueue: () => void;
   onOpenVideo: () => void;
@@ -52,6 +56,8 @@ export function ExpandedPlayer({
   shuffle,
   repeatMode,
   isLiked,
+  isDownloaded,
+  isDownloading,
   quality,
   lyrics,
   lyricsSynced,
@@ -62,6 +68,7 @@ export function ExpandedPlayer({
   onToggleShuffle,
   onCycleRepeat,
   onToggleLike,
+  onToggleDownload,
   onSeek,
   onOpenQueue,
   onOpenVideo,
@@ -82,7 +89,7 @@ export function ExpandedPlayer({
       className="fixed inset-0 z-50 flex flex-col overflow-y-auto bg-gradient-to-b from-[#1f2621] via-[#121212] to-black text-white"
     >
       {/* Top Bar */}
-      <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-4 sm:px-8">
+      <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-2.5 sm:px-8 sm:py-4">
         <button
           type="button"
           onClick={onClose}
@@ -113,10 +120,10 @@ export function ExpandedPlayer({
       </div>
 
       {/* Main Content */}
-      <div className="mx-auto grid w-full max-w-6xl flex-1 items-center gap-8 px-5 pb-8 pt-2 lg:grid-cols-[minmax(320px,440px)_1fr] lg:px-10">
+      <div className="mx-auto grid w-full max-w-6xl flex-1 items-center gap-5 px-5 pb-5 pt-1 sm:gap-8 sm:pb-8 sm:pt-2 lg:grid-cols-[minmax(300px,420px)_1fr] lg:px-10">
         {/* Left: Cover + Metadata + Full Transport */}
         <div className="mx-auto flex w-full max-w-[420px] flex-col">
-          <div className="overflow-hidden rounded-lg bg-black shadow-2xl">
+          <div className="mx-auto w-full max-w-[min(420px,36dvh)] overflow-hidden rounded-lg bg-black shadow-2xl lg:max-w-[min(400px,44dvh)]">
             <CoverImage
               src={track.image}
               alt={track.name}
@@ -124,9 +131,9 @@ export function ExpandedPlayer({
             />
           </div>
 
-          <div className="mt-6 flex items-center justify-between gap-3">
+          <div className="mt-4 flex items-center justify-between gap-3 sm:mt-6">
             <div className="min-w-0 flex-1">
-              <h2 className="truncate text-2xl font-extrabold tracking-tight text-white">
+              <h2 className="truncate text-xl font-extrabold tracking-tight text-white sm:text-2xl">
                 {track.name}
               </h2>
               <p className="mt-0.5 truncate text-sm font-medium text-zinc-300">{track.artist}</p>
@@ -148,7 +155,7 @@ export function ExpandedPlayer({
           </div>
 
           {/* Scrubber */}
-          <div className="mt-5">
+          <div className="mt-3 sm:mt-5">
             <div className="group/bar relative flex w-full items-center">
               <div
                 aria-hidden="true"
@@ -175,7 +182,7 @@ export function ExpandedPlayer({
           </div>
 
           {/* Transport */}
-          <div className="mt-3 flex items-center justify-between px-2">
+          <div className="mt-2 flex items-center justify-between px-2 sm:mt-3">
             <button
               type="button"
               onClick={onToggleShuffle}
@@ -198,12 +205,12 @@ export function ExpandedPlayer({
               type="button"
               onClick={onTogglePlay}
               aria-label={isPlaying ? 'Pause' : 'Play'}
-              className="grid h-16 w-16 place-items-center rounded-full bg-white text-black shadow-xl transition-transform hover:scale-105 active:scale-95"
+              className="grid h-14 w-14 place-items-center rounded-full bg-white text-black shadow-xl transition-transform hover:scale-105 active:scale-95 sm:h-16 sm:w-16"
             >
               {isPlaying ? (
-                <Pause className="h-7 w-7 fill-current" />
+                <Pause className="h-6 w-6 fill-current sm:h-7 sm:w-7" />
               ) : (
-                <Play className="h-7 w-7 fill-current pl-0.5" />
+                <Play className="h-6 w-6 fill-current pl-0.5 sm:h-7 sm:w-7" />
               )}
             </button>
 
@@ -227,7 +234,7 @@ export function ExpandedPlayer({
           </div>
 
           {/* Bottom Utility Row */}
-          <div className="mt-5 flex items-center justify-between text-xs text-zinc-400">
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-zinc-400 sm:mt-5">
             <button
               type="button"
               onClick={onCycleQuality}
@@ -236,7 +243,14 @@ export function ExpandedPlayer({
               Quality: {QUALITY_LABELS[quality]}
             </button>
 
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              <DownloadButton
+                trackName={track.name}
+                downloaded={isDownloaded}
+                downloading={isDownloading}
+                onClick={onToggleDownload}
+                variant="pill"
+              />
               <button
                 type="button"
                 onClick={onOpenVideo}

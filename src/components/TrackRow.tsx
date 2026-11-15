@@ -2,6 +2,7 @@ import { Heart, ListPlus, Play, Plus, Video } from 'lucide-react';
 import type { Track } from '../types/music';
 import { formatPlayCount, formatTime } from '../utils/playerEngine';
 import { CoverImage } from './CoverImage';
+import { DownloadButton } from './DownloadButton';
 
 interface TrackRowProps {
   track: Track;
@@ -9,9 +10,12 @@ interface TrackRowProps {
   isCurrent: boolean;
   isPlaying: boolean;
   isLiked: boolean;
+  isDownloaded: boolean;
+  isDownloading: boolean;
   onPlay: () => void;
   onEnqueue: () => void;
   onToggleLike: () => void;
+  onToggleDownload: () => void;
   onAddToPlaylist: () => void;
   onOpenVideo: () => void;
 }
@@ -22,9 +26,12 @@ export function TrackRow({
   isCurrent,
   isPlaying,
   isLiked,
+  isDownloaded,
+  isDownloading,
   onPlay,
   onEnqueue,
   onToggleLike,
+  onToggleDownload,
   onAddToPlaylist,
   onOpenVideo,
 }: TrackRowProps) {
@@ -79,10 +86,18 @@ export function TrackRow({
         <div className="truncate text-xs text-zinc-400">{metaParts.join(' · ')}</div>
       </button>
 
-      <div className="flex items-center gap-1.5 sm:gap-2">
+      <div className="flex items-center gap-1 sm:gap-1.5">
         <span className="mr-1 hidden font-mono-num text-xs text-zinc-400 sm:inline">
           {formatTime(track.duration)}
         </span>
+
+        <DownloadButton
+          trackName={track.name}
+          downloaded={isDownloaded}
+          downloading={isDownloading}
+          onClick={onToggleDownload}
+          size="xs"
+        />
 
         <button
           type="button"
@@ -100,7 +115,7 @@ export function TrackRow({
           onClick={onEnqueue}
           aria-label={`Add ${track.name} to queue`}
           title="Add to queue"
-          className="grid h-8 w-8 place-items-center rounded-full text-zinc-400 transition-colors hover:bg-white/10 hover:text-white"
+          className="hidden h-8 w-8 place-items-center rounded-full text-zinc-400 transition-colors hover:bg-white/10 hover:text-white sm:grid"
         >
           <ListPlus className="h-4 w-4" />
         </button>
@@ -110,7 +125,7 @@ export function TrackRow({
           onClick={onAddToPlaylist}
           aria-label={`Add ${track.name} to playlist`}
           title="Add to playlist"
-          className="hidden h-8 w-8 place-items-center rounded-full text-zinc-400 transition-colors hover:bg-white/10 hover:text-white sm:grid"
+          className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-zinc-400 transition-colors hover:bg-white/10 hover:text-white"
         >
           <Plus className="h-4 w-4" />
         </button>

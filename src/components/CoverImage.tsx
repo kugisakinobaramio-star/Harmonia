@@ -38,7 +38,7 @@ export function CoverImage({
           setImgSrc(fallbackSrc);
         }
       }}
-      className={className}
+      className={`bg-[#1f1f24] ${className}`}
     />
   );
 }

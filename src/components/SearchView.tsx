@@ -27,9 +27,12 @@ interface SearchViewProps {
   currentTrackId?: string;
   isPlaying: boolean;
   likedIds: Record<string, Track>;
+  downloadedIds: Set<string>;
+  downloadingIds: Set<string>;
   onPlayList: (tracks: Track[], startIndex: number) => void;
   onEnqueue: (track: Track) => void;
   onToggleLike: (track: Track) => void;
+  onToggleDownload: (track: Track) => void;
   onAddToPlaylist: (track: Track) => void;
   onOpenVideoQuery: (query: string) => void;
   onOpenVideoModal: (videos: VideoResult[], selectedId: string) => void;
@@ -57,9 +60,12 @@ export function SearchView({
   currentTrackId,
   isPlaying,
   likedIds,
+  downloadedIds,
+  downloadingIds,
   onPlayList,
   onEnqueue,
   onToggleLike,
+  onToggleDownload,
   onAddToPlaylist,
   onOpenVideoQuery,
   onOpenVideoModal,
@@ -310,9 +316,12 @@ export function SearchView({
                 isCurrent={track.id === currentTrackId}
                 isPlaying={isPlaying}
                 isLiked={Boolean(likedIds[track.id])}
+                isDownloaded={downloadedIds.has(track.id)}
+                isDownloading={downloadingIds.has(track.id)}
                 onPlay={() => onPlayList(songs, idx)}
                 onEnqueue={() => onEnqueue(track)}
                 onToggleLike={() => onToggleLike(track)}
+                onToggleDownload={() => onToggleDownload(track)}
                 onAddToPlaylist={() => onAddToPlaylist(track)}
                 onOpenVideo={() =>
                   onOpenVideoQuery(`${track.name} ${track.artist} official music video`)
