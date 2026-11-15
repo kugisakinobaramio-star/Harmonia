@@ -355,6 +355,10 @@ export default function App() {
   }, [showToast]);
 
   const handleToggleDownload = useCallback(async (track: Track) => {
+    if (track.offlineAvailable === false || track.sourceProvider === 'Jamendo') {
+      showToast('This provider supports online listening only in Harmonia.');
+      return;
+    }
     if (downloadingIds.has(track.id)) return;
     setDownloadingIds((current) => new Set(current).add(track.id));
     try {
