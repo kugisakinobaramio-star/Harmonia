@@ -267,8 +267,10 @@ function isInstrumentalOrSpam(name: string, album = ''): boolean {
   ].some((p) => hay.includes(p));
 }
 
-function inferLanguage(text: string, hintLang?: string): 'Hindi' | 'English' | 'J-Pop' | 'Other' {
+function inferLanguage(text: string, hintLang?: string): 'Hindi' | 'Punjabi' | 'English' | 'J-Pop' | 'Other' {
+  if (hintLang === 'Punjabi') return 'Punjabi';
   if (hintLang === 'Hindi' || hintLang === 'English' || hintLang === 'J-Pop') return hintLang;
+  if (/[\u0a00-\u0a7f]/.test(text)) return 'Punjabi';
   if (/[\u3040-\u30ff\u4e00-\u9faf]/.test(text)) return 'J-Pop';
   const low = text.toLowerCase();
   if (
