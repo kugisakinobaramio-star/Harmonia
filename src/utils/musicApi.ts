@@ -655,6 +655,7 @@ export async function resolveTrackStreams(
   options: { forceRefresh?: boolean } = {}
 ): Promise<Track & { alternates?: string[] }> {
   const cached = resolvedTrackCache.get(track.id);
+  if (options.forceRefresh) resolvedTrackCache.delete(track.id);
   if (!options.forceRefresh && hasFullAudioStream(track)) {
     return { ...track, alternates: cached?.alternates, youtubeId: cached?.youtubeId || track.youtubeId };
   }
@@ -708,6 +709,15 @@ export async function resolveTrackStreams(
     }
   } catch {
     // Fallback gracefully
+  }
+  if (options.forceRefresh) {
+    return {
+      ...track,
+      streamUrls: undefined,
+      previewUrl: undefined,
+      youtubeId: undefined,
+      alternates: [],
+    };
   }
   return track;
 }
