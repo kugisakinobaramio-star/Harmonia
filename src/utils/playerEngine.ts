@@ -224,7 +224,13 @@ export function isAllowedJamendoNonCommercialLicense(value: string): boolean {
       !['http:', 'https:'].includes(url.protocol) ||
       url.hostname.toLowerCase() !== 'creativecommons.org'
     ) return false;
-    return /^\\/licenses\\/by-nc(?:-sa|-nd)?\\/[0-9.]+\\/?$/i.test(url.pathname);
+    const parts = url.pathname.toLowerCase().split('/').filter(Boolean);
+    return (
+      parts.length === 3 &&
+      parts[0] === 'licenses' &&
+      /^by-nc(?:-sa|-nd)?$/.test(parts[1]) &&
+      /^\d+(?:\.\d+)*$/.test(parts[2])
+    );
   } catch {
     return false;
   }
