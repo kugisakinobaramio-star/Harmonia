@@ -1,7 +1,6 @@
 import express from 'express';
 import path from 'node:path';
 import { Readable } from 'node:stream';
-import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
 import { isPublicAddress } from './src/utils/networkSecurity.ts';
 import { fileURLToPath } from 'node:url';
