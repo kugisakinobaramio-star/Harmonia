@@ -1,3 +1,4 @@
+import { preserveTrackAfterFailedRefresh } from './streamRefresh.ts';
 import { apiUrl } from './apiUrl';
 import {
   ARTWORK,
@@ -874,7 +875,7 @@ export async function resolveTrackStreams(
       // A failed refresh is not evidence that the existing source metadata is bad.
       // Keep the caller's last-known-good streams so the playback layer can retry
       // them (and exclude only URLs that actually failed in this playback session).
-      return track as Track & { alternates?: string[] };
+      return preserveTrackAfterFailedRefresh(track);
     }
     return track;
   })();
