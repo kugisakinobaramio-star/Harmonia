@@ -989,11 +989,13 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
     }
 
     const cacheKey = `${title.toLowerCase()}::${artist.toLowerCase()}`;
+    const forceRefresh = String(req.query.refresh || '') === '1';
     const cached = streamResolveCache.get(cacheKey);
-    if (cached && (Object.keys(cached.streamUrls).length > 0 || cached.youtubeId)) {
+    if (!forceRefresh && cached && (Object.keys(cached.streamUrls).length > 0 || cached.youtubeId)) {
       res.json({ ok: true, ...cached });
       return;
     }
+    if (forceRefresh) streamResolveCache.delete(cacheKey);
 
     const primaryArtist = artist.split(',')[0]?.trim() || '';
     const cleanTitle = title.split('(')[0]?.trim() || title;
@@ -1213,9 +1215,10 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
       }
     }
 
-    // Always resolve YouTube ID if no full 320k stream exists, ensuring full playback length
+    // Resolve YouTube as an additional recovery source after failed URLs, even
+    // when a provider returned a nominal 320k stream that the browser could not play.
     let youtubeId: string | undefined;
-    if (!streamUrls['320kbps']) {
+    if (forceRefresh || !streamUrls['320kbps']) {
       youtubeId = await resolveYouTubeAudioId(cleanTitle, primaryArtist, targetDurationSec);
     }
 
