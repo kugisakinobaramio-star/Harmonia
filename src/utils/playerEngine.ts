@@ -871,6 +871,25 @@ export function addTrackToPlaylist(
   return { playlists: next, added };
 }
 
+export function removeQueueItem(
+  queue: Track[],
+  currentIndex: number,
+  removeIndex: number
+): { queue: Track[]; currentIndex: number; removedCurrent: boolean } {
+  if (!Number.isInteger(removeIndex) || removeIndex < 0 || removeIndex >= queue.length) {
+    return { queue, currentIndex, removedCurrent: false };
+  }
+  const next = queue.filter((_, index) => index !== removeIndex);
+  const removedCurrent = removeIndex === currentIndex;
+  if (!next.length) return { queue: next, currentIndex: 0, removedCurrent };
+  const nextIndex = removeIndex < currentIndex
+    ? currentIndex - 1
+    : removedCurrent
+      ? Math.min(removeIndex, next.length - 1)
+      : Math.min(Math.max(0, currentIndex), next.length - 1);
+  return { queue: next, currentIndex: nextIndex, removedCurrent };
+}
+
 export function reorderQueueItem(
   queue: Track[],
   currentIndex: number,
