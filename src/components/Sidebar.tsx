@@ -1,4 +1,4 @@
-import { Heart, Library, Plus, X } from 'lucide-react';
+import { Download, Heart, Library, Plus, X } from 'lucide-react';
 import { useState } from 'react';
 import { ARTWORK, SEED_ARTISTS, SEED_PLAYLISTS } from '../data/catalog';
 import type { ArtistProfile, CuratedPlaylist, Track, ViewName } from '../types/music';
@@ -214,6 +214,8 @@ export function Sidebar({
               );
             })}
         </div>
+
+        <button type="button" onClick={() => { onSelectView('downloads'); onCloseMobile(); }} className="mb-2 flex w-full items-center gap-2 rounded-md bg-[#1a1a1d] px-3 py-2 text-xs font-semibold text-zinc-300 hover:bg-[#252529]"><Download className="h-4 w-4" /> Offline Downloads</button>
 
         {/* Utility shortcuts at bottom of sidebar */}
         <div className="mt-2 flex gap-1.5 border-t border-white/[0.06] pt-2.5">

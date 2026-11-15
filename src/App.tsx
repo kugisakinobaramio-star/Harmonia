@@ -5,6 +5,7 @@ import { ExpandedPlayer } from './components/ExpandedPlayer';
 import { Header } from './components/Header';
 import { HomeView } from './components/HomeView';
 import { LibraryView } from './components/LibraryView';
+import { OfflineDownloadsView } from './components/OfflineDownloadsView';
 import { LyricsView } from './components/LyricsView';
 import {
   AddToPlaylistModal,
@@ -1766,6 +1767,8 @@ export default function App() {
               />
             )}
 
+            {activeView === 'downloads' && <OfflineDownloadsView onPlayList={playTrackList} onToast={showToast} />}
+
             {activeView === 'lyrics' && (
               <LyricsView
                 track={currentTrack}
@@ -1864,30 +1867,9 @@ export default function App() {
           setQuality(nextQ);
           showToast(`Audio quality: ${nextQ}`);
         }}
-        onDownload={async () => {
-          if (!currentTrack) return;
-          showToast(`Preparing download for "${currentTrack.name}"...`);
-          let streamUrl = currentTrack.streamUrls?.['320kbps'] || currentTrack.streamUrls?.['160kbps'] || currentTrack.previewUrl;
-          if (!streamUrl && currentTrack.youtubeId) {
-            streamUrl = `https://www.youtube.com/watch?v=${currentTrack.youtubeId}`;
-          }
-          if (!streamUrl) {
-            const resolved = await resolveTrackStreams(currentTrack);
-            streamUrl = resolved.streamUrls?.['320kbps'] || resolved.streamUrls?.['160kbps'] || resolved.previewUrl;
-          }
-          if (!streamUrl) {
-            showToast('Unable to fetch stream for download.');
-            return;
-          }
-          const cleanName = `${currentTrack.artist} - ${currentTrack.name}`.replace(/["\\/|?*<>]|[:]/g, '_');
-          const dlUrl = `/api/music/download?url=${encodeURIComponent(streamUrl)}&filename=${encodeURIComponent(cleanName)}`;
-          const a = document.createElement('a');
-          a.href = dlUrl;
-          a.download = `${cleanName}.mp3`;
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          showToast(`Downloaded "${currentTrack.name}" successfully!`);
+        onDownload={() => {
+          navigateTo('downloads', null);
+          showToast('Import audio files in Offline Downloads to listen without internet.');
         }}
       />
 
