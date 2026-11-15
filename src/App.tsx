@@ -575,8 +575,52 @@ export default function App() {
       incoming.volume = 0;
       incoming.muted = volume === 0;
 
-      incoming.play().then(() => {
+      // Some hosts leave a media request stalled without firing an error.
+      // Advance only if this candidate is still active and playback never began.
+      const candidateSlot: 1 | 2 = incoming === a1 ? 1 : 2;
+      let candidateFailed = false;
+      let startupTimer = 0;
+      const clearCandidateWatch = () => {
+        if (startupTimer) window.clearTimeout(startupTimer);
+        incoming.removeEventListener('playing', onCandidatePlaying);
+        incoming.removeEventListener('error', onCandidateError);
+      };
+      const onCandidatePlaying = () => clearCandidateWatch();
+      const onCandidateError = () => {
+        if (candidateFailed) return;
+        candidateFailed = true;
+        clearCandidateWatch();
         if (playSeq !== playbackSeqRef.current) return;
+        incoming.pause();
+        incoming.removeAttribute('src');
+        incoming.load();
+        loadAndPlayCandidate(idx + 1, playSeq, onAllFailed);
+      };
+      incoming.addEventListener('playing', onCandidatePlaying, { once: true });
+      incoming.addEventListener('error', onCandidateError, { once: true });
+      startupTimer = window.setTimeout(() => {
+        if (
+          playSeq !== playbackSeqRef.current ||
+          activeAudioSlotRef.current !== candidateSlot ||
+          candidateIdxRef.current !== idx
+        ) {
+          clearCandidateWatch();
+          return;
+        }
+        if (!incoming.paused && incoming.currentTime < 0.25) {
+          onCandidateError();
+        } else {
+          clearCandidateWatch();
+        }
+      }, 12_000);
+
+      incoming.play().then(() => {
+        if (
+          candidateFailed ||
+          playSeq !== playbackSeqRef.current ||
+          activeAudioSlotRef.current !== candidateSlot ||
+          incoming.src !== url
+        ) return;
         const targetVol = volume / 100;
         const steps = 15;
         const stepTime = 100; // 1.5 seconds total crossfade
@@ -601,9 +645,7 @@ export default function App() {
           }
         }, stepTime);
       }).catch(() => {
-        if (playSeq === playbackSeqRef.current) {
-          loadAndPlayCandidate(idx + 1, playSeq, onAllFailed);
-        }
+        if (!candidateFailed) onCandidateError();
       });
     },
     [volume]
