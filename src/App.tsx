@@ -77,12 +77,11 @@ function buildStreamCandidates(
   extraAlternates: string[] = []
 ): string[] {
   const fullRaw: string[] = [];
-  const previewRaw: string[] = [];
 
+  // Never silently treat a 30-second catalogue preview as a full track.
   const pushClassified = (u?: string) => {
-    if (!u) return;
-    if (isShortPreviewUrl(u)) previewRaw.push(u);
-    else fullRaw.push(u);
+    if (!u || isShortPreviewUrl(u)) return;
+    fullRaw.push(u);
   };
 
   pushClassified(selectStreamUrl(track, quality));
@@ -111,7 +110,7 @@ function buildStreamCandidates(
     }
   };
 
-  for (const raw of [...fullRaw, ...previewRaw]) {
+  for (const raw of fullRaw) {
     if (raw.startsWith('/') || raw.startsWith('data:') || raw.startsWith('blob:')) {
       pushUnique(raw);
     } else if (/^https?:\/\//i.test(raw)) {
@@ -579,13 +578,17 @@ export default function App() {
       // Advance only if this candidate is still active and playback never began.
       const candidateSlot: 1 | 2 = incoming === a1 ? 1 : 2;
       let candidateFailed = false;
+      let hasStartedPlaying = false;
       let startupTimer = 0;
       const clearCandidateWatch = () => {
         if (startupTimer) window.clearTimeout(startupTimer);
         incoming.removeEventListener('playing', onCandidatePlaying);
         incoming.removeEventListener('error', onCandidateError);
       };
-      const onCandidatePlaying = () => clearCandidateWatch();
+      const onCandidatePlaying = () => {
+        hasStartedPlaying = true;
+        clearCandidateWatch();
+      };
       const onCandidateError = () => {
         if (candidateFailed) return;
         candidateFailed = true;
@@ -607,11 +610,11 @@ export default function App() {
           clearCandidateWatch();
           return;
         }
-        if (!incoming.paused && incoming.currentTime < 0.25) {
-          onCandidateError();
-        } else {
-          clearCandidateWatch();
-        }
+        // A fulfilled play() promise does not guarantee that audio ever reaches
+        // the playing state (some providers stall indefinitely). Fail over unless
+        // the browser emitted a real playing event.
+        if (!hasStartedPlaying) onCandidateError();
+        else clearCandidateWatch();
       }, 12_000);
 
       incoming.play().then(() => {
@@ -1175,19 +1178,13 @@ export default function App() {
         if (audio.src === SILENT_WAV_DATA_URI) return;
         advanceTrack(1, true);
       };
-      const onError = () => {
-        if (activeEngineRef.current !== 'audio' || !isActiveAudio(audio)) return;
-        if (!isPlayingRef.current || audio.src === SILENT_WAV_DATA_URI) return;
-        const nextIdx = candidateIdxRef.current + 1;
-        loadAndPlayCandidate(nextIdx, playbackSeqRef.current, candidateFailureRef.current);
-      };
       audio.addEventListener('timeupdate', onTime);
       audio.addEventListener('ended', onEnded);
-      audio.addEventListener('error', onError);
+      // Candidate-specific error handling lives in loadAndPlayCandidate.
+      // A second global error handler caused the same failure to advance twice.
       return () => {
         audio.removeEventListener('timeupdate', onTime);
         audio.removeEventListener('ended', onEnded);
-        audio.removeEventListener('error', onError);
       };
     });
     return () => cleanups.forEach((cleanup) => cleanup());
