@@ -6,6 +6,7 @@ import { isPublicAddress } from './src/utils/networkSecurity.ts';
 import { fileURLToPath } from 'node:url';
 import {
   isPlausibleSongDuration,
+  isMatchingLyricsCandidate,
   isRemixOrKnockoff,
   scoreAuthenticTrackCandidate,
   selectSaavnArtistForMatch,
@@ -1690,22 +1691,26 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
       const lrcRes = await fetchWithTimeout(`https://lrclib.net/api/get?${params.toString()}`, 4500);
       if (lrcRes.ok) {
         const data = (await lrcRes.json()) as {
+          trackName?: string;
+          artistName?: string;
+          duration?: number;
           instrumental?: boolean;
           syncedLyrics?: string;
           plainLyrics?: string;
         };
-        if (data.instrumental) {
+        const exactMatch = isMatchingLyricsCandidate(data, title, artist, duration);
+        if (exactMatch && data.instrumental) {
           res.json({ ok: true, hasLyrics: false, synced: false, lines: [] });
           return;
         }
-        if (data.syncedLyrics) {
+        if (exactMatch && data.syncedLyrics) {
           const lines = parseLrcText(data.syncedLyrics);
           if (lines.length) {
             res.json({ ok: true, hasLyrics: true, synced: true, lines });
             return;
           }
         }
-        if (data.plainLyrics) {
+        if (exactMatch && data.plainLyrics) {
           const plain = data.plainLyrics
             .split('\n')
             .map((s) => s.trim())
@@ -1734,11 +1739,19 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
       );
       if (searchRes.ok) {
         const list = (await searchRes.json()) as Array<{
+          trackName?: string;
+          artistName?: string;
+          duration?: number;
           instrumental?: boolean;
           syncedLyrics?: string;
           plainLyrics?: string;
         }>;
-        const firstWithLyrics = list.find((item) => !item.instrumental && (item.syncedLyrics || item.plainLyrics));
+        const firstWithLyrics = list.find(
+          (item) =>
+            !item.instrumental &&
+            isMatchingLyricsCandidate(item, title, artist, duration) &&
+            (item.syncedLyrics || item.plainLyrics)
+        );
         if (firstWithLyrics?.syncedLyrics) {
           const lines = parseLrcText(firstWithLyrics.syncedLyrics);
           if (lines.length) {
