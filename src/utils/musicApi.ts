@@ -611,11 +611,12 @@ export async function loadCollectionTracks(
     // Fallback
   }
 
+  // A failed remote collection lookup must not silently play unrelated demo tracks.
   return {
-    title: 'Curated Mix',
-    subtitle: 'Harmonia Selection',
+    title: 'Collection unavailable',
+    subtitle: 'The provider could not load this collection. Try again later.',
     image: ARTWORK.englishVinyl,
-    tracks: SEED_TRACKS.slice(0, 8),
+    tracks: [],
   };
 }
 
