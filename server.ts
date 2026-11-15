@@ -961,9 +961,16 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
         const html = await ytRes.text();
         const items = parseYouTubeSearchHtml(html, 6);
         for (const item of items) {
-          if (!isRemixOrKnockoff(item.title, '', item.channel, '')) {
-            return item.id;
-          }
+          // The HTML scrape has no reliable duration field, but still require
+          // a real title + artist match. Never accept the first generic result.
+          const score = scoreAuthenticTrackCandidate({
+            itemTitle: item.title || '',
+            itemArtist: item.channel || '',
+            requestedTitle: cleanTitle,
+            requestedArtist: primaryArtist,
+            targetDurationSec,
+          });
+          if (score !== null) return item.id;
         }
       }
     } catch {
