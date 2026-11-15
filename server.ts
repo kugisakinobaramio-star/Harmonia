@@ -1214,9 +1214,10 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
       }
     }
 
-    // Always resolve YouTube ID if no full 320k stream exists, ensuring full playback length
+    // Resolve YouTube as a fallback on forced retries too: a nominal 320k URL may be stale,
+    // blocked, or otherwise unplayable even though the resolver returned it successfully.
     let youtubeId: string | undefined;
-    if (!streamUrls['320kbps']) {
+    if (!streamUrls['320kbps'] || forceRefresh) {
       youtubeId = await resolveYouTubeAudioId(cleanTitle, primaryArtist, targetDurationSec);
     }
 
