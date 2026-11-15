@@ -637,9 +637,10 @@ export default function App() {
                 setIsPlaying(true);
               }
             },
-            onError: () => {
+            onError: (event: any) => {
               // A YouTube error is a source failure, not proof that the song ended.
-              // Try any already-resolved native candidates, but never silently skip the track.
+              // Keep the provider error code visible so embedding/availability failures
+              // can be distinguished from native-audio candidate failures.
               if (activeEngineRef.current !== 'yt') return;
               const cur = currentTrackRef.current;
               if (!cur) return;
@@ -648,11 +649,15 @@ export default function App() {
                 activeEngineRef.current = 'audio';
                 loadAndPlayCandidate(0, playbackSeqRef.current, () => {
                   setIsPlaying(false);
-                  showToast('This track could not be played. Try another source or track.');
+                  showToast(
+                    `YouTube error ${Number(event?.data) || 'unknown'}; no alternate audio source could be played.`
+                  );
                 });
               } else {
                 setIsPlaying(false);
-                showToast('This track could not be played. Try another source or track.');
+                showToast(
+                  `YouTube error ${Number(event?.data) || 'unknown'}; no alternate audio source is available.`
+                );
               }
             },
           },
@@ -776,6 +781,10 @@ export default function App() {
     (track: Track) => {
       const audio = audioRef.current;
       const playSeq = ++playbackSeqRef.current;
+      // Keep the active track ref in sync immediately; React state updates below are async.
+      // YouTube can fail before the queue update effect runs, and its fallback needs this
+      // track's freshly resolved preview/alternate URLs.
+      currentTrackRef.current = track;
       audioEngine.stopSynthLoop();
       usingSynthRef.current = false;
 
@@ -918,6 +927,9 @@ export default function App() {
           resolved.previewUrl ||
           resolved.youtubeId
         ) {
+          // Update synchronously before starting YouTube: its iframe may emit onError
+          // before the queue state update commits and the ref-sync effect runs.
+          currentTrackRef.current = { ...track, ...resolved };
           setQueue((prev) =>
             prev.map((qItem) =>
               qItem.id === track.id
