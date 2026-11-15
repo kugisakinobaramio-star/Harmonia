@@ -82,7 +82,7 @@ export function DownloadButton({
   return (
     <button
       type="button"
-      disabled={downloading}
+      disabled={isDisabled}
       onClick={(e) => {
         e.stopPropagation();
         onClick(e);
