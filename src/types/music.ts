@@ -3,7 +3,7 @@ export type SearchTab = 'songs' | 'albums' | 'playlists' | 'artists' | 'videos';
 export type AudioQuality = '320kbps' | '160kbps' | '96kbps' | 'auto';
 export type RepeatMode = 0 | 1 | 2; // 0 = off, 1 = all, 2 = one
 export type MusicRegion = 'IN' | 'JP' | 'US' | 'GB' | 'GLOBAL';
-export type MusicLanguage = 'Hindi' | 'English' | 'J-Pop';
+export type MusicLanguage = 'Hindi' | 'Punjabi' | 'English' | 'J-Pop';
 export type EqPreset = 'flat' | 'bass' | 'vocal' | 'latenight';
 export type RightPanelMode = 'closed' | 'nowplaying' | 'queue';
 
