@@ -1336,8 +1336,6 @@ export default function App() {
     setLanguageAffinity({});
     setGenreAffinity({});
     setPlayCounts({});
-    setRecentlyPlayed([]);
-    setLikedMap({});
     setPrioritizeLyrics(true);
 
     sendPersonalisation({ resetTaste: true }).then((state) => {
@@ -1535,7 +1533,6 @@ export default function App() {
             {activeView === 'home' && (
               <HomeView
                 displayName={displayName}
-                favoriteArtists={favoriteArtists}
                 personalizedFeedTracks={personalizedFeedTracks}
                 region={region}
                 languageFilter={languageFilter}
@@ -1544,7 +1541,6 @@ export default function App() {
                 recommendationReason={recommendationReason}
                 regionalTracks={regionalTracks}
                 spotifyPlaylists={spotifyPlaylists}
-                allCatalogTracks={SEED_TRACKS}
                 recentlyPlayed={recentlyPlayed}
                 likedCount={likedTracks.length}
                 tasteHighlights={tasteHighlights}
@@ -1552,7 +1548,6 @@ export default function App() {
                 onOpenPlaylist={openPlaylistCollection}
                 onOpenLiked={openLikedCollection}
                 onOpenRecent={openRecentCollection}
-                onOpenArtist={openArtistCollection}
                 onOpenPersonalise={() => setPersonaliseOpen(true)}
               />
             )}
