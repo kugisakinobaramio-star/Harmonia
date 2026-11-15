@@ -10,6 +10,7 @@ import {
   AddToPlaylistModal,
   CreatePlaylistModal,
   PersonaliseModal,
+  ProfileModal,
   SpotifyImportModal,
   VideoModal,
 } from './components/Modals';
@@ -253,6 +254,7 @@ export default function App() {
   const [addToPlaylistTrack, setAddToPlaylistTrack] = useState<Track | null>(null);
   const [spotifyImportOpen, setSpotifyImportOpen] = useState(false);
   const [personaliseOpen, setPersonaliseOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
   const [videoModalOpen, setVideoModalOpen] = useState(false);
   const [videos, setVideos] = useState<VideoResult[]>(SEED_VIDEOS);
   const [selectedVideoId, setSelectedVideoId] = useState<string | null>(SEED_VIDEOS[0]?.id || null);
@@ -1641,7 +1643,7 @@ export default function App() {
         recentDrops={recommendedTracks}
         onPlayTrack={(t) => playTrackList([t, ...recommendedTracks.filter((x) => x.id !== t.id)], 0)}
         displayName={displayName}
-        onOpenPersonalise={() => setPersonaliseOpen(true)}
+        onOpenProfile={() => setProfileOpen(true)}
       />
 
       {/* Main 3-Pane Spotify Desktop Shell */}
@@ -1681,6 +1683,8 @@ export default function App() {
                 spotifyPlaylists={spotifyPlaylists}
                 recentlyPlayed={recentlyPlayed}
                 likedCount={likedTracks.length}
+                likedTracks={likedTracks}
+                playCounts={playCounts}
                 tasteHighlights={tasteHighlights}
                 onPlayTrackList={playTrackList}
                 onOpenPlaylist={openPlaylistCollection}
@@ -1993,6 +1997,23 @@ export default function App() {
         selectedId={selectedVideoId}
         onSelectVideo={setSelectedVideoId}
         onClose={() => setVideoModalOpen(false)}
+      />
+
+      <ProfileModal
+        open={profileOpen}
+        displayName={displayName}
+        region={region}
+        preferredLanguages={preferredLanguages}
+        favoriteArtists={favoriteArtists}
+        preferredMoods={preferredMoods}
+        totalPlays={Object.values(playCounts).reduce((sum, count) => sum + count, 0)}
+        uniqueTracks={Object.keys(playCounts).length}
+        likedCount={likedTracks.length}
+        onClose={() => setProfileOpen(false)}
+        onEditPreferences={() => {
+          setProfileOpen(false);
+          setPersonaliseOpen(true);
+        }}
       />
 
       <PersonaliseModal
