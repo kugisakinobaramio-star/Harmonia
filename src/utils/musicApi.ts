@@ -20,6 +20,7 @@ import {
   decodeHtmlEntities,
   filterAndRankTracks,
   hasFullAudioStream,
+  mergeResolvedTrackSources,
   isRemixOrKnockoff,
   isUnnecessaryNoLyricsTrack,
   parsePlainLyricsToLines,
@@ -692,19 +693,14 @@ export async function resolveTrackStreams(
           json.previewUrl ||
           json.youtubeId)
       ) {
-        const entry = {
-          streamUrls:
-            json.streamUrls && Object.keys(json.streamUrls).length > 0
-              ? json.streamUrls
-              : forceRefresh
-                ? undefined
-                : track.streamUrls,
-          previewUrl: json.previewUrl || (forceRefresh ? undefined : track.previewUrl),
-          alternates: json.alternates,
-          youtubeId: json.youtubeId || (forceRefresh ? undefined : track.youtubeId),
-        };
-        resolvedTrackCache.set(track.id, entry);
-        return { ...track, ...entry };
+        const resolvedTrack = mergeResolvedTrackSources(track, json, forceRefresh);
+        resolvedTrackCache.set(track.id, {
+          streamUrls: resolvedTrack.streamUrls,
+          previewUrl: resolvedTrack.previewUrl,
+          alternates: resolvedTrack.alternates,
+          youtubeId: resolvedTrack.youtubeId,
+        });
+        return resolvedTrack;
       }
     }
   } catch {
