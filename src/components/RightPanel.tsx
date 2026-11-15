@@ -116,6 +116,19 @@ export function RightPanel({
                     {currentTrack.albumName}
                     {currentTrack.language ? ` · ${currentTrack.language}` : ''}
                   </p>
+                  {currentTrack.sourceProvider && (
+                    <p className="mt-1 truncate text-[10px] text-zinc-500">
+                      Source: {currentTrack.sourceProvider}
+                    </p>
+                  )}
+                  {currentTrack.sourceProvider === 'Jamendo' && currentTrack.sourcePageUrl && (
+                    <div className="mt-1 flex flex-wrap gap-x-2 text-[10px]">
+                      <a href={currentTrack.sourcePageUrl} target="_blank" rel="noreferrer" className="text-[#86dba4] underline underline-offset-2">Jamendo track</a>
+                      {currentTrack.sourceLicense && (
+                        <a href={currentTrack.sourceLicense} target="_blank" rel="noreferrer" className="text-zinc-500 underline underline-offset-2">Licence</a>
+                      )}
+                    </div>
+                  )}
                 </div>
                 <DownloadButton
                   trackName={currentTrack.name}
