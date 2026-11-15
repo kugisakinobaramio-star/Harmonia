@@ -1941,103 +1941,76 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
 
   const discoverCache = new Map<string, { expiresAt: number; tracks: StoredTrack[] }>();
 
-  // Location-based regional charts & multi-language discovery across Deezer + iTunes + Audius
+  // Live, genre-led discovery. No fixed artist seeds: each genre is queried
+  // against the current regional catalogues and the results are diversified.
   app.get('/api/music/discover', async (req, res) => {
     const region = String(req.query.region || 'IN').toUpperCase();
+    const forceRefresh = String(req.query.refresh || '') === '1';
     const cached = discoverCache.get(region);
-    if (cached && cached.expiresAt > Date.now()) {
-      res.json({ ok: true, region, tracks: cached.tracks });
+    if (!forceRefresh && cached && cached.expiresAt > Date.now()) {
+      res.json({ ok: true, region, tracks: cached.tracks, cached: true });
       return;
     }
 
-    const countryCode = region === 'JP' ? 'jp' : region === 'GB' ? 'gb' : region === 'US' ? 'us' : 'in';
-
-    const queriesByRegion: Record<string, Array<{ term: string; country: string; lang: string }>> = {
-      IN: [
-        { term: 'Arijit Singh Hindi', country: 'in', lang: 'Hindi' },
-        { term: 'YOASOBI', country: 'jp', lang: 'J-Pop' },
-        { term: 'The Weeknd', country: 'us', lang: 'English' },
-      ],
-      JP: [
-        { term: 'YOASOBI Kenshi Yonezu', country: 'jp', lang: 'J-Pop' },
-        { term: 'Arijit Singh', country: 'in', lang: 'Hindi' },
-        { term: 'The Weeknd', country: 'us', lang: 'English' },
-      ],
-      US: [
-        { term: 'The Weeknd Glass Animals', country: 'us', lang: 'English' },
-        { term: 'Arijit Singh', country: 'in', lang: 'Hindi' },
-        { term: 'YOASOBI', country: 'jp', lang: 'J-Pop' },
-      ],
-      GB: [
-        { term: 'Dua Lipa Glass Animals', country: 'gb', lang: 'English' },
-        { term: 'Arijit Singh', country: 'in', lang: 'Hindi' },
-        { term: 'YOASOBI', country: 'jp', lang: 'J-Pop' },
-      ],
-      GLOBAL: [
-        { term: 'Arijit Singh', country: 'in', lang: 'Hindi' },
-        { term: 'YOASOBI', country: 'jp', lang: 'J-Pop' },
-        { term: 'The Weeknd', country: 'us', lang: 'English' },
-      ],
-    };
-
-    const specs = queriesByRegion[region] || queriesByRegion.IN;
+    const country = region === 'JP' ? 'JP' : region === 'GB' ? 'GB' : region === 'US' ? 'US' : 'IN';
+    const genres = [
+      'indie pop', 'alternative rock', 'electronic', 'hip hop',
+      'R&B', 'jazz', 'folk', 'J-pop', 'Afrobeats', 'Latin pop',
+      'Punjabi pop', 'ambient'
+    ];
 
     try {
-      const settled = await Promise.allSettled([
-        ...specs.map((spec) =>
-          fetchWithTimeout(
-            `https://api.deezer.com/search?q=${encodeURIComponent(spec.term)}&limit=5`,
-            4000
+      const settled = await Promise.allSettled(genres.flatMap((term) => [
+        fetchWithTimeout(
+          `https://api.deezer.com/search?q=${encodeURIComponent(term)}&limit=12`,
+          5000
+        ).then((r) => r.ok ? r.json() : { data: [] })
+          .then((json: { data?: DeezerTrackRaw[] }) =>
+            (json.data || []).map((item) => mapDeezerTrack(item, country))
+              .filter((track) => Boolean(track.image) &&
+                !isInstrumentalOrSpam(track.name, track.albumName) &&
+                !isRemixOrKnockoff(track.name, '', track.artist, ''))
+          ),
+        fetchWithTimeout(
+          `https://itunes.apple.com/search?term=${encodeURIComponent(term)}&country=${country}&media=music&entity=song&limit=12`,
+          5000
+        ).then((r) => r.ok ? r.json() : { results: [] })
+          .then((json: { results?: ItunesTrackRaw[] }) =>
+            (json.results || []).map((item) => mapItunesTrack(item, country))
+              .filter((track) => Boolean(track.image) &&
+                !isInstrumentalOrSpam(track.name, track.albumName) &&
+                !isRemixOrKnockoff(track.name, '', track.artist, ''))
           )
-            .then((r) => (r.ok ? r.json() : { data: [] }))
-            .then((json: { data?: DeezerTrackRaw[] }) =>
-              (json.data || [])
-                .map((item) => mapDeezerTrack(item, countryCode.toUpperCase(), spec.lang))
-                .filter(
-                  (t) =>
-                    Boolean(t.image) &&
-                    !isInstrumentalOrSpam(t.name, t.albumName) &&
-                    !isRemixOrKnockoff(t.name, '', t.artist, '')
-                )
-            )
-        ),
-        ...specs.map((spec) =>
-          fetchWithTimeout(
-            `https://itunes.apple.com/search?term=${encodeURIComponent(spec.term)}&country=${spec.country}&media=music&entity=song&limit=4`,
-            4000
-          )
-            .then((r) => (r.ok ? r.json() : { results: [] }))
-            .then((json: { results?: ItunesTrackRaw[] }) =>
-              (json.results || [])
-                .map((item) => mapItunesTrack(item, countryCode.toUpperCase(), spec.lang))
-                .filter(
-                  (t) =>
-                    Boolean(t.image) &&
-                    !isInstrumentalOrSpam(t.name, t.albumName) &&
-                    !isRemixOrKnockoff(t.name, '', t.artist, '')
-                )
-            )
-        ),
-      ]);
+      ]));
 
-      const tracks: StoredTrack[] = [];
-      const seen = new Set<string>();
-      for (const s of settled) {
-        if (s.status === 'fulfilled') {
-          for (const t of s.value) {
-            const key = `${t.name.toLowerCase()}::${t.artist.toLowerCase()}`;
-            if (!seen.has(key)) {
-              seen.add(key);
-              tracks.push(t);
-            }
-          }
+      const byGenre: StoredTrack[][] = settled.map((result) =>
+        result.status === 'fulfilled' ? result.value : []
+      );
+      const seenTracks = new Set<string>();
+      const seenArtists = new Set<string>();
+      // Round-robin across genres and providers, then allow artist repeats only
+      // after the first pass has introduced as many distinct artists as possible.
+      const candidates = byGenre.flat();
+      const unique = candidates.filter((track) => {
+        const key = `${track.name.toLowerCase()}::${track.artist.toLowerCase()}`;
+        if (seenTracks.has(key)) return false;
+        seenTracks.add(key);
+        return true;
+      });
+      const firstPass: StoredTrack[] = [];
+      const repeats: StoredTrack[] = [];
+      for (const track of unique) {
+        const artist = track.artist.split(/,|&| feat\.? | ft\.? /i)[0].trim().toLowerCase();
+        if (!seenArtists.has(artist)) {
+          seenArtists.add(artist);
+          firstPass.push(track);
+        } else {
+          repeats.push(track);
         }
       }
-
-      if (tracks.length > 0) {
-        discoverCache.set(region, { expiresAt: Date.now() + 15 * 60_000, tracks });
-      }
-      res.json({ ok: tracks.length > 0, region, tracks });
+      const tracks = [...firstPass, ...repeats].slice(0, 80) as StoredTrack[];
+      if (tracks.length) discoverCache.set(region, { expiresAt: Date.now() + 5 * 60_000, tracks });
+      res.json({ ok: tracks.length > 0, region, tracks, cached: false });
     } catch {
       res.json({ ok: false, region, tracks: [] });
     }

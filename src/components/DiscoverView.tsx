@@ -7,6 +7,7 @@ interface DiscoverViewProps {
   tracks: Track[];
   recentlyPlayed: Track[];
   onPlayTrackList: (tracks: Track[], startIndex: number) => void;
+  onRefresh: () => Promise<void>;
 }
 
 const LANGUAGES: Array<MusicLanguage | 'All'> = ['All', 'Hindi', 'Punjabi', 'Haryanvi', 'English', 'Japanese', 'J-Pop', 'Korean', 'Tamil', 'Telugu', 'Bengali'];
@@ -43,9 +44,10 @@ function buildVariedList(tracks: Track[], recentlyPlayed: Track[], rotation: num
   return [...firstPass, ...secondPass];
 }
 
-export function DiscoverView({ tracks, recentlyPlayed, onPlayTrackList }: DiscoverViewProps) {
+export function DiscoverView({ tracks, recentlyPlayed, onPlayTrackList, onRefresh }: DiscoverViewProps) {
   const [language, setLanguage] = useState<MusicLanguage | 'All'>('All');
   const [rotation, setRotation] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
   const varied = useMemo(
     () => buildVariedList(tracks, recentlyPlayed, rotation),
     [tracks, recentlyPlayed, rotation]
@@ -61,8 +63,12 @@ export function DiscoverView({ tracks, recentlyPlayed, onPlayTrackList }: Discov
         </div>
         <h1 className="mt-3 text-2xl font-extrabold text-white sm:text-3xl">Find your next favourite.</h1>
         <p className="mt-2 max-w-2xl text-sm text-zinc-300">A wider mix beyond your usual rotation. Artists are spread out so one familiar name does not take over the feed.</p>
-        <button type="button" onClick={() => setRotation((value) => value + 7)} className="mt-4 inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-xs font-bold text-black hover:bg-zinc-200">
-          <Shuffle className="h-4 w-4" /> Refresh discoveries
+        <button type="button" disabled={refreshing} onClick={async () => {
+          setRefreshing(true);
+          try { await onRefresh(); setRotation((value) => value + 7); }
+          finally { setRefreshing(false); }
+        }} className="mt-4 inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-xs font-bold text-black hover:bg-zinc-200 disabled:opacity-60">
+          <Shuffle className="h-4 w-4" /> {refreshing ? 'Finding new tracks…' : 'Refresh discoveries'}
         </button>
       </div>
 

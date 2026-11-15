@@ -183,9 +183,9 @@ function normalizeRemoteTrack(raw: Track): Track {
   };
 }
 
-export async function fetchRegionalDiscovery(region: MusicRegion): Promise<Track[]> {
+export async function fetchRegionalDiscovery(region: MusicRegion, refresh = false): Promise<Track[]> {
   try {
-    const res = await fetch(`/api/music/discover?region=${encodeURIComponent(region)}`);
+    const res = await fetch(`/api/music/discover?region=${encodeURIComponent(region)}${refresh ? '&refresh=1' : ''}`);
     if (res.ok) {
       const json = (await res.json()) as { ok?: boolean; tracks?: Track[] };
       if (json.ok && json.tracks?.length) {
@@ -240,8 +240,6 @@ export async function searchSongs(
         .map(mapSaavnSong)
         .filter(
           (t) =>
-            typeof t.playCount === 'number' &&
-            t.playCount >= 5000 &&
             (!prioritizeLyrics || !isUnnecessaryNoLyricsTrack(t)) &&
             isPlausibleSongDuration(t.duration) &&
             !isRemixOrKnockoff(`${t.name} ${t.albumName}`, trimmed, t.artist, trimmed)
@@ -273,7 +271,9 @@ export async function searchSongs(
         }
       }
 
-      const merged = [...localMatches, ...dedupedRemote].slice(0, 30);
+      // Prefer live catalogue matches; keep local catalogue matches as a fallback,
+      // not as a fixed block that crowds out the user's actual query.
+      const merged = [...dedupedRemote, ...localMatches].slice(0, 30);
       if (merged.length > 0) {
         return { tracks: merged, source: 'live' };
       }
@@ -282,8 +282,9 @@ export async function searchSongs(
     // Fallback
   }
 
+  // Never show unrelated demo tracks for a real search query.
   return {
-    tracks: localMatches.length ? localMatches : SEED_TRACKS,
+    tracks: localMatches,
     source: 'catalog',
   };
 }
