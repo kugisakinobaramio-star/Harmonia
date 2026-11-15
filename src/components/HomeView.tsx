@@ -25,13 +25,6 @@ interface HomeViewProps {
   likedTracks: Track[];
   playCounts: Record<string, number>;
   playedTracks: Track[];
-  tasteHighlights?: {
-    topArtists: string[];
-    topLanguage: MusicLanguage | null;
-    topGenre: string | null;
-    repeatFocusedArtist: string | null;
-    reason: string;
-  };
   onPlayTrackList: (tracks: Track[], startIndex: number) => void;
   onOpenPlaylist: (pl: CuratedPlaylist) => void;
   onOpenLiked: () => void;
@@ -54,7 +47,6 @@ export function HomeView({
   likedTracks,
   playCounts,
   playedTracks,
-  tasteHighlights,
   onPlayTrackList,
   onOpenPlaylist,
   onOpenLiked,
@@ -116,24 +108,7 @@ export function HomeView({
     return likedTracks.filter((track) => !recentIds.has(track.id)).slice(0, 10);
   }, [likedTracks, recentlyPlayed]);
 
-  const repeatFocusedArtist = tasteHighlights?.repeatFocusedArtist;
-  const repeatArtistTracks = useMemo(() => {
-    if (!repeatFocusedArtist) return [];
-    const q = repeatFocusedArtist.toLowerCase();
-    const pool = [...recommendedTracks, ...personalizedFeedTracks, ...regionalTracks, ...recentlyPlayed];
-    const seen = new Set<string>();
-    const res: Track[] = [];
-    for (const t of pool) {
-      if (t.artist.toLowerCase().includes(q)) {
-        const key = `${t.name.toLowerCase()}::${t.artist.toLowerCase()}`;
-        if (!seen.has(key)) {
-          seen.add(key);
-          res.push(t);
-        }
-      }
-    }
-    return res;
-  }, [repeatFocusedArtist, recommendedTracks, personalizedFeedTracks, regionalTracks, recentlyPlayed]);
+
 
   const quickPicks = [
     {
@@ -316,13 +291,7 @@ export function HomeView({
       {rediscoverLikes.length > 0 &&
         renderTrackShelf('Rediscover Your Likes', 'Saved favourites you have not played lately', rediscoverLikes)}
 
-      {/* Dynamic Repeat-Listening Shelf: Heavy Rotation */}
-      {repeatFocusedArtist && repeatArtistTracks.length > 0 &&
-        renderTrackShelf(
-          `Heavy Rotation: ${repeatFocusedArtist}`,
-          `Based on your repeated plays · Ranked for your listening habits`,
-          filterByLang(repeatArtistTracks).length ? filterByLang(repeatArtistTracks) : repeatArtistTracks
-        )}
+
 
       {/* User-Based Personalized Recommendations */}
       {visibleRecommended.length > 0 &&

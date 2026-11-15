@@ -1,6 +1,7 @@
-import { Home, Library, Search } from 'lucide-react';
+import { Compass, Home, Library, Search } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CollectionView } from './components/CollectionView';
+import { DiscoverView } from './components/DiscoverView';
 import { ExpandedPlayer } from './components/ExpandedPlayer';
 import { Header } from './components/Header';
 import { HomeView } from './components/HomeView';
@@ -442,13 +443,14 @@ export default function App() {
     const uniqueArtists = [...new Set(artistSeeds.map((artist) => artist.toLowerCase()))]
       .map((key) => artistSeeds.find((artist) => artist.toLowerCase() === key) || '')
       .filter(Boolean)
-      .slice(0, 3);
+      .slice(0, 1);
     const topGenres = Object.entries(genreAffinity)
       .filter(([, weight]) => weight > 0)
       .sort((a, b) => b[1] - a[1])
-      .slice(0, 1)
+      .slice(0, 2)
       .map(([genre]) => genre);
-    const queries = [...uniqueArtists, ...topGenres].slice(0, 3);
+    const languageSeed = preferredLanguages[0] || '';
+    const queries = [...topGenres, ...uniqueArtists, ...(languageSeed ? [languageSeed] : [])].slice(0, 4);
     if (!queries.length) {
       setPersonalizedFeedTracks([]);
       return () => { cancelled = true; };
@@ -477,7 +479,7 @@ export default function App() {
   }, [favoriteArtists, artistAffinity, genreAffinity, likedMap, recentlyPlayed, region, prioritizeLyrics]);
 
   // Dynamic User-Based Recommendation Ranking
-  const { recommendedTracks, recommendationReason, tasteHighlights } = useMemo(() => {
+  const { recommendedTracks, recommendationReason } = useMemo(() => {
     const tasteProfile = buildTasteProfile({
       region,
       preferredLanguages,
@@ -518,7 +520,6 @@ export default function App() {
     return {
       recommendedTracks: ranked,
       recommendationReason: highlights.reason,
-      tasteHighlights: highlights,
     };
   }, [
     region,
@@ -1694,13 +1695,16 @@ export default function App() {
                 likedTracks={likedTracks}
                 playCounts={playCounts}
                 playedTracks={Object.values(playedTracks)}
-                tasteHighlights={tasteHighlights}
                 onPlayTrackList={playTrackList}
                 onOpenPlaylist={openPlaylistCollection}
                 onOpenLiked={openLikedCollection}
                 onOpenRecent={openRecentCollection}
                 onOpenPersonalise={() => setPersonaliseOpen(true)}
               />
+            )}
+
+            {activeView === 'discover' && (
+              <DiscoverView tracks={[...regionalTracks, ...personalizedFeedTracks, ...recommendedTracks]} recentlyPlayed={recentlyPlayed} onPlayTrackList={playTrackList} />
             )}
 
             {activeView === 'search' && (
@@ -1918,7 +1922,7 @@ export default function App() {
       {/* Mobile Bottom Navigation Bar */}
       <nav
         aria-label="Mobile navigation"
-        className="grid grid-cols-3 border-t border-white/[0.08] bg-black py-1.5 lg:hidden"
+        className="grid grid-cols-4 border-t border-white/[0.08] bg-black py-1.5 lg:hidden"
       >
         <button
           type="button"
@@ -1929,6 +1933,9 @@ export default function App() {
         >
           <Home className="h-5 w-5" />
           <span>Home</span>
+        </button>
+        <button type="button" onClick={() => navigateTo('discover', null)} className={`flex flex-col items-center gap-0.5 py-1 text-[11px] font-semibold ${activeView === 'discover' ? 'text-white' : 'text-zinc-400'}`}>
+          <Compass className="h-5 w-5" /><span>Discover</span>
         </button>
         <button
           type="button"

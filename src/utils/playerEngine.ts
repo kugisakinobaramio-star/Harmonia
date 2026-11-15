@@ -634,18 +634,18 @@ export function scoreTrackForUser(track: Track, profile: UserTasteProfile): numb
       score += 36 - prefIdx * 6;
     }
     const langAff = profile.languageAffinity[track.language] || 0;
-    score += Math.min(75, langAff * 8);
+    score += Math.min(28, Math.log1p(langAff) * 9);
   }
 
   // Regional match boost
   if (track.region === profile.region) {
-    score += 24;
+    score += 12;
   } else if (profile.region === 'IN' && track.language === 'Hindi') {
-    score += 24;
+    score += 12;
   } else if (profile.region === 'JP' && track.language === 'J-Pop') {
-    score += 24;
+    score += 12;
   } else if ((profile.region === 'US' || profile.region === 'GB') && track.language === 'English') {
-    score += 20;
+    score += 10;
   }
 
   // Artist affinity from user's plays, likes & explicit personalisation picks
@@ -653,13 +653,13 @@ export function scoreTrackForUser(track: Track, profile: UserTasteProfile): numb
   const trackArtistLow = track.artist.toLowerCase();
   for (const [artName, weight] of Object.entries(profile.artistAffinity)) {
     if (primaryArtist.includes(artName.toLowerCase()) || trackArtistLow.includes(artName.toLowerCase())) {
-      score += Math.min(120, weight * 14);
+      score += Math.min(24, Math.log1p(weight) * 8);
     }
   }
   for (const favArt of profile.favoriteArtists || []) {
     const tok = favArt.toLowerCase();
     if (tok && (primaryArtist.includes(tok) || trackArtistLow.includes(tok))) {
-      score += 50;
+      score += 24;
     }
   }
 
