@@ -59,7 +59,6 @@ import {
   deriveDynamicTasteHighlights,
   hasFullAudioStream,
   hasFullPlaybackSource,
-  isShortPreviewUrl,
   isSpotifyLinkOrUri,
   isInstrumentalOrLowValueTrack,
   mapCoordsToRegion,
@@ -68,11 +67,17 @@ import {
   removeQueueItem,
   resolveNextTrackIndex,
   scoreTrackForUser,
-  selectStreamUrl,
   toggleTrackInLiked,
 } from './utils/playerEngine';
+import { partitionStreamCandidates } from './utils/streamCandidates';
 import { audioEngine } from './utils/webAudioSynth';
-import { downloadTrackForOffline, listOfflineTracks, removeOfflineTrack } from './utils/offlineStore';
+import {
+  downloadTrackForOffline,
+  getOfflineAudioUrl,
+  isCollectionFullyDownloaded,
+  listOfflineTracks,
+  removeOfflineTrack,
+} from './utils/offlineStore';
 
 const SILENT_WAV_DATA_URI =
   'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
@@ -80,53 +85,12 @@ const SILENT_WAV_DATA_URI =
 function buildStreamCandidates(
   track: Track,
   quality: AudioQuality,
-  extraAlternates: string[] = []
+  extraAlternates: string[] = [],
+  includePreviewFallback = false
 ): string[] {
-  const fullRaw: string[] = [];
-
-  // Never silently treat a 30-second catalogue preview as a full track.
-  const pushClassified = (u?: string) => {
-    if (!u || isShortPreviewUrl(u)) return;
-    fullRaw.push(u);
-  };
-
-  pushClassified(selectStreamUrl(track, quality));
-  if (track.streamUrls) {
-    for (const q of ['320kbps', '160kbps', '96kbps', '48kbps', '12kbps'] as const) {
-      pushClassified(track.streamUrls[q]);
-    }
-  }
-  for (const alt of extraAlternates) {
-    pushClassified(alt);
-  }
-  pushClassified(track.previewUrl);
-  // The resolver returns alternates alongside previewUrl/streamUrls. Keep these
-  // attached to the Track object usable by the iframe error handler too.
-  const trackAlternates = (track as Track & { alternates?: string[] }).alternates || [];
-  for (const alt of trackAlternates) {
-    pushClassified(alt);
-  }
-
-  const out: string[] = [];
-  const seen = new Set<string>();
-  const pushUnique = (u: string) => {
-    if (!seen.has(u)) {
-      seen.add(u);
-      out.push(u);
-    }
-  };
-
-  for (const raw of fullRaw) {
-    if (raw.startsWith('/api/')) {
-      pushUnique(apiUrl(raw));
-    } else if (raw.startsWith('/') || raw.startsWith('data:') || raw.startsWith('blob:')) {
-      pushUnique(raw);
-    } else if (/^https?:\/\//i.test(raw)) {
-      pushUnique(apiUrl(`/api/music/audio?url=${encodeURIComponent(raw)}`));
-      if (raw.startsWith('https://')) pushUnique(raw);
-    }
-  }
-  return out;
+  const { full, preview } = partitionStreamCandidates(track, quality, extraAlternates, apiUrl);
+  if (full.length > 0) return full;
+  return includePreviewFallback ? preview : [];
 }
 
 interface NavEntry {
@@ -376,10 +340,12 @@ export default function App() {
           next.delete(track.id);
           return next;
         });
+        window.dispatchEvent(new Event('harmonia-offline-library-change'));
         showToast(`Removed ${track.name} from offline downloads.`);
       } else {
         await downloadTrackForOffline(track, quality);
         setDownloadedIds((current) => new Set(current).add(track.id));
+        window.dispatchEvent(new Event('harmonia-offline-library-change'));
         showToast(`Saved ${track.name} for offline listening.`);
       }
     } catch (error) {
@@ -394,13 +360,80 @@ export default function App() {
   }, [downloadedIds, downloadingIds, quality, showToast]);
 
   const handleDownloadAll = useCallback(async (tracks: Track[]) => {
-    const removeAll = tracks.length > 0 && tracks.every((track) => downloadedIds.has(track.id));
-    for (const track of tracks) {
-      if (removeAll ? downloadedIds.has(track.id) : !downloadedIds.has(track.id)) {
-        await handleToggleDownload(track);
-      }
+    const downloadableTracks = tracks.filter(
+      (track) => track.offlineAvailable !== false && track.sourceProvider !== 'Jamendo'
+    );
+    if (!downloadableTracks.length) {
+      showToast('These tracks support online listening only in Harmonia.');
+      return;
     }
-  }, [downloadedIds, handleToggleDownload]);
+
+    const removeAll = isCollectionFullyDownloaded(downloadableTracks, downloadedIds);
+    const targets = downloadableTracks.filter((track) => {
+      if (downloadingIds.has(track.id)) return false;
+      return removeAll ? downloadedIds.has(track.id) : !downloadedIds.has(track.id);
+    });
+    if (!targets.length) return;
+
+    setDownloadingIds((current) => {
+      const next = new Set(current);
+      targets.forEach((t) => next.add(t.id));
+      return next;
+    });
+
+    let succeeded = 0;
+    let failed = 0;
+    let nextCursor = 0;
+    const workerCount = removeAll ? 1 : Math.min(2, targets.length);
+
+    const runWorker = async () => {
+      while (nextCursor < targets.length) {
+        const track = targets[nextCursor++];
+        if (!track) continue;
+        try {
+          if (removeAll) {
+            await removeOfflineTrack(track.id);
+            setDownloadedIds((current) => {
+              const next = new Set(current);
+              next.delete(track.id);
+              return next;
+            });
+          } else {
+            await downloadTrackForOffline(track, quality);
+            setDownloadedIds((current) => new Set(current).add(track.id));
+          }
+          succeeded += 1;
+        } catch {
+          failed += 1;
+        } finally {
+          setDownloadingIds((current) => {
+            const next = new Set(current);
+            next.delete(track.id);
+            return next;
+          });
+        }
+      }
+    };
+
+    await Promise.all(Array.from({ length: workerCount }, () => runWorker()));
+    window.dispatchEvent(new Event('harmonia-offline-library-change'));
+
+    if (removeAll) {
+      showToast(
+        succeeded > 0
+          ? `Removed ${succeeded} song${succeeded === 1 ? '' : 's'} from offline downloads.`
+          : 'Could not remove offline downloads.'
+      );
+    } else if (failed === 0) {
+      showToast(`Saved ${succeeded} song${succeeded === 1 ? '' : 's'} for offline listening.`);
+    } else if (succeeded > 0) {
+      showToast(
+        `Saved ${succeeded} song${succeeded === 1 ? '' : 's'}; ${failed} unavailable offline.`
+      );
+    } else {
+      showToast('Could not download these songs for offline listening.');
+    }
+  }, [downloadedIds, downloadingIds, quality, showToast]);
 
   useEffect(() => {
     if (!toastMsg) return;
@@ -1164,13 +1197,19 @@ export default function App() {
                   : item
               )
             );
-            const freshCandidates = buildStreamCandidates(
-              refreshed,
+            const { full, preview } = partitionStreamCandidates(
+              refreshedTrack,
               quality,
-              refreshed.alternates || []
-            ).filter((url) => !failedUrls.has(url));
-            if (freshCandidates.length) {
-              playNativeAudioCandidates(freshCandidates);
+              refreshed.alternates || [],
+              apiUrl
+            );
+            const freshFull = full.filter((url) => !failedUrls.has(url));
+            const freshPreview = preview.filter((url) => !failedUrls.has(url));
+            if (freshFull.length) {
+              playNativeAudioCandidates(freshFull);
+            } else if (freshPreview.length) {
+              showToast(`Playing 30s preview · ${refreshedTrack.sourceProvider || 'Catalogue'}`);
+              playNativeAudioCandidates(freshPreview);
             } else {
               setIsPlaying(false);
               showToast('No playable audio source found for this track');
@@ -1187,77 +1226,107 @@ export default function App() {
       };
 
 
-      // 1. Direct full-length audio stream (e.g. JioSaavn 320k or Audius verified)
-      if (hasFullAudioStream(track)) {
-        const fullCandidates = buildStreamCandidates(track, quality);
-        if (fullCandidates.length > 0) {
-          playNativeAudioCandidates(fullCandidates);
-          return;
-        }
-      }
-
-      // Preserve the user gesture while authorized audio sources resolve.
-      if (audio) {
-        audio.src = SILENT_WAV_DATA_URI;
-        audio.play().catch(() => {});
-      }
-
-      resolveTrackStreams(track).then((resolved) => {
+      const startOnlinePlayback = () => {
         if (playSeq !== playbackSeqRef.current) return;
-        if (
-          (resolved.streamUrls && Object.keys(resolved.streamUrls).length > 0) ||
-          resolved.previewUrl
-        ) {
-          // Keep the resolved track in sync before native audio starts.
+        // 1. Direct full-length audio stream (e.g. JioSaavn 320k or Audius verified)
+        if (hasFullAudioStream(track)) {
+          const fullCandidates = buildStreamCandidates(track, quality);
+          if (fullCandidates.length > 0) {
+            playNativeAudioCandidates(fullCandidates);
+            return;
+          }
+        }
+
+        // Preserve the user gesture while authorized audio sources resolve.
+        if (audio) {
+          audio.src = SILENT_WAV_DATA_URI;
+          audio.play().catch(() => {});
+        }
+
+        resolveTrackStreams(track).then((resolved) => {
+          if (playSeq !== playbackSeqRef.current) return;
           const resolvedTrack = {
             ...track,
             ...resolved,
             alternates: resolved.alternates || [],
           } as Track;
-          currentTrackRef.current = resolvedTrack;
-          resolvedPlaybackTrackRef.current = resolvedTrack;
-          setQueue((prev) =>
-            prev.map((qItem) =>
-              qItem.id === track.id
-                ? {
-                    ...qItem,
-                    streamUrls: resolved.streamUrls || qItem.streamUrls,
-                    previewUrl: resolved.previewUrl || qItem.previewUrl,
-                    sourceProvider: resolved.sourceProvider || qItem.sourceProvider,
-                    sourceAvailability: resolved.sourceAvailability || qItem.sourceAvailability,
-                    sourcePageUrl: resolved.sourcePageUrl || qItem.sourcePageUrl,
-                    sourceLicense: resolved.sourceLicense || qItem.sourceLicense,
-                    offlineAvailable: typeof resolved.offlineAvailable === 'boolean'
-                      ? resolved.offlineAvailable
-                      : qItem.offlineAvailable,
-                  }
-                : qItem
-            )
-          );
-        }
+          if (
+            (resolved.streamUrls && Object.keys(resolved.streamUrls).length > 0) ||
+            resolved.previewUrl
+          ) {
+            // Keep the resolved track in sync before native audio starts.
+            currentTrackRef.current = resolvedTrack;
+            resolvedPlaybackTrackRef.current = resolvedTrack;
+            setQueue((prev) =>
+              prev.map((qItem) =>
+                qItem.id === track.id
+                  ? {
+                      ...qItem,
+                      streamUrls: resolved.streamUrls || qItem.streamUrls,
+                      previewUrl: resolved.previewUrl || qItem.previewUrl,
+                      sourceProvider: resolved.sourceProvider || qItem.sourceProvider,
+                      sourceAvailability: resolved.sourceAvailability || qItem.sourceAvailability,
+                      sourcePageUrl: resolved.sourcePageUrl || qItem.sourcePageUrl,
+                      sourceLicense: resolved.sourceLicense || qItem.sourceLicense,
+                      offlineAvailable: typeof resolved.offlineAvailable === 'boolean'
+                        ? resolved.offlineAvailable
+                        : qItem.offlineAvailable,
+                    }
+                  : qItem
+              )
+            );
+          }
 
-        if (hasFullAudioStream(resolved)) {
-          const resolvedCandidates = buildStreamCandidates(
-            resolved,
+          const { full, preview } = partitionStreamCandidates(
+            resolvedTrack,
             quality,
-            resolved.alternates || []
+            resolved.alternates || [],
+            apiUrl
           );
-          playNativeAudioCandidates(resolvedCandidates);
-        } else {
-          const resolvedCandidates = buildStreamCandidates(
-            resolved,
-            quality,
-            resolved.alternates || []
-          );
-          playNativeAudioCandidates(resolvedCandidates);
+          if (full.length > 0) {
+            playNativeAudioCandidates(full);
+          } else if (preview.length > 0) {
+            showToast(`Playing 30s preview · ${resolvedTrack.sourceProvider || 'Catalogue'}`);
+            playNativeAudioCandidates(preview);
+          } else {
+            playNativeAudioCandidates([]);
+          }
+        }).catch(() => {
+          if (playSeq !== playbackSeqRef.current) return;
+          const fallbackPreview = buildStreamCandidates(track, quality, [], true);
+          if (fallbackPreview.length > 0) {
+            showToast(`Playing 30s preview · ${track.sourceProvider || 'Catalogue'}`);
+            playNativeAudioCandidates(fallbackPreview);
+            return;
+          }
+          setIsPlaying(false);
+          showToast('Could not resolve an authorized audio source for this recording. Try another match.');
+        });
+      };
+
+      if (downloadedIds.has(track.id)) {
+        if (audio) {
+          audio.src = SILENT_WAV_DATA_URI;
+          audio.play().catch(() => {});
         }
-      }).catch(() => {
-        if (playSeq !== playbackSeqRef.current) return;
-        setIsPlaying(false);
-        showToast('Could not resolve an authorized audio source for this recording. Try another match.');
-      });
+        getOfflineAudioUrl(track.id)
+          .then((offlineUrl) => {
+            if (playSeq !== playbackSeqRef.current) return;
+            if (offlineUrl) {
+              playNativeAudioCandidates([offlineUrl]);
+            } else {
+              startOnlinePlayback();
+            }
+          })
+          .catch(() => {
+            if (playSeq === playbackSeqRef.current) startOnlinePlayback();
+          });
+        return;
+      }
+
+      startOnlinePlayback();
     },
-    [quality, showToast, loadAndPlayCandidate, volume]
+    [downloadedIds, quality, showToast, loadAndPlayCandidate, volume]
   );
 
   const playTrackList = useCallback(
@@ -1818,7 +1887,7 @@ export default function App() {
   const likedTracks = useMemo(() => Object.values(likedMap), [likedMap]);
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-black text-white">
+    <div className="flex h-dvh flex-col overflow-hidden bg-black text-white">
       <audio ref={audioRef} preload="metadata" className="hidden" />
       <audio ref={audioRef2} preload="metadata" className="hidden" />
       <div
@@ -1922,7 +1991,10 @@ export default function App() {
                 likedTracks={likedTracks}
                 playCounts={playCounts}
                 playedTracks={Object.values(playedTracks)}
+                downloadedIds={downloadedIds}
+                downloadingIds={downloadingIds}
                 onPlayTrackList={playTrackList}
+                onToggleDownload={handleToggleDownload}
                 onOpenPlaylist={openPlaylistCollection}
                 onOpenLiked={openLikedCollection}
                 onOpenRecent={openRecentCollection}
@@ -1934,7 +2006,10 @@ export default function App() {
               <DiscoverView
                 tracks={[...regionalTracks, ...personalizedFeedTracks, ...recommendedTracks]}
                 recentlyPlayed={recentlyPlayed}
+                downloadedIds={downloadedIds}
+                downloadingIds={downloadingIds}
                 onPlayTrackList={playTrackList}
+                onToggleDownload={handleToggleDownload}
                 onRefresh={async () => {
                   const freshTracks = await fetchRegionalDiscovery(region, true);
                   setRegionalTracks(freshTracks);
@@ -2118,6 +2193,8 @@ export default function App() {
         shuffle={shuffle}
         repeatMode={repeatMode}
         isLiked={Boolean(currentTrack && likedMap[currentTrack.id])}
+        isDownloaded={Boolean(currentTrack && downloadedIds.has(currentTrack.id))}
+        isDownloading={Boolean(currentTrack && downloadingIds.has(currentTrack.id))}
         volume={volume}
         quality={quality}
         lyricsOpen={activeView === 'lyrics'}
@@ -2154,10 +2231,7 @@ export default function App() {
           setQuality(nextQ);
           showToast(`Audio quality: ${nextQ}`);
         }}
-        onDownload={() => {
-          navigateTo('downloads', null);
-          showToast('Import audio files in Offline Downloads to listen without internet.');
-        }}
+        onDownload={() => currentTrack && void handleToggleDownload(currentTrack)}
       />
 
       {/* Expandable Full-Screen Spotify Now Playing Overlay */}
@@ -2325,7 +2399,7 @@ export default function App() {
         <div
           role="status"
           aria-live="polite"
-          className="pointer-events-none fixed bottom-24 left-1/2 z-50 -translate-x-1/2 rounded-full bg-[#1DB954] px-4 py-1.5 text-xs font-extrabold text-black shadow-2xl"
+          className="pointer-events-none fixed bottom-32 left-1/2 z-50 max-w-[calc(100vw-2rem)] -translate-x-1/2 rounded-full bg-[#1DB954] px-4 py-1.5 text-center text-xs font-extrabold text-black shadow-2xl lg:bottom-24"
         >
           {toastMsg}
         </div>

@@ -119,6 +119,9 @@ export function RightPanel({
                   {currentTrack.sourceProvider && (
                     <p className="mt-1 truncate text-[10px] text-zinc-500">
                       Source: {currentTrack.sourceProvider}
+                      {currentTrack.sourceAvailability === 'preview' && !downloadedIds.has(currentTrack.id) && (
+                        <span className="text-amber-300/90"> · 30s preview</span>
+                      )}
                     </p>
                   )}
                   {currentTrack.sourceProvider === 'Jamendo' && currentTrack.sourcePageUrl && (

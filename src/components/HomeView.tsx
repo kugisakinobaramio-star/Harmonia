@@ -9,6 +9,7 @@ import type {
 } from '../types/music';
 import { getGreetingForHour, REGION_LABELS } from '../utils/playerEngine';
 import { CoverImage } from './CoverImage';
+import { DownloadButton } from './DownloadButton';
 
 interface HomeViewProps {
   displayName: string;
@@ -25,7 +26,10 @@ interface HomeViewProps {
   likedTracks: Track[];
   playCounts: Record<string, number>;
   playedTracks: Track[];
+  downloadedIds: Set<string>;
+  downloadingIds: Set<string>;
   onPlayTrackList: (tracks: Track[], startIndex: number) => void;
+  onToggleDownload: (track: Track) => void;
   onOpenPlaylist: (pl: CuratedPlaylist) => void;
   onOpenLiked: () => void;
   onOpenRecent: () => void;
@@ -47,7 +51,10 @@ export function HomeView({
   likedTracks,
   playCounts,
   playedTracks,
+  downloadedIds,
+  downloadingIds,
   onPlayTrackList,
+  onToggleDownload,
   onOpenPlaylist,
   onOpenLiked,
   onOpenRecent,
@@ -173,37 +180,56 @@ export function HomeView({
         </div>
 
         <div className="grid grid-cols-2 gap-3.5 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5">
-          {tracks.slice(0, 5).map((track, idx) => (
-            <div
-              key={`${title}-${track.id}`}
-              className="group relative rounded-lg bg-[#161619] p-3 transition-colors hover:bg-[#222227]"
-            >
-              <button
-                type="button"
-                onClick={() => onPlayTrackList(tracks, idx)}
-                className="w-full text-left focus:outline-none"
+          {tracks.slice(0, 5).map((track, idx) => {
+            const isDownloaded = downloadedIds.has(track.id);
+            const isDownloading = downloadingIds.has(track.id);
+            const isOnlineOnly = track.offlineAvailable === false || track.sourceProvider === 'Jamendo';
+            return (
+              <div
+                key={`${title}-${track.id}`}
+                className="group relative rounded-lg bg-[#161619] p-3 transition-colors hover:bg-[#222227]"
               >
-                <div className="relative aspect-square w-full overflow-hidden rounded-md bg-black shadow-lg">
-                  <CoverImage
-                    src={track.image}
-                    alt={track.name}
-                    className="h-full w-full object-cover"
-                  />
-                  <span
-                    aria-hidden="true"
-                    className="absolute bottom-2 right-2 grid h-10 w-10 translate-y-2 place-items-center rounded-full bg-[#1DB954] text-black opacity-0 shadow-xl transition-all duration-150 group-hover:translate-y-0 group-hover:opacity-100"
-                  >
-                    <Play className="h-4 w-4 fill-current pl-0.5" />
-                  </span>
-                </div>
-                <div className="mt-3 truncate text-sm font-bold text-white">{track.name}</div>
-                <div className="mt-0.5 truncate text-xs text-zinc-400">
-                  {track.artist}
-                  {track.language ? ` · ${track.language}` : ''}
-                </div>
-              </button>
-            </div>
-          ))}
+                <button
+                  type="button"
+                  onClick={() => onPlayTrackList(tracks, idx)}
+                  className="w-full text-left focus:outline-none"
+                >
+                  <div className="relative aspect-square w-full overflow-hidden rounded-md bg-black shadow-lg">
+                    <CoverImage
+                      src={track.image}
+                      alt={track.name}
+                      className="h-full w-full object-cover"
+                    />
+                    <span
+                      aria-hidden="true"
+                      className="absolute bottom-2 right-2 grid h-10 w-10 translate-y-2 place-items-center rounded-full bg-[#1DB954] text-black opacity-0 shadow-xl transition-all duration-150 group-hover:translate-y-0 group-hover:opacity-100"
+                    >
+                      <Play className="h-4 w-4 fill-current pl-0.5" />
+                    </span>
+                  </div>
+                  <div className="mt-3 truncate text-sm font-bold text-white">{track.name}</div>
+                  <div className="mt-0.5 truncate text-xs text-zinc-400">
+                    {track.artist}
+                    {track.language ? ` · ${track.language}` : ''}
+                  </div>
+                </button>
+                <DownloadButton
+                  trackName={track.name}
+                  downloaded={isDownloaded}
+                  downloading={isDownloading}
+                  onClick={() => onToggleDownload(track)}
+                  disabled={isOnlineOnly}
+                  disabledReason="This provider supports online listening only"
+                  size="xs"
+                  className={`absolute right-4.5 top-4.5 z-10 shadow-md transition-opacity ${
+                    isDownloaded || isDownloading
+                      ? 'opacity-100'
+                      : 'opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:focus:opacity-100'
+                  }`}
+                />
+              </div>
+            );
+          })}
         </div>
       </section>
     );

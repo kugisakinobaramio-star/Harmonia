@@ -17,11 +17,11 @@ import {
   Video,
   Volume2,
   VolumeX,
-  Download,
 } from 'lucide-react';
 import type { AudioQuality, RepeatMode, RightPanelMode, Track } from '../types/music';
 import { formatTime, QUALITY_LABELS } from '../utils/playerEngine';
 import { CoverImage } from './CoverImage';
+import { DownloadButton } from './DownloadButton';
 
 interface PlayerBarProps {
   currentTrack: Track | null;
@@ -31,6 +31,8 @@ interface PlayerBarProps {
   shuffle: boolean;
   repeatMode: RepeatMode;
   isLiked: boolean;
+  isDownloaded: boolean;
+  isDownloading: boolean;
   volume: number;
   quality: AudioQuality;
   lyricsOpen: boolean;
@@ -60,6 +62,8 @@ export function PlayerBar({
   shuffle,
   repeatMode,
   isLiked,
+  isDownloaded,
+  isDownloading,
   volume,
   quality,
   lyricsOpen,
@@ -108,6 +112,16 @@ export function PlayerBar({
               </div>
             </div>
           </button>
+
+          <DownloadButton
+            trackName={currentTrack?.name || 'current track'}
+            downloaded={isDownloaded}
+            downloading={isDownloading}
+            onClick={onDownload}
+            disabled={!currentTrack || currentTrack.offlineAvailable === false || currentTrack.sourceProvider === 'Jamendo'}
+            disabledReason="This provider supports online listening only"
+            size="xs"
+          />
 
           <button
             type="button"
@@ -160,13 +174,13 @@ export function PlayerBar({
       </div>
 
       {/* Desktop Spotify Edge-to-Edge Now Playing Bar */}
-      <div className="hidden h-[84px] grid-cols-[minmax(220px,1fr)_minmax(340px,1.45fr)_minmax(260px,1fr)] items-center gap-3 px-4 md:grid">
+      <div className="hidden h-[84px] grid-cols-[minmax(0,1fr)_minmax(0,1.35fr)_minmax(0,1fr)] items-center gap-2 px-3 md:grid lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.25fr)_minmax(0,1.1fr)] lg:gap-3 lg:px-4 xl:grid-cols-[minmax(220px,1fr)_minmax(340px,1.45fr)_minmax(260px,1fr)]">
         {/* Left: Cover art (opens expanded view), Title, Artist, Spotify '+' / green Check */}
-        <div className="flex min-w-0 items-center gap-3">
+        <div className="flex min-w-0 items-center gap-2.5 lg:gap-3">
           <button
             type="button"
             onClick={onOpenExpanded}
-            className="group relative h-14 w-14 shrink-0 overflow-hidden rounded bg-[#18181b] focus:outline-none"
+            className="group relative h-12 w-12 shrink-0 overflow-hidden rounded bg-[#18181b] focus:outline-none lg:h-14 lg:w-14"
             aria-label="Open full-screen player"
             title="Expand player"
           >
@@ -180,7 +194,7 @@ export function PlayerBar({
             </span>
           </button>
 
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <button
               type="button"
               onClick={onOpenExpanded}
@@ -190,6 +204,11 @@ export function PlayerBar({
             </button>
             <div className="truncate text-xs text-zinc-400">
               {currentTrack?.artist || 'Arijit Singh, Pritam'}
+              {currentTrack?.sourceAvailability === 'preview' && !isDownloaded && (
+                <span className="ml-1.5 text-[10px] font-semibold text-amber-300/90">
+                  · 30s preview
+                </span>
+              )}
             </div>
           </div>
 
@@ -198,7 +217,7 @@ export function PlayerBar({
             onClick={onToggleLike}
             aria-label={isLiked ? 'Remove from Liked Songs' : 'Save to Liked Songs'}
             aria-pressed={isLiked}
-            className={`ml-1 grid h-6 w-6 shrink-0 place-items-center rounded-full transition-transform hover:scale-105 ${
+            className={`ml-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full transition-transform hover:scale-105 ${
               isLiked
                 ? 'bg-[#1DB954] text-black'
                 : 'border border-zinc-400 text-zinc-300 hover:border-white hover:text-white'
@@ -209,8 +228,8 @@ export function PlayerBar({
         </div>
 
         {/* Center: Transport + Progress Bar */}
-        <div className="flex flex-col items-center justify-center gap-1.5">
-          <div className="flex items-center gap-4">
+        <div className="flex min-w-0 flex-col items-center justify-center gap-1.5">
+          <div className="flex items-center gap-2 lg:gap-3.5 xl:gap-4">
             <button
               type="button"
               onClick={onToggleShuffle}
@@ -284,9 +303,9 @@ export function PlayerBar({
           </div>
 
           <div className="group/bar flex w-full max-w-[540px] items-center gap-2 text-[11px] text-zinc-400">
-            <span className="font-mono-num w-9 text-right">{formatTime(currentTime)}</span>
+            <span className="font-mono-num w-8 shrink-0 text-right lg:w-9">{formatTime(currentTime)}</span>
 
-            <div className="relative flex flex-1 items-center">
+            <div className="relative flex min-w-0 flex-1 items-center">
               <div
                 aria-hidden="true"
                 className="pointer-events-none absolute left-0 top-1/2 h-1 -translate-y-1/2 rounded-full bg-white transition-colors group-hover/bar:bg-[#1DB954]"
@@ -306,19 +325,19 @@ export function PlayerBar({
               />
             </div>
 
-            <span className="font-mono-num w-9">{formatTime(safeDuration)}</span>
+            <span className="font-mono-num w-8 shrink-0 lg:w-9">{formatTime(safeDuration)}</span>
           </div>
         </div>
 
-        {/* Right: Now Playing View, Lyrics Mic, Queue, Video, Share, Quality, Volume, Fullscreen */}
-        <div className="flex items-center justify-end gap-2">
+        {/* Right: Now Playing View, Lyrics Mic, Queue, Video, Share, Download, Quality, Volume, Fullscreen */}
+        <div className="flex min-w-0 items-center justify-end gap-0.5 lg:gap-1 xl:gap-1.5">
           <button
             type="button"
             onClick={() => onToggleRightPanel('nowplaying')}
             aria-label="Toggle Now Playing sidebar"
             aria-pressed={rightPanelMode === 'nowplaying'}
             title="Now Playing view"
-            className={`p-1.5 transition-colors ${
+            className={`shrink-0 p-1 transition-colors lg:p-1.5 ${
               rightPanelMode === 'nowplaying' ? 'text-[#1DB954]' : 'text-zinc-400 hover:text-white'
             }`}
           >
@@ -331,7 +350,7 @@ export function PlayerBar({
             aria-label="Toggle Lyrics view"
             aria-pressed={lyricsOpen}
             title="Lyrics"
-            className={`p-1.5 transition-colors ${
+            className={`shrink-0 p-1 transition-colors lg:p-1.5 ${
               lyricsOpen ? 'text-[#1DB954]' : 'text-zinc-400 hover:text-white'
             }`}
           >
@@ -344,7 +363,7 @@ export function PlayerBar({
             aria-label="Toggle Queue sidebar"
             aria-pressed={rightPanelMode === 'queue'}
             title="Queue"
-            className={`p-1.5 transition-colors ${
+            className={`shrink-0 p-1 transition-colors lg:p-1.5 ${
               rightPanelMode === 'queue' ? 'text-[#1DB954]' : 'text-zinc-400 hover:text-white'
             }`}
           >
@@ -356,7 +375,7 @@ export function PlayerBar({
             onClick={onOpenVideo}
             aria-label="Watch music video"
             title="Music video"
-            className="p-1.5 text-zinc-400 transition-colors hover:text-white"
+            className="hidden shrink-0 p-1.5 text-zinc-400 transition-colors hover:text-white lg:inline-flex"
           >
             <Video className="h-4 w-4" />
           </button>
@@ -366,40 +385,41 @@ export function PlayerBar({
             onClick={onShare}
             aria-label="Share track"
             title="Share"
-            className="p-1.5 text-zinc-400 transition-colors hover:text-white"
+            className="hidden shrink-0 p-1.5 text-zinc-400 transition-colors hover:text-white xl:inline-flex"
           >
             <Share2 className="h-4 w-4" />
           </button>
 
-          <button
-            type="button"
+          <DownloadButton
+            trackName={currentTrack?.name || 'current track'}
+            downloaded={isDownloaded}
+            downloading={isDownloading}
             onClick={onDownload}
-            aria-label="Open offline library"
-            title="Offline library"
-            className="p-1.5 text-zinc-400 transition-colors hover:text-[#1DB954]"
-          >
-            <Download className="h-4 w-4" />
-          </button>
+            disabled={!currentTrack || currentTrack.offlineAvailable === false || currentTrack.sourceProvider === 'Jamendo'}
+            disabledReason="This provider supports online listening only"
+            size="xs"
+            className="mx-0.5 lg:mx-1"
+          />
 
           <button
             type="button"
             onClick={onCycleQuality}
             aria-label="Cycle audio quality"
-            className="font-mono-num rounded border border-white/15 px-1.5 py-0.5 text-[10px] font-semibold text-zinc-300 hover:border-white hover:text-white"
+            className="hidden shrink-0 font-mono-num rounded border border-white/15 px-1.5 py-0.5 text-[10px] font-semibold text-zinc-300 hover:border-white hover:text-white lg:inline-flex"
           >
             {QUALITY_LABELS[quality]}
           </button>
 
-          <div className="flex items-center gap-1.5">
+          <div className="flex shrink-0 items-center gap-1 lg:gap-1.5">
             <button
               type="button"
               onClick={() => onVolumeChange(volume === 0 ? 85 : 0)}
               aria-label={volume === 0 ? 'Unmute audio' : 'Mute audio'}
-              className="text-zinc-400 hover:text-white"
+              className="shrink-0 p-1 text-zinc-400 hover:text-white"
             >
               {volume === 0 ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
             </button>
-            <div className="group/bar relative flex w-20 items-center">
+            <div className="group/bar relative flex w-12 items-center lg:w-16 xl:w-20">
               <div
                 aria-hidden="true"
                 className="pointer-events-none absolute left-0 top-1/2 h-1 -translate-y-1/2 rounded-full bg-white group-hover/bar:bg-[#1DB954]"
@@ -425,7 +445,7 @@ export function PlayerBar({
             onClick={onOpenExpanded}
             aria-label="Expand full screen player"
             title="Full screen player"
-            className="p-1.5 text-zinc-400 transition-colors hover:text-white"
+            className="shrink-0 p-1 text-zinc-400 transition-colors hover:text-white lg:p-1.5"
           >
             <Maximize2 className="h-4 w-4" />
           </button>

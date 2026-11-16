@@ -87,7 +87,7 @@ export function TrackRow({
       </button>
 
       <div className="min-w-0">
-        <button type="button" onClick={onPlay} className="block min-w-0 text-left focus:outline-none">
+        <button type="button" onClick={onPlay} className="block w-full min-w-0 text-left focus:outline-none">
           <div
             className={`truncate text-sm font-semibold ${
               isCurrent ? 'text-[#1DB954]' : 'text-white'

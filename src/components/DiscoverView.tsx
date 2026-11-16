@@ -3,11 +3,15 @@ import { useMemo, useState } from 'react';
 import type { MusicLanguage, Track } from '../types/music';
 import { rankDiscoverTracks } from '../utils/playerEngine';
 import { CoverImage } from './CoverImage';
+import { DownloadButton } from './DownloadButton';
 
 interface DiscoverViewProps {
   tracks: Track[];
   recentlyPlayed: Track[];
+  downloadedIds: Set<string>;
+  downloadingIds: Set<string>;
   onPlayTrackList: (tracks: Track[], startIndex: number) => void;
+  onToggleDownload: (track: Track) => void;
   onRefresh: () => Promise<void>;
   likedTracks: Track[];
   playCounts: Record<string, number>;
@@ -21,7 +25,22 @@ interface DiscoverViewProps {
 const LANGUAGES: Array<MusicLanguage | 'All'> = ['All', 'Hindi', 'Punjabi', 'Haryanvi', 'English', 'Japanese', 'J-Pop', 'Korean', 'Tamil', 'Telugu', 'Bengali'];
 
 
-export function DiscoverView({ tracks, recentlyPlayed, onPlayTrackList, onRefresh, likedTracks, playCounts, artistAffinity, genreAffinity, preferredLanguages, favoriteArtists, preferredMoods }: DiscoverViewProps) {
+export function DiscoverView({
+  tracks,
+  recentlyPlayed,
+  downloadedIds,
+  downloadingIds,
+  onPlayTrackList,
+  onToggleDownload,
+  onRefresh,
+  likedTracks,
+  playCounts,
+  artistAffinity,
+  genreAffinity,
+  preferredLanguages,
+  favoriteArtists,
+  preferredMoods,
+}: DiscoverViewProps) {
   const [language, setLanguage] = useState<MusicLanguage | 'All'>('All');
   const [rotation, setRotation] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
@@ -67,19 +86,49 @@ export function DiscoverView({ tracks, recentlyPlayed, onPlayTrackList, onRefres
 
       {visible.length ? (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5">
-          {visible.slice(0, 40).map((track, index) => (
-            <button key={track.id} type="button" onClick={() => onPlayTrackList(visible, index)} className="group min-w-0 rounded-lg bg-[#18181b] p-3 text-left transition-colors hover:bg-[#252529]">
-              <div className="relative aspect-square overflow-hidden rounded-md bg-black">
-                <CoverImage src={track.image} alt={track.name} className="h-full w-full object-cover" />
-                <span className="absolute bottom-2 right-2 grid h-9 w-9 place-items-center rounded-full bg-[#1DB954] text-black opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
-                  <Play className="h-4 w-4 fill-current" />
-                </span>
+          {visible.slice(0, 40).map((track, index) => {
+            const isDownloaded = downloadedIds.has(track.id);
+            const isDownloading = downloadingIds.has(track.id);
+            const isOnlineOnly = track.offlineAvailable === false || track.sourceProvider === 'Jamendo';
+            return (
+              <div
+                key={track.id}
+                className="group relative min-w-0 rounded-lg bg-[#18181b] p-3 text-left transition-colors hover:bg-[#252529]"
+              >
+                <button
+                  type="button"
+                  onClick={() => onPlayTrackList(visible, index)}
+                  className="w-full text-left focus:outline-none"
+                >
+                  <div className="relative aspect-square overflow-hidden rounded-md bg-black">
+                    <CoverImage src={track.image} alt={track.name} className="h-full w-full object-cover" />
+                    <span className="absolute bottom-2 right-2 grid h-9 w-9 place-items-center rounded-full bg-[#1DB954] text-black opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
+                      <Play className="h-4 w-4 fill-current" />
+                    </span>
+                  </div>
+                  <div className="mt-2 truncate text-sm font-bold text-white">{track.name}</div>
+                  <div className="mt-0.5 truncate text-xs text-zinc-400">{track.artist}</div>
+                  <div className="mt-1 truncate text-[10px] text-zinc-500">
+                    {[track.language, track.genre].filter(Boolean).join(' · ') || 'Explore'}
+                  </div>
+                </button>
+                <DownloadButton
+                  trackName={track.name}
+                  downloaded={isDownloaded}
+                  downloading={isDownloading}
+                  onClick={() => onToggleDownload(track)}
+                  disabled={isOnlineOnly}
+                  disabledReason="This provider supports online listening only"
+                  size="xs"
+                  className={`absolute right-4.5 top-4.5 z-10 shadow-md transition-opacity ${
+                    isDownloaded || isDownloading
+                      ? 'opacity-100'
+                      : 'opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:focus:opacity-100'
+                  }`}
+                />
               </div>
-              <div className="mt-2 truncate text-sm font-bold text-white">{track.name}</div>
-              <div className="mt-0.5 truncate text-xs text-zinc-400">{track.artist}</div>
-              <div className="mt-1 truncate text-[10px] text-zinc-500">{[track.language, track.genre].filter(Boolean).join(' · ') || 'Explore'}</div>
-            </button>
-          ))}
+            );
+          })}
         </div>
       ) : (
         <div className="rounded-lg bg-[#18181b] p-6 text-sm text-zinc-400">No fresh tracks in this filter yet. Try All or check back after discovery sources refresh.</div>

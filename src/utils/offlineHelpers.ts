@@ -94,11 +94,14 @@ export function collectDownloadCandidateUrls(
 }
 
 export function isCollectionFullyDownloaded(
-  tracks: Pick<Track, 'id'>[],
+  tracks: Pick<Track, 'id' | 'offlineAvailable' | 'sourceProvider'>[],
   downloadedIds: Set<string>
 ): boolean {
-  if (!tracks.length) return false;
-  return tracks.every((t) => downloadedIds.has(t.id));
+  const downloadable = tracks.filter(
+    (t) => t.offlineAvailable !== false && t.sourceProvider !== 'Jamendo'
+  );
+  if (!downloadable.length) return false;
+  return downloadable.every((t) => downloadedIds.has(t.id));
 }
 
 export function offlineItemToTrack(item: OfflineTrackRecord, objectUrl: string): Track {

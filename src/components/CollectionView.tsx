@@ -54,6 +54,9 @@ export function CollectionView({
   const totalSeconds = sorted.reduce((acc, t) => acc + (t.duration || 0), 0);
   const totalMins = Math.round(totalSeconds / 60);
   const allDownloaded = isCollectionFullyDownloaded(sorted, downloadedIds);
+  const hasDownloadable = sorted.some(
+    (t) => t.offlineAvailable !== false && t.sourceProvider !== 'Jamendo'
+  );
   const anyDownloading = sorted.some((t) => downloadingIds.has(t.id));
 
   return (
@@ -131,17 +134,25 @@ export function CollectionView({
               <button
                 type="button"
                 onClick={() => onDownloadAll(sorted)}
-                disabled={anyDownloading}
+                disabled={anyDownloading || !hasDownloadable}
                 aria-label={
-                  anyDownloading
-                    ? `Downloading ${collection.title}`
-                    : allDownloaded
-                      ? `Remove downloaded tracks in ${collection.title}`
-                      : `Download all ${sorted.length} songs in ${collection.title}`
+                  !hasDownloadable
+                    ? `Offline download is unavailable for ${collection.title}`
+                    : anyDownloading
+                      ? `Downloading ${collection.title}`
+                      : allDownloaded
+                        ? `Remove downloaded tracks in ${collection.title}`
+                        : `Download all songs in ${collection.title}`
                 }
                 aria-pressed={allDownloaded}
-                title={allDownloaded ? 'Downloaded — click to remove' : 'Download all songs for offline listening'}
-                className={`grid h-9 w-9 place-items-center rounded-full border transition-all disabled:cursor-wait ${
+                title={
+                  !hasDownloadable
+                    ? 'These tracks support online listening only'
+                    : allDownloaded
+                      ? 'Downloaded — click to remove'
+                      : 'Download all songs for offline listening'
+                }
+                className={`grid h-9 w-9 place-items-center rounded-full border transition-all disabled:cursor-not-allowed disabled:opacity-50 ${
                   allDownloaded
                     ? 'border-[#1DB954] bg-[#1DB954] text-black shadow-md'
                     : anyDownloading

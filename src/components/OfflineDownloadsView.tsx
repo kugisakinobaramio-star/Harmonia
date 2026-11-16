@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Music2, Trash2, Upload } from 'lucide-react';
+import { Download, Music2, Trash2, Upload } from 'lucide-react';
 import type { Track } from '../types/music';
 import {
   formatStorageBytes,
@@ -8,10 +8,13 @@ import {
 import {
   getOrCreateOfflineObjectUrl,
   listOfflineTracks,
+  offlineItemToTrack,
   removeOfflineTrack,
   saveOfflineTrack,
+  triggerBrowserFileSave,
   type OfflineTrackRecord,
 } from '../utils/offlineStore';
+import { CoverImage } from './CoverImage';
 
 function notifyOfflineLibraryChanged() {
   window.dispatchEvent(new Event('harmonia-offline-library-change'));
@@ -115,17 +118,7 @@ export function OfflineDownloadsView({
   const play = (index: number) => {
     const tracks: Track[] = items.map((item) => {
       const url = getOrCreateOfflineObjectUrl(item.id, item.blob);
-      return {
-        id: item.id,
-        name: item.name,
-        artist: item.artist,
-        albumName: item.albumName || 'Offline files',
-        duration: item.duration || 0,
-        image: item.image || '',
-        language: item.language,
-        previewUrl: url,
-        streamUrls: { '320kbps': url },
-      };
+      return offlineItemToTrack(item, url);
     });
     onPlayList(tracks, index);
   };
@@ -148,7 +141,9 @@ export function OfflineDownloadsView({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-extrabold text-white">Offline Library</h1>
-          <p className="mt-1 text-sm text-zinc-400">Your imported audio files, stored on this device</p>
+          <p className="mt-1 text-sm text-zinc-400">
+            Downloaded songs and imported audio files stored on this device
+          </p>
         </div>
         <label className="inline-flex cursor-pointer items-center gap-2 rounded-full bg-[#1DB954] px-4 py-2 text-sm font-bold text-black">
           <Upload className="h-4 w-4" />
@@ -169,14 +164,14 @@ export function OfflineDownloadsView({
 
       <div className="grid grid-cols-2 gap-3 sm:max-w-2xl sm:grid-cols-3">
         <div className="rounded-xl bg-[#1b1b1f] p-4">
-          <p className="text-xs text-zinc-400">Saved files</p>
+          <p className="text-xs text-zinc-400">Saved tracks</p>
           <p className="mt-2 text-2xl font-bold text-white">{items.length}</p>
         </div>
         <div className="rounded-xl bg-[#1b1b1f] p-4">
           <p className="text-xs text-zinc-400">Offline library</p>
           <p className="mt-2 text-2xl font-bold text-white">{formatStorageBytes(total)}</p>
         </div>
-        <div className="rounded-xl bg-[#1b1b1f] p-4">
+        <div className="col-span-2 rounded-xl bg-[#1b1b1f] p-4 sm:col-span-1">
           <p className="text-xs text-zinc-400">Browser storage used</p>
           <p className="mt-2 text-2xl font-bold text-white">
             {browserStorage?.usage != null ? formatStorageBytes(browserStorage.usage) : 'Unavailable'}
@@ -194,7 +189,7 @@ export function OfflineDownloadsView({
           <Music2 className="mx-auto h-9 w-9 text-zinc-500" />
           <h2 className="mt-3 font-bold text-white">Your offline library is empty</h2>
           <p className="mt-1 text-sm text-zinc-400">
-            Import audio files you own or have permission to store. They will remain available on this device.
+            Tap the download button on any song or playlist, or import audio files you own to listen offline.
           </p>
         </div>
       ) : (
@@ -203,9 +198,9 @@ export function OfflineDownloadsView({
             <button
               type="button"
               onClick={() => play(0)}
-              className="rounded-full bg-white px-4 py-2 text-xs font-bold text-black"
+              className="rounded-full bg-[#1DB954] px-4 py-2 text-xs font-extrabold text-black transition-transform hover:scale-105"
             >
-              Play all
+              Play all offline
             </button>
           </div>
           {items.map((item, index) => (
@@ -215,19 +210,40 @@ export function OfflineDownloadsView({
                 onClick={() => play(index)}
                 className="flex min-w-0 flex-1 items-center gap-3 text-left"
               >
-                <span className="grid h-11 w-11 place-items-center rounded-lg bg-[#29292f]">
-                  <Music2 className="h-5 w-5 text-zinc-400" />
-                </span>
+                {item.image ? (
+                  <CoverImage
+                    src={item.image}
+                    alt={item.name}
+                    className="h-11 w-11 shrink-0 rounded-lg object-cover"
+                  />
+                ) : (
+                  <span className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-[#29292f]">
+                    <Music2 className="h-5 w-5 text-zinc-400" />
+                  </span>
+                )}
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-semibold text-white">{item.name}</span>
-                  <span className="block text-xs text-zinc-400">{item.artist} · {formatStorageBytes(item.size)}</span>
+                  <span className="block truncate text-xs text-zinc-400">
+                    {item.artist} · {formatStorageBytes(item.size)}
+                    {item.provider ? ` · ${item.provider}` : ''}
+                  </span>
                 </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => triggerBrowserFileSave(item)}
+                aria-label={`Save audio file for ${item.name}`}
+                title="Save audio file to device"
+                className="rounded-full p-2 text-zinc-400 transition-colors hover:bg-white/10 hover:text-white"
+              >
+                <Download className="h-4 w-4" />
               </button>
               <button
                 type="button"
                 onClick={() => void remove(item.id)}
                 aria-label={'Remove ' + item.name}
-                className="rounded-full p-2 text-zinc-400 hover:bg-white/10"
+                title="Remove from offline library"
+                className="rounded-full p-2 text-zinc-400 transition-colors hover:bg-white/10 hover:text-red-400"
               >
                 <Trash2 className="h-4 w-4" />
               </button>
@@ -237,7 +253,7 @@ export function OfflineDownloadsView({
       )}
 
       <p className="text-xs leading-relaxed text-zinc-500">
-        Stored in this browser’s local database. Clearing site data may remove these files. Streaming tracks can only be saved through a provider’s official offline feature when permitted.
+        Stored in this browser’s local database. Clearing site data may remove these files. Online-only providers such as Jamendo remain streaming-only under their API terms.
       </p>
     </section>
   );

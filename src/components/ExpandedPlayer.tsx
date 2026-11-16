@@ -138,7 +138,10 @@ export function ExpandedPlayer({
               </h2>
               <p className="mt-0.5 truncate text-sm font-medium text-zinc-300">{track.artist}</p>
               {track.sourceProvider && (
-                <p className="mt-1 truncate text-[10px] text-zinc-500">Source: {track.sourceProvider}</p>
+                <p className="mt-1 truncate text-[10px] text-zinc-500">
+                  Source: {track.sourceProvider}
+                  {track.sourceAvailability === 'preview' ? ' · 30s preview' : ''}
+                </p>
               )}
               {track.sourceProvider === 'Jamendo' && track.sourcePageUrl && (
                 <div className="mt-1 flex flex-wrap gap-x-3 text-[10px]">

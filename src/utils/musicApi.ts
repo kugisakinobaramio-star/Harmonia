@@ -183,7 +183,14 @@ function mapSaavnSong(raw: SaavnSongRaw): Track {
 }
 
 function searchTextTokens(value: string): string[] {
-  return value.toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').trim().split(/\s+/).filter((token) => token.length > 1);
+  return value
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim()
+    .split(/\s+/)
+    .filter((token) => token.length > 1 || /[^\x00-\x7f]/.test(token));
 }
 
 function isRelevantSearchCandidate(track: Pick<Track, 'name' | 'artist' | 'albumName'>, query: string): boolean {

@@ -54,10 +54,24 @@ test('collectDownloadCandidateUrls prefers full-length quality streams before pr
   ]);
 });
 
-test('isCollectionFullyDownloaded returns true only when every track in non-empty list is downloaded', () => {
+test('isCollectionFullyDownloaded returns true only when every downloadable track in non-empty list is downloaded', () => {
   const downloaded = new Set(['a', 'b']);
   assert.equal(isCollectionFullyDownloaded([], downloaded), false);
   assert.equal(isCollectionFullyDownloaded([{ id: 'a' }, { id: 'b' }], downloaded), true);
+  assert.equal(
+    isCollectionFullyDownloaded(
+      [{ id: 'a' }, { id: 'j1', offlineAvailable: false, sourceProvider: 'Jamendo' }],
+      downloaded
+    ),
+    true
+  );
+  assert.equal(
+    isCollectionFullyDownloaded(
+      [{ id: 'j1', offlineAvailable: false, sourceProvider: 'Jamendo' }],
+      downloaded
+    ),
+    false
+  );
   assert.equal(isCollectionFullyDownloaded([{ id: 'a' }, { id: 'c' }], downloaded), false);
 });
 

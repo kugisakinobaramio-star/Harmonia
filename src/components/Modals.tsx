@@ -753,7 +753,7 @@ export function PersonaliseModal({
               <span className="text-[11px] text-zinc-500">Boosts Home &amp; fetches artist mixes</span>
             </div>
 
-            <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
               {ARTIST_PICKER_OPTIONS.map((art) => {
                 const selected = favoriteArtists.some(
                   (a) => a.toLowerCase() === art.name.toLowerCase()
@@ -943,7 +943,7 @@ export function ProfileModal({
   const initial = displayName.trim().charAt(0).toUpperCase() || 'H';
   return (
     <div role="dialog" aria-modal="true" aria-label="Your Harmonia profile" className="fixed inset-0 z-50 grid place-items-center bg-black/80 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-lg overflow-hidden rounded-2xl border border-white/10 bg-[#18181b] shadow-2xl">
+      <div className="max-h-[90dvh] w-full max-w-lg overflow-y-auto rounded-2xl border border-white/10 bg-[#18181b] shadow-2xl">
         <div className="relative bg-gradient-to-br from-[#183b2a] via-[#20252a] to-[#18181b] px-5 pb-5 pt-4">
           <div className="flex justify-end">
             <button type="button" onClick={onClose} aria-label="Close profile" className="rounded-full bg-black/30 p-2 text-zinc-200 hover:bg-black/50"><X className="h-4 w-4" /></button>

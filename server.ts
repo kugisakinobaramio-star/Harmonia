@@ -13,8 +13,19 @@ import {
   scoreAuthenticTrackCandidate,
   selectSaavnArtistForMatch,
 } from './src/utils/playerEngine.ts';
+import {
+  JIOSAAVN_NATIVE_HEADERS,
+  mapNativeSaavnAlbum,
+  mapNativeSaavnArtist,
+  mapNativeSaavnSong,
+  type NativeSaavnAlbumRaw,
+  type NativeSaavnArtistRaw,
+  type NativeSaavnSongRaw,
+  type SaavnNormalizedSong,
+} from './src/utils/jiosaavnNative.ts';
 
 const SAAVN_BASE = 'https://saavn.sumit.co';
+const JIOSAAVN_API_BASE = 'https://www.jiosaavn.com/api.php';
 
 interface StoredLyricLine {
   time: number;
@@ -602,6 +613,66 @@ async function enrichSpotifyTracksArtwork(tracks: StoredTrack[]): Promise<Stored
   return [...enriched, ...rest];
 }
 
+async function fetchSaavnNativeSongs(
+  query: string,
+  page = 0,
+  limit = 20,
+  timeoutMs = 3500
+): Promise<SaavnNormalizedSong[]> {
+  try {
+    const url =
+      `${JIOSAAVN_API_BASE}?__call=search.getResults&q=${encodeURIComponent(query)}` +
+      `&n=${limit}&p=${page + 1}&_format=json&_marker=0&api_version=4`;
+    const res = await fetchWithTimeout(url, timeoutMs, JIOSAAVN_NATIVE_HEADERS);
+    if (!res.ok) return [];
+    const json = (await res.json()) as { results?: NativeSaavnSongRaw[] };
+    const out: SaavnNormalizedSong[] = [];
+    const seen = new Set<string>();
+    for (const raw of json.results || []) {
+      const mapped = mapNativeSaavnSong(raw);
+      if (mapped && !seen.has(mapped.id)) {
+        seen.add(mapped.id);
+        out.push(mapped);
+      }
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
+
+async function fetchSaavnSongsCombined(
+  query: string,
+  page = 0,
+  limit = 20,
+  timeoutMs = 3500
+): Promise<SaavnCandidateRaw[]> {
+  const [nativeSettled, sumitSettled] = await Promise.allSettled([
+    fetchSaavnNativeSongs(query, page, limit, timeoutMs),
+    fetchWithTimeout(
+      `${SAAVN_BASE}/api/search/songs?query=${encodeURIComponent(query)}&page=${page}&limit=${limit}`,
+      timeoutMs
+    ).then((r) => (r.ok ? r.json() : null)),
+  ]);
+  const merged: SaavnCandidateRaw[] = [];
+  const seenIds = new Set<string>();
+  const pushItem = (item: SaavnCandidateRaw & { id?: string }) => {
+    const id = String(item.id || '');
+    if (id && seenIds.has(id)) return;
+    if (id) seenIds.add(id);
+    merged.push(item);
+  };
+  if (nativeSettled.status === 'fulfilled') {
+    for (const item of nativeSettled.value) pushItem(item);
+  }
+  if (sumitSettled.status === 'fulfilled' && sumitSettled.value?.data?.results) {
+    for (const item of sumitSettled.value.data.results as Array<SaavnCandidateRaw & { id?: string }>) {
+      pushItem(item);
+    }
+  }
+  return merged;
+}
+
 interface SaavnCandidateRaw {
   name?: string;
   duration?: number | string;
@@ -960,7 +1031,7 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
   // Direct audio download proxy endpoint (forces attachment download with clean filename)
   app.get('/api/music/download', async (req, res) => {
     const rawUrl = String(req.query.url || '').trim();
-    const filename = String(req.query.filename || 'harmonia-track.mp3').trim().replace(/["\\/]/g, '_');
+    const rawName = String(req.query.filename || 'harmonia-track').trim().replace(/["\\/]/g, '_');
     if (!rawUrl || !/^https?:\/\//i.test(rawUrl)) {
       res.status(400).send('Invalid audio stream URL');
       return;
@@ -971,8 +1042,19 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
         res.status(502).send('Failed to fetch stream for download');
         return;
       }
-      res.setHeader('Content-Type', upstream.headers.get('content-type') || 'audio/mpeg');
-      res.setHeader('Content-Disposition', `attachment; filename="${filename}.mp3"`);
+      const upstreamType = (upstream.headers.get('content-type') || 'audio/mpeg').toLowerCase();
+      const inferredExt = upstreamType.includes('mp4') || upstreamType.includes('aac')
+        ? 'm4a'
+        : upstreamType.includes('ogg')
+          ? 'ogg'
+          : upstreamType.includes('wav')
+            ? 'wav'
+            : 'mp3';
+      const finalName = /\.(mp3|m4a|aac|ogg|opus|wav|flac)$/i.test(rawName)
+        ? rawName
+        : `${rawName}.${inferredExt}`;
+      res.setHeader('Content-Type', upstreamType);
+      res.setHeader('Content-Disposition', `attachment; filename="${finalName}"`);
       const cl = upstream.headers.get('content-length');
       if (cl) res.setHeader('Content-Length', cl);
 
@@ -1361,29 +1443,22 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
     const [saavnSettled, audiusSettled, deezerSettled, itunesSettled, jamendoSettled, funkwhaleSettled] =
       await Promise.allSettled([
         (async () => {
-          // Search both the combined query and title-only variants. Public catalogues
-          // sometimes tokenize artist/title differently; the strict scorer below
-          // still verifies the primary artist before accepting any stream.
+          // Search both the combined query and title-only variants across both
+          // JioSaavn's regional-IN catalogue and the public mirror so tracks
+          // licensed in IN (such as J-Pop releases) still resolve full streams.
           const saavnQueries = [...new Set([
             query,
             `${primaryArtist} ${cleanTitle}`.trim(),
             cleanTitle,
           ].filter(Boolean))];
           const responses = await Promise.allSettled(
-            saavnQueries.map((term) =>
-              fetchWithTimeout(
-                `${SAAVN_BASE}/api/search/songs?query=${encodeURIComponent(term)}&page=0&limit=12`,
-                5000
-              ).then((r) => (r.ok ? r.json() : null))
-            )
+            saavnQueries.map((term) => fetchSaavnSongsCombined(term, 0, 12, 4200))
           );
           const seen = new Set<string>();
           const results: SaavnCandidateRaw[] = [];
           for (const response of responses) {
             if (response.status !== 'fulfilled') continue;
-            const items = response.value?.data?.results;
-            if (!Array.isArray(items)) continue;
-            for (const item of items as SaavnCandidateRaw[]) {
+            for (const item of response.value) {
               const primary = (item.artists?.primary || [])
                 .map((entry) => entry.name || '')
                 .join(', ')
@@ -1976,11 +2051,7 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
 
       const [saavnResult, itunesResult, deezerResult, audiusResult, jamendoResult, funkwhaleResult, catalogueResult] =
         await Promise.allSettled([
-          fetchWithTimeout(
-            SAAVN_BASE + '/api/search/songs?query=' + encodeURIComponent(query) +
-            '&page=' + page + '&limit=' + limit,
-            3200
-          ).then((r) => r.ok ? r.json() : null),
+          fetchSaavnSongsCombined(query, page, limit, 3400),
           fetchWithTimeout(
             'https://itunes.apple.com/search?term=' + encodeURIComponent(query) +
             '&country=' + country + '&media=music&entity=song&limit=' + limit + '&offset=' + offset,
@@ -2019,12 +2090,7 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
         ]);
 
       const saavnRaw = (
-        saavnResult.status === 'fulfilled' && saavnResult.value
-          ? ((saavnResult.value.data?.results || []) as Array<{
-              name?: string;
-              artists?: { primary?: Array<{ name?: string }> };
-            }>)
-          : []
+        saavnResult.status === 'fulfilled' ? saavnResult.value : []
       ).filter((item) => {
         const primary = (item.artists?.primary || []).map((artist) => artist.name || '').join(', ');
         return !isRemixOrKnockoff(item.name || '', query, primary, query);
@@ -2212,10 +2278,22 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
     const dzEndpoint =
       safeType === 'artists' ? 'artist' : safeType === 'playlists' ? 'playlist' : 'album';
 
-    const [saavnSettled, deezerSettled, musicBrainzSettled] = await Promise.allSettled([
+    const nativeSearchCall =
+      safeType === 'artists'
+        ? 'search.getArtistResults'
+        : safeType === 'playlists'
+          ? 'search.getPlaylistResults'
+          : 'search.getAlbumResults';
+
+    const [saavnSettled, nativeSaavnSettled, deezerSettled, musicBrainzSettled] = await Promise.allSettled([
       fetchWithTimeout(
         `${SAAVN_BASE}/api/search/${safeType}?query=${encodeURIComponent(query)}&page=${page}&limit=${limit}`,
         4500
+      ).then((r) => (r.ok ? r.json() : null)),
+      fetchWithTimeout(
+        `${JIOSAAVN_API_BASE}?__call=${nativeSearchCall}&q=${encodeURIComponent(query)}&n=${limit}&p=${page + 1}&_format=json&_marker=0&api_version=4`,
+        4000,
+        JIOSAAVN_NATIVE_HEADERS
       ).then((r) => (r.ok ? r.json() : null)),
       fetchWithTimeout(
         `https://api.deezer.com/search/${dzEndpoint}?q=${encodeURIComponent(query)}&limit=8`,
@@ -2226,10 +2304,30 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
         : Promise.resolve(null),
     ]);
 
-    const saavnData =
+    const saavnMirrorData =
       saavnSettled.status === 'fulfilled' && saavnSettled.value
         ? (saavnSettled.value.data ?? saavnSettled.value)
         : { results: [] };
+    const nativeResultsRaw =
+      nativeSaavnSettled.status === 'fulfilled' && nativeSaavnSettled.value?.results
+        ? (nativeSaavnSettled.value.results as Array<NativeSaavnAlbumRaw & NativeSaavnArtistRaw>)
+        : [];
+    const nativeMapped =
+      safeType === 'artists'
+        ? nativeResultsRaw.map(mapNativeSaavnArtist).filter(Boolean)
+        : safeType === 'albums'
+          ? nativeResultsRaw.map(mapNativeSaavnAlbum).filter(Boolean)
+          : [];
+    const saavnResultsMerged: Array<{ id?: string; [k: string]: unknown }> = [];
+    const seenSaavnCollectionIds = new Set<string>();
+    for (const item of [...(saavnMirrorData?.results || []), ...nativeMapped]) {
+      if (!item || typeof item !== 'object') continue;
+      const cid = String((item as { id?: string }).id || '');
+      if (cid && seenSaavnCollectionIds.has(cid)) continue;
+      if (cid) seenSaavnCollectionIds.add(cid);
+      saavnResultsMerged.push(item as { id?: string; [k: string]: unknown });
+    }
+    const saavnData = { ...saavnMirrorData, results: saavnResultsMerged };
     const deezerItems =
       deezerSettled.status === 'fulfilled' && deezerSettled.value?.data
         ? (deezerSettled.value.data as Array<{
@@ -2374,7 +2472,12 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
             ? `https://api.deezer.com/artist/${encodeURIComponent(dzId)}/top?limit=${limit}`
             : `https://api.deezer.com/album/${encodeURIComponent(dzId)}`;
       try {
-        const dzRes = await fetchWithTimeout(dzUrl, 4500);
+        const [dzRes, artistMetaRes] = await Promise.all([
+          fetchWithTimeout(dzUrl, 4500),
+          type === 'artists'
+            ? fetchWithTimeout(`https://api.deezer.com/artist/${encodeURIComponent(dzId)}`, 3500).catch(() => null)
+            : Promise.resolve(null),
+        ]);
         if (dzRes.ok) {
           const dzJson = (await dzRes.json()) as {
             title?: string;
@@ -2386,8 +2489,54 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
             tracks?: { data?: DeezerTrackRaw[] };
             data?: DeezerTrackRaw[];
           };
-          const rawTracks = dzJson.tracks?.data || dzJson.data || [];
-          const albumCover = dzJson.cover_big || dzJson.cover_medium || dzJson.picture_big || dzJson.picture_medium || '';
+          const artistMeta =
+            artistMetaRes && artistMetaRes.ok
+              ? ((await artistMetaRes.json()) as {
+                  name?: string;
+                  picture_big?: string;
+                  picture_medium?: string;
+                })
+              : null;
+          let rawTracks = dzJson.tracks?.data || dzJson.data || [];
+          const artistName = artistMeta?.name || '';
+          if (type === 'artists' && artistName && rawTracks.length < 15) {
+            try {
+              const extraRes = await fetchWithTimeout(
+                `https://api.deezer.com/search?q=${encodeURIComponent(artistName)}&limit=${limit}`,
+                4000
+              );
+              if (extraRes.ok) {
+                const extraJson = (await extraRes.json()) as { data?: DeezerTrackRaw[] };
+                const normalizedArtist = artistName.toLowerCase().trim();
+                const seenIds = new Set(rawTracks.map((item) => String(item.id || '')));
+                for (const item of extraJson.data || []) {
+                  const itemId = String(item.id || '');
+                  const itemArtistId = String(item.artist?.id || '');
+                  const itemArtist = (item.artist?.name || '').toLowerCase().trim();
+                  if (
+                    itemId &&
+                    !seenIds.has(itemId) &&
+                    (itemArtistId === String(dzId) ||
+                      itemArtist === normalizedArtist ||
+                      itemArtist.includes(normalizedArtist))
+                  ) {
+                    seenIds.add(itemId);
+                    rawTracks = [...rawTracks, item];
+                  }
+                }
+              }
+            } catch {
+              // Keep primary top tracks if expanded artist search fails
+            }
+          }
+          const albumCover =
+            dzJson.cover_big ||
+            dzJson.cover_medium ||
+            dzJson.picture_big ||
+            dzJson.picture_medium ||
+            artistMeta?.picture_big ||
+            artistMeta?.picture_medium ||
+            '';
           const mapped = rawTracks
             .map((item) => {
               const t = mapDeezerTrack(item, 'GLOBAL');
@@ -2402,9 +2551,69 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
             ok: mapped.length > 0,
             source: 'deezer',
             data: {
-              name: dzJson.title || dzJson.name || 'Collection',
+              name: dzJson.title || dzJson.name || artistName || 'Collection',
               image: albumCover || mapped[0]?.image || '',
               tracks: mapped,
+            },
+          });
+          return;
+        }
+      } catch {
+        // Fallback below
+      }
+      res.json({ ok: false, fallback: true });
+      return;
+    }
+
+    if (type === 'artists') {
+      try {
+        const [nativeArtistRes, mirrorArtistRes] = await Promise.allSettled([
+          fetchWithTimeout(
+            `${JIOSAAVN_API_BASE}?__call=artist.getArtistPageDetails&artistId=${encodeURIComponent(id)}&n_song=${limit}&n_album=20&_format=json&_marker=0&api_version=4`,
+            4500,
+            JIOSAAVN_NATIVE_HEADERS
+          ).then((r) => (r.ok ? r.json() : null)),
+          fetchWithTimeout(
+            `${SAAVN_BASE}/api/artists/${encodeURIComponent(id)}/songs?page=0&limit=${limit}`,
+            4500
+          ).then((r) => (r.ok ? r.json() : null)),
+        ]);
+        const nativeArtistJson =
+          nativeArtistRes.status === 'fulfilled' ? nativeArtistRes.value : null;
+        const nativeRawSongs = Array.isArray(nativeArtistJson?.topSongs?.songs)
+          ? (nativeArtistJson.topSongs.songs as NativeSaavnSongRaw[])
+          : Array.isArray(nativeArtistJson?.topSongs)
+            ? (nativeArtistJson.topSongs as NativeSaavnSongRaw[])
+            : [];
+        const nativeSongs = nativeRawSongs
+          .map(mapNativeSaavnSong)
+          .filter((s): s is SaavnNormalizedSong => s !== null);
+        const mirrorData =
+          mirrorArtistRes.status === 'fulfilled' && mirrorArtistRes.value
+            ? (mirrorArtistRes.value.data ?? mirrorArtistRes.value)
+            : null;
+        const mirrorSongs = Array.isArray(mirrorData?.songs) ? mirrorData.songs : [];
+        const mergedSongs: SaavnNormalizedSong[] = [];
+        const seenSongIds = new Set<string>();
+        for (const s of [...nativeSongs, ...mirrorSongs]) {
+          const sid = String(s?.id || '');
+          if (sid && seenSongIds.has(sid)) continue;
+          if (sid) seenSongIds.add(sid);
+          mergedSongs.push(s);
+        }
+        if (mergedSongs.length > 0) {
+          const artistImg =
+            typeof nativeArtistJson?.image === 'string' &&
+            !nativeArtistJson.image.includes('artist-default') &&
+            !nativeArtistJson.image.includes('/_i/3.0/')
+              ? nativeArtistJson.image
+              : mirrorData?.image;
+          res.json({
+            ok: true,
+            data: {
+              name: nativeArtistJson?.name || mirrorData?.name || 'Artist',
+              image: artistImg,
+              songs: mergedSongs,
             },
           });
           return;
@@ -2419,18 +2628,47 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
     let upstream = `${SAAVN_BASE}/api/albums?id=${encodeURIComponent(id)}`;
     if (type === 'playlists') {
       upstream = `${SAAVN_BASE}/api/playlists?id=${encodeURIComponent(id)}&page=0&limit=${limit}`;
-    } else if (type === 'artists') {
-      upstream = `${SAAVN_BASE}/api/artists/${encodeURIComponent(id)}/songs?page=0&limit=${limit}`;
     }
 
     try {
       const response = await fetchWithTimeout(upstream, 4500);
-      if (!response.ok) {
-        res.json({ ok: false, fallback: true });
-        return;
+      if (response.ok) {
+        const json = await response.json();
+        const data = json.data ?? json;
+        if (Array.isArray(data?.songs) && data.songs.length > 0) {
+          res.json({ ok: true, data });
+          return;
+        }
       }
-      const json = await response.json();
-      res.json({ ok: true, data: json.data ?? json });
+      if (type === 'albums') {
+        const nativeAlbumRes = await fetchWithTimeout(
+          `${JIOSAAVN_API_BASE}?__call=content.getAlbumDetails&albumid=${encodeURIComponent(id)}&_format=json&_marker=0&api_version=4`,
+          4500,
+          JIOSAAVN_NATIVE_HEADERS
+        );
+        if (nativeAlbumRes.ok) {
+          const albumJson = (await nativeAlbumRes.json()) as {
+            title?: string;
+            image?: string;
+            list?: NativeSaavnSongRaw[];
+          };
+          const songs = (albumJson.list || [])
+            .map(mapNativeSaavnSong)
+            .filter((s): s is SaavnNormalizedSong => s !== null);
+          if (songs.length > 0) {
+            res.json({
+              ok: true,
+              data: {
+                name: albumJson.title || 'Album',
+                image: albumJson.image,
+                songs,
+              },
+            });
+            return;
+          }
+        }
+      }
+      res.json({ ok: false, fallback: true });
     } catch {
       res.json({ ok: false, fallback: true });
     }
