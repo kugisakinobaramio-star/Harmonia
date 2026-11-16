@@ -108,6 +108,13 @@ jobs:
 
       - name: Configure Android release signing and version
         if: startsWith(github.ref, 'refs/tags/android-v')
+        env:
+          ANDROID_KEYSTORE_PATH: ${{ env.ANDROID_KEYSTORE_PATH }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          HARMONIA_VERSION_NAME: ${{ env.HARMONIA_VERSION_NAME }}
+          HARMONIA_VERSION_CODE: ${{ env.HARMONIA_VERSION_CODE }}
         run: python3 scripts/configure-android-release.py
 
       - name: Build signed release APK
