@@ -876,8 +876,7 @@ export async function resolveTrackStreams(
     !forceRefresh &&
     cached &&
     ((cached.streamUrls && Object.keys(cached.streamUrls).length > 0) ||
-      cached.previewUrl ||
-      cached.youtubeId)
+      cached.previewUrl)
   ) {
     return {
       ...track,
@@ -927,11 +926,12 @@ export async function resolveTrackStreams(
           sourceLicense?: string;
           offlineAvailable?: boolean;
         };
+        // A YouTube video ID is not an audio stream. Keep it as video metadata,
+        // but only treat this resolver as successful when it returns audio media.
         if (
           json.ok &&
           ((json.streamUrls && Object.keys(json.streamUrls).length > 0) ||
-            json.previewUrl ||
-            json.youtubeId)
+            json.previewUrl)
         ) {
           const entry = {
             streamUrls:
