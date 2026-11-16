@@ -1,5 +1,18 @@
 import type { AudioQuality, Track } from '../types/music';
-import { isShortPreviewUrl, selectStreamUrl } from './playerEngine';
+import { hasFullAudioStream, isShortPreviewUrl, selectStreamUrl } from './playerEngine';
+
+/** Higher values win when equivalent catalogue results are deduplicated. */
+export function getAudioProviderPriority(track: Track): number {
+  if (!hasFullAudioStream(track)) return 0;
+  const priorities: Record<string, number> = {
+    JioSaavn: 50,
+    Audius: 40,
+    Jamendo: 30,
+    Funkwhale: 20,
+    SoundCloud: 10,
+  };
+  return priorities[track.sourceProvider || ''] || 0;
+}
 
 export interface PartitionedStreamCandidates {
   full: string[];
