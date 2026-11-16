@@ -27,6 +27,17 @@ export function OfflineDownloadsView({
   const [items, setItems] = useState<OfflineTrackRecord[]>([]);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [browserStorage, setBrowserStorage] = useState<{ usage?: number; quota?: number } | null>(null);
+
+  const refreshBrowserStorage = useCallback(async () => {
+    if (typeof navigator === 'undefined' || !navigator.storage?.estimate) return;
+    try {
+      const estimate = await navigator.storage.estimate();
+      setBrowserStorage({ usage: estimate.usage, quota: estimate.quota });
+    } catch {
+      setBrowserStorage(null);
+    }
+  }, []);
 
   const refresh = useCallback(async () => {
     try {
@@ -35,8 +46,9 @@ export function OfflineDownloadsView({
       onToast('Offline storage is unavailable in this browser.');
     } finally {
       setLoading(false);
+      void refreshBrowserStorage();
     }
-  }, [onToast]);
+  }, [onToast, refreshBrowserStorage]);
 
   useEffect(() => {
     void refresh();
@@ -53,36 +65,48 @@ export function OfflineDownloadsView({
     if (!files?.length) return;
     setBusy(true);
     let imported = 0;
+    let skipped = 0;
+    let failed = 0;
     try {
       for (const file of Array.from(files)) {
         if (!file.type.startsWith('audio/') && !/\.(mp3|m4a|aac|ogg|opus|wav|flac)$/i.test(file.name)) {
+          skipped += 1;
           continue;
         }
-        const base = file.name.replace(/\.[^.]+$/, '');
-        const split = base.split(' - ');
-        const artist = split.length > 1 ? split.shift()!.trim() : 'Local audio';
-        const name = split.join(' - ').trim() || base;
-        const audioBlob = normalizeImportedAudioBlob(file, file.name);
-        const record: OfflineTrackRecord = {
-          id: 'local-' + file.name + '-' + file.size + '-' + file.lastModified,
-          name,
-          artist,
-          albumName: 'Imported files',
-          image: '',
-          duration: 0,
-          size: audioBlob.size,
-          blob: audioBlob,
-          provider: 'Local import',
-          downloadedAt: Date.now(),
-        };
-        await saveOfflineTrack(record);
-        imported += 1;
+        try {
+          const base = file.name.replace(/\.[^.]+$/, '');
+          const split = base.split(' - ');
+          const artist = split.length > 1 ? split.shift()!.trim() : 'Local audio';
+          const name = split.join(' - ').trim() || base;
+          const audioBlob = normalizeImportedAudioBlob(file, file.name);
+          const record: OfflineTrackRecord = {
+            id: 'local-' + file.name + '-' + file.size + '-' + file.lastModified,
+            name,
+            artist,
+            albumName: 'Imported files',
+            image: '',
+            duration: 0,
+            size: audioBlob.size,
+            blob: audioBlob,
+            provider: 'Local import',
+            downloadedAt: Date.now(),
+          };
+          await saveOfflineTrack(record);
+          imported += 1;
+        } catch {
+          failed += 1;
+        }
       }
       await refresh();
       notifyOfflineLibraryChanged();
-      onToast(imported > 0 ? `Added ${imported} audio file${imported === 1 ? '' : 's'}.` : 'No supported audio files were selected.');
-    } catch {
-      onToast('Import failed. Check available device storage.');
+      if (imported === 0 && skipped === files.length) {
+        onToast('No supported audio files were selected.');
+      } else {
+        const details = [`${imported} imported`, skipped ? `${skipped} skipped` : '', failed ? `${failed} failed (check device storage)` : '']
+          .filter(Boolean)
+          .join(', ');
+        onToast(details ? `Import finished: ${details}.` : 'No audio files were imported.');
+      }
     } finally {
       setBusy(false);
     }
@@ -143,14 +167,23 @@ export function OfflineDownloadsView({
         </label>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 sm:max-w-md">
+      <div className="grid grid-cols-2 gap-3 sm:max-w-2xl sm:grid-cols-3">
         <div className="rounded-xl bg-[#1b1b1f] p-4">
           <p className="text-xs text-zinc-400">Saved files</p>
           <p className="mt-2 text-2xl font-bold text-white">{items.length}</p>
         </div>
         <div className="rounded-xl bg-[#1b1b1f] p-4">
-          <p className="text-xs text-zinc-400">Storage used</p>
+          <p className="text-xs text-zinc-400">Offline library</p>
           <p className="mt-2 text-2xl font-bold text-white">{formatStorageBytes(total)}</p>
+        </div>
+        <div className="rounded-xl bg-[#1b1b1f] p-4">
+          <p className="text-xs text-zinc-400">Browser storage used</p>
+          <p className="mt-2 text-2xl font-bold text-white">
+            {browserStorage?.usage != null ? formatStorageBytes(browserStorage.usage) : 'Unavailable'}
+          </p>
+          {browserStorage?.quota != null && (
+            <p className="mt-1 text-[11px] text-zinc-500">Estimated limit: {formatStorageBytes(browserStorage.quota)}</p>
+          )}
         </div>
       </div>
 
