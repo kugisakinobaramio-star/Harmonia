@@ -3,7 +3,7 @@ import { hasFullAudioStream, isShortPreviewUrl, selectStreamUrl } from './player
 
 /** Higher values win when equivalent catalogue results are deduplicated. */
 export function getAudioProviderPriority(track: Track): number {
-  if (!hasFullAudioStream(track)) return 0;
+  if (track.metadataOnly || !hasFullAudioStream(track)) return 0;
   const priorities: Record<string, number> = {
     JioSaavn: 50,
     Audius: 40,
