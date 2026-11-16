@@ -139,7 +139,7 @@ git push origin android-v1.1.0
 3. GitHub Actions runs tests and type-checking, builds the Android release APK, verifies its signature, and publishes `app-release.apk` as a **non-prerelease** GitHub Release.
 4. Download the APK from [Harmonia Releases](https://github.com/kugisakinobaramio-star/Harmonia/releases).
 
-Only tags matching `android-vMAJOR.MINOR.PATCH` (with an optional prerelease suffix) trigger the stable release path. A missing signing secret or failed signature verification stops publication; the workflow does not fall back to an unsigned/debug APK.
+Only tags matching `android-vMAJOR.MINOR.PATCH` (for example, `android-v1.2.3`) trigger the stable release path. Prerelease tags are intentionally not published by this workflow. A missing signing secret or failed signature verification stops publication; the workflow does not fall back to an unsigned/debug APK.
 
 ### CI verification builds
 
