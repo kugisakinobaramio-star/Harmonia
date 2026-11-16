@@ -23,6 +23,10 @@ import {
   type NativeSaavnSongRaw,
   type SaavnNormalizedSong,
 } from './src/utils/jiosaavnNative.ts';
+import {
+  buildCanonicalEditionPlan,
+  type CanonicalEditionPlan,
+} from './src/utils/editionSearch.ts';
 
 const SAAVN_BASE = 'https://saavn.sumit.co';
 const JIOSAAVN_API_BASE = 'https://www.jiosaavn.com/api.php';
@@ -674,6 +678,7 @@ async function fetchSaavnSongsCombined(
 }
 
 interface SaavnCandidateRaw {
+  id?: string;
   name?: string;
   duration?: number | string;
   artists?: { primary?: Array<{ name?: string }>; all?: Array<{ name?: string }> };
@@ -2256,6 +2261,105 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
         })
         .filter((track): track is StoredTrack => track !== null);
 
+      const hasDirectMatch =
+        (/[^\x00-\x7f]/.test(query) &&
+          (saavnRaw.length > 0 || itunesTracks.length > 0 || deezerTracks.length > 0)) ||
+        saavnRaw.some((item) => {
+          const primary = (item.artists?.primary || []).map((a) => a.name || '').join(', ');
+          return isRelevantSongSearchCandidate(item.name || '', primary, query);
+        }) ||
+        itunesTracks.some((t) => isRelevantSongSearchCandidate(t.name, t.artist, query)) ||
+        deezerTracks.some((t) => isRelevantSongSearchCandidate(t.name, t.artist, query)) ||
+        audiusTracks.some((t) => isRelevantSongSearchCandidate(t.name, t.artist, query)) ||
+        jamendoTracks.some((t) => isRelevantSongSearchCandidate(t.name, t.artist, query)) ||
+        funkwhaleTracks.some((t) => isRelevantSongSearchCandidate(t.name, t.artist, query));
+
+      let editionPlan: CanonicalEditionPlan | undefined;
+      if (!hasDirectMatch && page === 0 && query.split(/\s+/).filter(Boolean).length >= 2) {
+        let videoHints: ParsedVideoItem[] = [];
+        try {
+          const ytRes = await fetchWithTimeout(
+            `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`,
+            2200
+          );
+          if (ytRes.ok) {
+            const ytHtml = await ytRes.text();
+            videoHints = parseYouTubeSearchHtml(ytHtml, 6);
+          }
+        } catch {
+          // Proceed with pure query-stripping fallback if YouTube is slow/unreachable.
+        }
+
+        editionPlan = buildCanonicalEditionPlan(query, videoHints);
+        const canonicalTargets = editionPlan.canonicalQueries.slice(0, 2);
+        if (canonicalTargets.length > 0) {
+          const fallbackSettled = await Promise.allSettled(
+            canonicalTargets.map(async (canonQuery) => {
+              const [cSaavn, cItunes, cDeezer] = await Promise.allSettled([
+                fetchSaavnSongsCombined(canonQuery, 0, Math.min(limit, 12), 2500),
+                fetchWithTimeout(
+                  'https://itunes.apple.com/search?term=' + encodeURIComponent(canonQuery) +
+                  '&country=' + country + '&media=music&entity=song&limit=10',
+                  2200
+                ).then((r) => (r.ok ? r.json() : null)),
+                fetchWithTimeout(
+                  'https://api.deezer.com/search?q=' + encodeURIComponent(canonQuery) + '&limit=10',
+                  2200
+                ).then((r) => (r.ok ? r.json() : null)),
+              ]);
+              return {
+                canonQuery,
+                saavn: cSaavn.status === 'fulfilled' ? cSaavn.value : [],
+                itunes:
+                  cItunes.status === 'fulfilled' && cItunes.value
+                    ? ((cItunes.value.results || []) as ItunesTrackRaw[])
+                    : [],
+                deezer:
+                  cDeezer.status === 'fulfilled' && cDeezer.value
+                    ? ((cDeezer.value.data || []) as DeezerTrackRaw[])
+                    : [],
+              };
+            })
+          );
+
+          const seenSaavnIds = new Set(saavnRaw.map((s) => s.id).filter(Boolean));
+          const seenItunesIds = new Set(itunesTracks.map((t) => t.id));
+          const seenDeezerIds = new Set(deezerTracks.map((t) => t.id));
+
+          for (const entry of fallbackSettled) {
+            if (entry.status !== 'fulfilled') continue;
+            const { canonQuery, saavn, itunes, deezer } = entry.value;
+            for (const item of saavn) {
+              if (!item.id || seenSaavnIds.has(item.id)) continue;
+              const primary = (item.artists?.primary || []).map((a) => a.name || '').join(', ');
+              if (isRemixOrKnockoff(item.name || '', canonQuery, primary, canonQuery)) continue;
+              seenSaavnIds.add(item.id);
+              saavnRaw.push(item);
+            }
+            for (const rawItem of itunes) {
+              const mapped = mapItunesTrack(rawItem, country);
+              if (seenItunesIds.has(mapped.id)) continue;
+              if (
+                isInstrumentalOrSpam(mapped.name, mapped.albumName) ||
+                isRemixOrKnockoff(mapped.name + ' ' + mapped.albumName, canonQuery, mapped.artist, canonQuery)
+              ) continue;
+              seenItunesIds.add(mapped.id);
+              itunesTracks.push(mapped);
+            }
+            for (const rawItem of deezer) {
+              const mapped = mapDeezerTrack(rawItem, country);
+              if (seenDeezerIds.has(mapped.id)) continue;
+              if (
+                isInstrumentalOrSpam(mapped.name, mapped.albumName) ||
+                isRemixOrKnockoff(mapped.name + ' ' + mapped.albumName, canonQuery, mapped.artist, canonQuery)
+              ) continue;
+              seenDeezerIds.add(mapped.id);
+              deezerTracks.push(mapped);
+            }
+          }
+        }
+      }
+
       res.setHeader('Cache-Control', 'no-store');
       res.json({
         ok:
@@ -2274,6 +2378,7 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
           jamendoTracks,
           funkwhaleTracks,
           musicBrainzRecordings,
+          ...(editionPlan ? { editionPlan } : {}),
         },
       });
       return;

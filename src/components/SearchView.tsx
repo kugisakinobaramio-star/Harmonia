@@ -389,8 +389,17 @@ export function SearchView({
         </div>
       ) : activeTab === 'songs' || drillCollection ? (
         songs.length === 0 ? (
-          <div className="rounded-lg bg-[#18181b] p-4 text-sm text-zinc-400">
-            No matching songs found. Try another keyword or switch language filter to All.
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-[#18181b] p-4 text-sm text-zinc-400">
+            <span>No matching songs found. Try another keyword or switch language filter to All.</span>
+            {query.trim() && !drillCollection && (
+              <button
+                type="button"
+                onClick={() => onTabChange('videos')}
+                className="rounded-full bg-[#242429] px-3.5 py-1.5 text-xs font-bold text-white transition-colors hover:bg-[#303036]"
+              >
+                Search in Videos
+              </button>
+            )}
           </div>
         ) : (
           <div className="space-y-1">
@@ -434,6 +443,11 @@ export function SearchView({
           </div>
         )
       ) : activeTab === 'albums' ? (
+        albums.length === 0 ? (
+          <div className="rounded-lg bg-[#18181b] p-4 text-sm text-zinc-400" role="status">
+            No matching albums found. Try checking Songs or Videos for this query.
+          </div>
+        ) : (
         <div className="grid grid-cols-2 gap-3.5 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5">
           {albums.map((album) => (
             <button
@@ -457,7 +471,13 @@ export function SearchView({
             </button>
           ))}
         </div>
+        )
       ) : activeTab === 'playlists' ? (
+        playlists.length === 0 ? (
+          <div className="rounded-lg bg-[#18181b] p-4 text-sm text-zinc-400" role="status">
+            No matching playlists found.
+          </div>
+        ) : (
         <div className="grid grid-cols-2 gap-3.5 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5">
           {playlists.map((pl) => (
             <button
@@ -481,7 +501,13 @@ export function SearchView({
             </button>
           ))}
         </div>
+        )
       ) : activeTab === 'artists' ? (
+        artists.length === 0 ? (
+          <div className="rounded-lg bg-[#18181b] p-4 text-sm text-zinc-400" role="status">
+            No matching artists found.
+          </div>
+        ) : (
         <div className="grid grid-cols-2 gap-3.5 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5">
           {artists.map((art) => (
             <button
@@ -505,6 +531,7 @@ export function SearchView({
             </button>
           ))}
         </div>
+        )
       ) : videos.length === 0 ? (
         <div className="rounded-lg bg-[#18181b] p-4 text-sm text-zinc-400" role="status">
           {query.trim()

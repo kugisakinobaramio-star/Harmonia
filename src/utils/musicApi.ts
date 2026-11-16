@@ -30,6 +30,12 @@ import {
   isUnnecessaryNoLyricsTrack,
   toProxiedImageUrl,
 } from './playerEngine';
+import {
+  buildCanonicalEditionPlan,
+  isCanonicalEditionTrackMatch,
+  scoreCanonicalEditionTrack,
+  type CanonicalEditionPlan,
+} from './editionSearch';
 
 interface SaavnImage {
   quality?: string;
@@ -299,15 +305,20 @@ export async function searchSongs(
             jamendoTracks?: Track[];
             funkwhaleTracks?: Track[];
             musicBrainzRecordings?: MusicBrainzRecordingRaw[];
+            editionPlan?: CanonicalEditionPlan;
           };
         };
       })
     );
 
     const remoteCandidates: Track[] = [];
-    for (const result of settled) {
+    let serverEditionPlan: CanonicalEditionPlan | undefined;
+    for (const [idx, result] of settled.entries()) {
       if (result.status !== 'fulfilled' || !result.value?.data) continue;
       const data = result.value.data;
+      if (idx === 0 && data.editionPlan) {
+        serverEditionPlan = data.editionPlan;
+      }
 
       const mappedSaavn = (data.results || [])
         .map(mapSaavnSong)
@@ -343,7 +354,7 @@ export async function searchSongs(
       );
     }
 
-    const combinedRemote = remoteCandidates
+    let combinedRemote = remoteCandidates
       .filter(
         (track) =>
           (isPlausibleSongDuration(track.duration) || (track.metadataOnly && track.duration === 0)) &&
@@ -364,6 +375,38 @@ export async function searchSongs(
           scoreSearchCandidate(a, trimmed) - lyricsPreference(a)
         );
       });
+
+    let activeEditionPlan: CanonicalEditionPlan | undefined;
+    if (combinedRemote.length === 0 && remoteCandidates.length > 0) {
+      const candidatePlan = serverEditionPlan || buildCanonicalEditionPlan(trimmed);
+      if (candidatePlan.coreTerms.length > 0) {
+        const relaxed = remoteCandidates
+          .filter(
+            (track) =>
+              (isPlausibleSongDuration(track.duration) || (track.metadataOnly && track.duration === 0)) &&
+              isCanonicalEditionTrackMatch(track, candidatePlan) &&
+              (languageFilter === 'All' || track.language === languageFilter) &&
+              !isRemixOrKnockoff(
+                track.name + ' ' + track.albumName,
+                trimmed,
+                track.artist,
+                trimmed
+              )
+          )
+          .sort((a, b) => {
+            const lyricsPreference = (track: Track) =>
+              prioritizeLyrics ? (isUnnecessaryNoLyricsTrack(track) ? -80 : 20) : 0;
+            return (
+              scoreCanonicalEditionTrack(b, candidatePlan) + lyricsPreference(b) -
+              scoreCanonicalEditionTrack(a, candidatePlan) - lyricsPreference(a)
+            );
+          });
+        if (relaxed.length > 0) {
+          combinedRemote = relaxed;
+          activeEditionPlan = candidatePlan;
+        }
+      }
+    }
 
     const dedupedIndexByKey = new Map<string, number>();
     const dedupedRemote: Track[] = [];
@@ -445,10 +488,13 @@ export async function searchSongs(
       .sort((a, b) => {
         const lyricsPreference = (track: Track) =>
           prioritizeLyrics ? (isUnnecessaryNoLyricsTrack(track) ? -80 : 20) : 0;
-        return (
-          scoreSearchCandidate(b, trimmed) + lyricsPreference(b) -
-          scoreSearchCandidate(a, trimmed) - lyricsPreference(a)
-        );
+        const scoreA = activeEditionPlan
+          ? scoreCanonicalEditionTrack(a, activeEditionPlan)
+          : scoreSearchCandidate(a, trimmed);
+        const scoreB = activeEditionPlan
+          ? scoreCanonicalEditionTrack(b, activeEditionPlan)
+          : scoreSearchCandidate(b, trimmed);
+        return scoreB + lyricsPreference(b) - scoreA - lyricsPreference(a);
       })
       .slice(0, 60);
 
