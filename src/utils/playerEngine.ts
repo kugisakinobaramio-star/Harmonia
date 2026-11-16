@@ -144,9 +144,12 @@ export function hasFullAudioStream(track: Track | null | undefined): boolean {
   return Boolean(track.previewUrl && !isShortPreviewUrl(track.previewUrl));
 }
 
+/**
+ * Audio readiness is deliberately independent from YouTube video availability.
+ * A YouTube ID belongs to the video experience and is never a direct audio source.
+ */
 export function hasFullPlaybackSource(track: Track | null | undefined): boolean {
-  if (!track) return false;
-  return hasFullAudioStream(track) || Boolean(track.youtubeId);
+  return hasFullAudioStream(track);
 }
 
 export function selectStreamUrl(
