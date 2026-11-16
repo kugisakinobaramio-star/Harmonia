@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { Track } from '../types/music';
-import { partitionStreamCandidates } from './streamCandidates.ts';
+import { getAudioProviderPriority, partitionStreamCandidates } from './streamCandidates.ts';
 
 const baseTrack: Track = {
   id: 'dz-2936968281',
@@ -52,4 +52,29 @@ test('partitionStreamCandidates prefers full-length streams and keeps previews a
     '/api/music/audio?url=' + encodeURIComponent(baseTrack.previewUrl!),
     baseTrack.previewUrl!,
   ]);
+});
+
+
+test('audio provider priority preserves JioSaavn first and keeps SoundCloud as a last-resort fallback', () => {
+  const makeTrack = (sourceProvider: string): Track => ({
+    ...baseTrack,
+    sourceProvider,
+    streamUrls: { '160kbps': `https://audio.example.com/${sourceProvider}.m4a` },
+  });
+
+  const priorities = ['JioSaavn', 'Audius', 'Jamendo', 'Funkwhale', 'SoundCloud']
+    .map((provider) => getAudioProviderPriority(makeTrack(provider)));
+
+  assert.deepEqual(priorities, [50, 40, 30, 20, 10]);
+  assert.ok(getAudioProviderPriority(makeTrack('JioSaavn')) > getAudioProviderPriority(makeTrack('SoundCloud')));
+});
+
+test('preview-only and metadata-only tracks never win provider deduplication priority', () => {
+  assert.equal(getAudioProviderPriority({ ...baseTrack, sourceProvider: 'JioSaavn' }), 0);
+  assert.equal(getAudioProviderPriority({
+    ...baseTrack,
+    sourceProvider: 'SoundCloud',
+    streamUrls: { '160kbps': 'https://audio.example.com/full.m4a' },
+    metadataOnly: true,
+  }), 10);
 });
