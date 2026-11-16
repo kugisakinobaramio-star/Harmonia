@@ -1065,7 +1065,7 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
     if (
       !forceRefresh &&
       freshCached &&
-      (Object.keys(freshCached.payload.streamUrls).length > 0 || freshCached.payload.youtubeId)
+      Object.keys(freshCached.payload.streamUrls).length > 0 || Boolean(freshCached.payload.previewUrl)
     ) {
       res.setHeader('Cache-Control', 'no-store');
       res.json({ ok: true, ...freshCached.payload, cache: 'hit' });
