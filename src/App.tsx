@@ -683,19 +683,34 @@ export default function App() {
       let candidateFailed = false;
       let hasStartedPlaying = false;
       let startupTimer = 0;
+      let stallTimer = 0;
       const clearCandidateWatch = () => {
         if (startupTimer) window.clearTimeout(startupTimer);
+        if (stallTimer) window.clearTimeout(stallTimer);
         incoming.removeEventListener('playing', onCandidatePlaying);
         incoming.removeEventListener('error', onCandidateError);
+        incoming.removeEventListener('waiting', onCandidateWaiting);
+        incoming.removeEventListener('stalled', onCandidateWaiting);
       };
       const onCandidatePlaying = () => {
         hasStartedPlaying = true;
         if (startupTimer) window.clearTimeout(startupTimer);
+        if (stallTimer) window.clearTimeout(stallTimer);
         startupTimer = 0;
+        stallTimer = 0;
         setIsPlaying(true);
         // Keep the error listener attached after startup so a later decode/network
         // failure can still advance to the next candidate.
         incoming.removeEventListener('playing', onCandidatePlaying);
+      };
+      const onCandidateWaiting = () => {
+        // A stream can begin successfully and then stall indefinitely. Give it
+        // a recovery window, then move to the next verified source if it stays stuck.
+        if (!hasStartedPlaying || candidateFailed || stallTimer) return;
+        stallTimer = window.setTimeout(() => {
+          stallTimer = 0;
+          onCandidateError();
+        }, 12_000);
       };
       const onCandidateError = () => {
         if (candidateFailed) return;
@@ -709,6 +724,8 @@ export default function App() {
       };
       incoming.addEventListener('playing', onCandidatePlaying, { once: true });
       incoming.addEventListener('error', onCandidateError, { once: true });
+      incoming.addEventListener('waiting', onCandidateWaiting);
+      incoming.addEventListener('stalled', onCandidateWaiting);
       startupTimer = window.setTimeout(() => {
         if (
           playSeq !== playbackSeqRef.current ||

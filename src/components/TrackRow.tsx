@@ -56,7 +56,7 @@ export function TrackRow({
 
   return (
     <div
-      className={`group grid grid-cols-[28px_44px_1fr_auto] items-center gap-3 rounded-md px-3 py-2 transition-colors ${
+      className={`group grid grid-cols-[24px_40px_minmax(0,1fr)_auto] items-center gap-2 rounded-md px-2 py-2 transition-colors ${
         isCurrent ? 'bg-white/[0.1]' : 'hover:bg-white/[0.06]'
       }`}
     >
@@ -159,7 +159,7 @@ export function TrackRow({
           onClick={onEnqueue}
           aria-label={`Add ${track.name} to queue`}
           title="Add to queue"
-          className="hidden h-8 w-8 place-items-center rounded-full text-zinc-400 transition-colors hover:bg-white/10 hover:text-white sm:grid"
+          className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-zinc-400 transition-colors hover:bg-white/10 hover:text-white"
         >
           <ListPlus className="h-4 w-4" />
         </button>
