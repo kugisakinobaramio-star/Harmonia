@@ -183,12 +183,18 @@ export async function downloadTrackForOffline(
   track: Track,
   quality: AudioQuality = '320kbps'
 ): Promise<OfflineTrackRecord> {
+  if (track.offlineAvailable === false || track.sourceProvider === 'Jamendo') {
+    throw new Error('This provider supports online listening only in Harmonia.');
+  }
   let workingTrack: Track & { alternates?: string[] } = track;
   let candidates = collectDownloadCandidateUrls(workingTrack, quality).filter((url) => !isShortPreviewUrl(url));
 
   if (!hasFullAudioStream(workingTrack) || candidates.length === 0) {
     const resolved = await resolveTrackStreams(track, { forceRefresh: candidates.length === 0 });
     workingTrack = { ...track, ...resolved, alternates: resolved.alternates };
+    if (workingTrack.offlineAvailable === false || workingTrack.sourceProvider === 'Jamendo') {
+      throw new Error('This provider supports online listening only in Harmonia.');
+    }
     candidates = collectDownloadCandidateUrls(workingTrack, quality).filter((url) => !isShortPreviewUrl(url));
   }
 

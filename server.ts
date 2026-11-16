@@ -6,6 +6,8 @@ import { isPublicAddress } from './src/utils/networkSecurity.ts';
 import { fileURLToPath } from 'node:url';
 import {
   isPlausibleSongDuration,
+  isRelevantSongSearchCandidate,
+  isAllowedJamendoNonCommercialLicense,
   isMatchingLyricsCandidate,
   isRemixOrKnockoff,
   scoreAuthenticTrackCandidate,
@@ -33,6 +35,11 @@ interface StoredTrack {
   genre?: string;
   hasLyrics?: boolean;
   metadataOnly?: boolean;
+  sourceProvider?: string;
+  sourceAvailability?: 'full' | 'preview' | 'lookup' | 'metadata';
+  sourcePageUrl?: string;
+  sourceLicense?: string;
+  offlineAvailable?: boolean;
   previewUrl?: string;
   streamUrls?: Record<string, string>;
   lyrics?: StoredLyricLine[];
@@ -168,13 +175,14 @@ function mapMusicBrainzRecording(raw: MusicBrainzRecordingRaw): StoredTrack {
     artist: credits.join(', ') || 'Unknown Artist',
     albumName: release?.title || 'Recording',
     year: release?.date?.slice(0, 4),
-    duration: raw.length ? Math.round(raw.length / 1000) : 195,
+    duration: raw.length ? Math.round(raw.length / 1000) : 0,
     image: '',
     language: 'Other',
     region: 'GLOBAL',
     genre: 'MusicBrainz metadata',
-    hasLyrics: true,
     metadataOnly: true,
+    sourceProvider: 'MusicBrainz',
+    sourceAvailability: 'metadata',
   };
 }
 
@@ -380,13 +388,15 @@ function mapItunesTrack(raw: ItunesTrackRaw, region: string, hintLang?: string):
     artist,
     albumName: raw.collectionName || 'Single',
     year: raw.releaseDate ? raw.releaseDate.slice(0, 4) : undefined,
-    duration: raw.trackTimeMillis ? Math.round(raw.trackTimeMillis / 1000) : 195,
+    duration: raw.trackTimeMillis ? Math.round(raw.trackTimeMillis / 1000) : 0,
     image: highResArt,
     language: lang,
     region,
     genre: raw.primaryGenreName || lang,
     hasLyrics: !isInstrumentalOrSpam(title, raw.collectionName || ''),
     previewUrl: raw.previewUrl || undefined,
+    sourceProvider: 'Apple Music',
+    sourceAvailability: raw.previewUrl ? 'preview' : 'lookup',
   };
 }
 
@@ -417,7 +427,7 @@ function mapDeezerTrack(raw: DeezerTrackRaw, region: string, hintLang?: string):
     name: title,
     artist,
     albumName,
-    duration: raw.duration || 195,
+    duration: Number(raw.duration) || 0,
     playCount: raw.rank || undefined,
     image,
     language: lang,
@@ -425,6 +435,8 @@ function mapDeezerTrack(raw: DeezerTrackRaw, region: string, hintLang?: string):
     genre: lang,
     hasLyrics: !isInstrumentalOrSpam(title, albumName),
     previewUrl: raw.preview || undefined,
+    sourceProvider: 'Deezer',
+    sourceAvailability: raw.preview ? 'preview' : 'lookup',
   };
 }
 
@@ -438,6 +450,35 @@ interface AudiusTrackRaw {
   release_date?: string;
   artwork?: { '150x150'?: string; '480x480'?: string; '1000x1000'?: string };
   user?: { name?: string; handle?: string; is_verified?: boolean };
+}
+
+interface JamendoSearchTrackRaw {
+  id?: string | number;
+  name?: string;
+  artist_name?: string;
+  album_name?: string;
+  duration?: number;
+  releasedate?: string;
+  image?: string;
+  album_image?: string;
+  audio?: string;
+  shareurl?: string;
+  license_ccurl?: string;
+  audiodownload_allowed?: boolean;
+}
+
+interface FunkwhaleSearchTrackRaw {
+  id?: number | string;
+  title?: string;
+  name?: string;
+  artist_name?: string;
+  artists?: Array<{ name?: string }>;
+  duration?: number | string;
+  listen_url?: string;
+  is_playable?: boolean;
+  album?: { title?: string; cover?: string; cover_url?: string };
+  cover?: string;
+  uploads?: Array<{ listen_url?: string; audio_file?: { listen_url?: string } }>;
 }
 
 function mapAudiusTrack(raw: AudiusTrackRaw, region: string, hintLang?: string): StoredTrack {
@@ -458,7 +499,7 @@ function mapAudiusTrack(raw: AudiusTrackRaw, region: string, hintLang?: string):
     artist,
     albumName: raw.genre ? `${raw.genre} · Audius` : 'Audius Release',
     year: raw.release_date ? raw.release_date.slice(0, 4) : undefined,
-    duration: raw.duration || 195,
+    duration: Number(raw.duration) || 0,
     playCount: raw.play_count || undefined,
     image,
     language: lang,
@@ -467,6 +508,8 @@ function mapAudiusTrack(raw: AudiusTrackRaw, region: string, hintLang?: string):
     hasLyrics: !isInstrumentalOrSpam(title, raw.genre || ''),
     streamUrls: streamUrl ? { '160kbps': streamUrl } : undefined,
     previewUrl: streamUrl || undefined,
+    sourceProvider: 'Audius',
+    sourceAvailability: streamUrl ? 'full' : 'lookup',
   };
 }
 
@@ -988,6 +1031,11 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
     alternates: string[];
     youtubeId?: string;
     youtubeAlternates?: string[];
+    sourceProvider?: string;
+    sourceAvailability?: 'full' | 'preview' | 'lookup';
+    sourcePageUrl?: string;
+    sourceLicense?: string;
+    offlineAvailable?: boolean;
   };
 
   // Resolved stream URLs can expire or be withdrawn. Keep this cache short-lived
@@ -1032,6 +1080,11 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
     const fullAlternates: string[] = [];
     const previewAlternates: string[] = [];
     let previewUrl: string | undefined;
+    let resolvedSourceProvider: string | undefined;
+    let previewSourceProvider: string | undefined;
+    let resolvedSourcePageUrl: string | undefined;
+    let resolvedSourceLicense: string | undefined;
+    let resolvedOfflineAvailable: boolean | undefined;
 
   interface JamendoTrackRaw {
     id?: string;
@@ -1039,6 +1092,15 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
     artist_name?: string;
     audio?: string;
     duration?: number;
+    shareurl?: string;
+    license_ccurl?: string;
+    audiodownload_allowed?: boolean;
+  }
+
+  interface JamendoResolvedStream {
+    url: string;
+    sourcePageUrl: string;
+    sourceLicense: string;
   }
 
   interface InternetArchiveSearchDoc {
@@ -1163,13 +1225,11 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
     cleanTitle: string,
     primaryArtist: string,
     targetDurationSec = 0
-  ): Promise<string | undefined> {
+  ): Promise<JamendoResolvedStream | undefined> {
     try {
       const q = `${cleanTitle} ${primaryArtist}`.trim();
       const res = await fetchWithTimeout(
-        `https://api.jamendo.com/v3.0/tracks/?client_id=5c361a6b&format=json&limit=6&search=${encodeURIComponent(
-          q
-        )}`,
+        `https://api.jamendo.com/v3.0/tracks/?client_id=5c361a6b&format=json&limit=6&audioformat=mp32&include=licenses&ccnc=true&search=${encodeURIComponent(q)}`,
         3500
       );
       if (!res.ok) return undefined;
@@ -1178,22 +1238,59 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
 
       const scored = json.results
         .map((item) => {
-          if (!item.audio) return null;
-          const dur = Number(item.duration || 0);
+          const audio = String(item.audio || '').trim();
+          const sourcePageUrl = String(item.shareurl || '').trim().replace(/^http:/i, 'https:');
+          const sourceLicense = String(item.license_ccurl || '').trim().replace(/^http:/i, 'https:');
+          if (
+            !audio ||
+            !isAllowedJamendoNonCommercialLicense(sourceLicense)
+          ) return null;
+
+          let safeAudioUrl = '';
+          let safePageUrl = '';
+          try {
+            const audioTarget = new URL(audio);
+            const page = new URL(sourcePageUrl);
+            if (
+              audioTarget.protocol !== 'https:' ||
+              !audioTarget.hostname.toLowerCase().endsWith('.jamendo.com') ||
+              page.protocol !== 'https:' ||
+              page.hostname !== 'www.jamendo.com' ||
+              !page.pathname.startsWith('/track/')
+            ) return null;
+            safeAudioUrl = audioTarget.toString();
+            safePageUrl = page.toString();
+          } catch {
+            return null;
+          }
+
+          const duration = Number(item.duration || 0);
           const score = scoreAuthenticTrackCandidate({
             itemTitle: item.name || '',
-            itemArtist: item.artist_name || primaryArtist,
+            itemArtist: item.artist_name || '',
             requestedTitle: cleanTitle,
             requestedArtist: primaryArtist,
-            itemDurationSec: dur,
+            itemDurationSec: duration,
             targetDurationSec,
           });
-          return { audio: item.audio, score };
+          if (score === null) return null;
+          return {
+            url: safeAudioUrl,
+            sourcePageUrl: safePageUrl,
+            sourceLicense,
+            score,
+          };
         })
-        .filter((x): x is { audio: string; score: number } => x !== null && x.score !== null)
+        .filter((item): item is JamendoResolvedStream & { score: number } => item !== null)
         .sort((a, b) => b.score - a.score);
 
-      return scored[0]?.audio;
+      return scored[0]
+        ? {
+            url: scored[0].url,
+            sourcePageUrl: scored[0].sourcePageUrl,
+            sourceLicense: scored[0].sourceLicense,
+          }
+        : undefined;
     } catch {
       return undefined;
     }
@@ -1358,6 +1455,7 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
       if (streamUrls['320kbps']) fullAlternates.push(streamUrls['320kbps']);
       if (streamUrls['160kbps']) fullAlternates.push(streamUrls['160kbps']);
       if (streamUrls['96kbps']) fullAlternates.push(streamUrls['96kbps']);
+      if (Object.values(streamUrls).some(Boolean)) resolvedSourceProvider = 'JioSaavn';
     }
 
     if (audiusSettled.status === 'fulfilled' && audiusSettled.value?.data?.length) {
@@ -1383,6 +1481,7 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
         if (!Object.values(streamUrls).some(Boolean)) {
           streamUrls['160kbps'] = audStreams[0];
           streamUrls['96kbps'] = audStreams[1];
+          resolvedSourceProvider = 'Audius';
         }
         fullAlternates.push(...audStreams);
       }
@@ -1400,20 +1499,29 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
       if (archiveUrl) {
         streamUrls['160kbps'] = archiveUrl;
         fullAlternates.push(archiveUrl);
+        resolvedSourceProvider = 'Internet Archive';
         internetArchiveSelected = true;
       }
     }
 
     if (!Object.values(streamUrls).some(Boolean)) {
-      // Jamendo/Funkwhale are fallback sources. Do not mix their 160kbps
-      // stream into a track that already has an exact primary-catalogue match:
-      // otherwise quality selection can accidentally play a different version.
-      const fallbackUrl =
-        (jamendoSettled.status === 'fulfilled' ? jamendoSettled.value : undefined) ||
-        (funkwhaleSettled.status === 'fulfilled' ? funkwhaleSettled.value : undefined);
-      if (fallbackUrl) {
-        streamUrls['160kbps'] = fallbackUrl;
-        fullAlternates.push(fallbackUrl);
+      // Do not mix lower-priority fallback streams into a track that already
+      // has an exact primary-catalogue match.
+      const jamendoCandidate =
+        jamendoSettled.status === 'fulfilled' ? jamendoSettled.value : undefined;
+      const funkwhaleCandidate =
+        funkwhaleSettled.status === 'fulfilled' ? funkwhaleSettled.value : undefined;
+      if (jamendoCandidate) {
+        streamUrls['160kbps'] = jamendoCandidate.url;
+        fullAlternates.push(jamendoCandidate.url);
+        resolvedSourceProvider = 'Jamendo';
+        resolvedSourcePageUrl = jamendoCandidate.sourcePageUrl;
+        resolvedSourceLicense = jamendoCandidate.sourceLicense;
+        resolvedOfflineAvailable = false;
+      } else if (funkwhaleCandidate) {
+        streamUrls['160kbps'] = funkwhaleCandidate;
+        fullAlternates.push(funkwhaleCandidate);
+        resolvedSourceProvider = 'Funkwhale';
       }
     }
 
@@ -1435,7 +1543,10 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
         .filter((x): x is { d: DeezerTrackRaw; score: number } => x.score !== null)
         .sort((x, y) => y.score - x.score)[0]?.d;
       if (bestDz?.preview) {
-        previewUrl = bestDz.preview;
+        if (!previewUrl) {
+          previewUrl = bestDz.preview;
+          previewSourceProvider = 'Deezer';
+        }
         previewAlternates.push(bestDz.preview);
       }
     }
@@ -1458,7 +1569,10 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
         .filter((x): x is { r: ItunesTrackRaw; score: number } => x.score !== null)
         .sort((x, y) => y.score - x.score)[0]?.r;
       if (bestIt?.previewUrl) {
-        if (!previewUrl) previewUrl = bestIt.previewUrl;
+        if (!previewUrl) {
+          previewUrl = bestIt.previewUrl;
+          previewSourceProvider = 'Apple Music';
+        }
         previewAlternates.push(bestIt.previewUrl);
       }
     }
@@ -1467,10 +1581,15 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
     // Do not resolve YouTube IDs into the hidden audio engine: that would
     // rely on unofficial search endpoints and could enable background audio.
 
-    const payload = {
+    const payload: StreamResolvePayload = {
       streamUrls,
       previewUrl,
       alternates: Array.from(new Set([...fullAlternates, ...previewAlternates])),
+      sourceProvider: resolvedSourceProvider || previewSourceProvider,
+      sourceAvailability: resolvedSourceProvider ? 'full' : previewUrl ? 'preview' : 'lookup',
+      sourcePageUrl: resolvedSourcePageUrl,
+      sourceLicense: resolvedSourceLicense,
+      offlineAvailable: resolvedOfflineAvailable,
     };
 
     // Safe playback diagnostics: never log search terms, stream URLs, or user data.
@@ -1597,7 +1716,7 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
       output: diagnostics.output,
       cache: diagnostics.cache,
     }));
-    if (Object.keys(streamUrls).length > 0) {
+    if (Object.keys(streamUrls).length > 0 && resolvedSourceProvider !== 'Jamendo') {
       if (streamResolveCache.size >= 300) {
         const first = streamResolveCache.keys().next().value;
         if (first) streamResolveCache.delete(first);
@@ -1809,12 +1928,13 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
     res.json({ ok: false, hasLyrics: false, synced: false, lines: [] });
   });
 
-  // Multi-source search (Deezer + iTunes + Audius + JioSaavn)
+  // Multi-source search: JioSaavn, Apple Music, Deezer, Audius,
+  // Jamendo, Funkwhale, plus opt-in MusicBrainz catalogue metadata.
   app.get('/api/music/search', async (req, res) => {
     const type = String(req.query.type || 'songs');
     const query = String(req.query.query || '').trim();
     const region = String(req.query.region || 'IN').toUpperCase();
-    const page = Number(req.query.page || 0);
+    const page = Math.max(0, Math.floor(Number(req.query.page || 0)));
     const limit = Math.min(30, Math.max(1, Number(req.query.limit || 20)));
 
     if (!query) {
@@ -1824,27 +1944,79 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
 
     if (type === 'songs') {
       const country = region === 'JP' ? 'JP' : region === 'US' ? 'US' : region === 'GB' ? 'GB' : 'IN';
-      // MusicBrainz is a metadata-only catalogue with a strict global rate limit.
-      // Keep it out of the interactive song-search critical path so it cannot
-      // delay playable results from the audio catalogues.
-      const [saavnResult, itunesResult, deezerResult, audiusResult] = await Promise.allSettled([
+      const offset = page * limit;
+      const catalogueRequested = String(req.query.catalogue || '') === '1';
+
+      const audiusPromise = Promise.allSettled([
         fetchWithTimeout(
-          `${SAAVN_BASE}/api/search/songs?query=${encodeURIComponent(query)}&page=${page}&limit=${limit}`,
+          'https://api.audius.co/v1/tracks/search?query=' + encodeURIComponent(query) +
+          '&limit=' + limit + '&offset=' + offset,
           3200
-        ).then((r) => (r.ok ? r.json() : null)),
+        ).then((r) => r.ok ? r.json() : null),
         fetchWithTimeout(
-          `https://itunes.apple.com/search?term=${encodeURIComponent(query)}&country=${country}&media=music&entity=song&limit=10`,
+          'https://discoveryprovider.audius.co/v1/tracks/search?query=' + encodeURIComponent(query) +
+          '&limit=' + limit + '&offset=' + offset,
           3200
-        ).then((r) => (r.ok ? r.json() : null)),
-        fetchWithTimeout(
-          `https://api.deezer.com/search?q=${encodeURIComponent(query)}&limit=10`,
-          3200
-        ).then((r) => (r.ok ? r.json() : null)),
-        fetchWithTimeout(
-          `https://discoveryprovider.audius.co/v1/tracks/search?query=${encodeURIComponent(query)}&limit=6`,
-          3200
-        ).then((r) => (r.ok ? r.json() : null)),
-      ]);
+        ).then((r) => r.ok ? r.json() : null),
+      ]).then((settled) => {
+        const seen = new Set<string>();
+        const tracks: AudiusTrackRaw[] = [];
+        for (const result of settled) {
+          if (result.status !== 'fulfilled' || !Array.isArray(result.value?.data)) continue;
+          for (const track of result.value.data as AudiusTrackRaw[]) {
+            const id = String(track.id || '');
+            if (id && !seen.has(id)) {
+              seen.add(id);
+              tracks.push(track);
+            }
+          }
+        }
+        return tracks;
+      });
+
+      const [saavnResult, itunesResult, deezerResult, audiusResult, jamendoResult, funkwhaleResult, catalogueResult] =
+        await Promise.allSettled([
+          fetchWithTimeout(
+            SAAVN_BASE + '/api/search/songs?query=' + encodeURIComponent(query) +
+            '&page=' + page + '&limit=' + limit,
+            3200
+          ).then((r) => r.ok ? r.json() : null),
+          fetchWithTimeout(
+            'https://itunes.apple.com/search?term=' + encodeURIComponent(query) +
+            '&country=' + country + '&media=music&entity=song&limit=' + limit + '&offset=' + offset,
+            3200
+          ).then((r) => r.ok ? r.json() : null),
+          fetchWithTimeout(
+            'https://api.deezer.com/search?q=' + encodeURIComponent(query) +
+            '&index=' + offset + '&limit=' + limit,
+            3200
+          ).then((r) => r.ok ? r.json() : null),
+          audiusPromise,
+          fetchWithTimeout(
+            'https://api.jamendo.com/v3.0/tracks/?client_id=5c361a6b&format=json&limit=' +
+            limit + '&offset=' + offset + '&search=' + encodeURIComponent(query) +
+            '&imagesize=300&audioformat=mp32&include=licenses&ccnc=true',
+            3200
+          ).then((r) => r.ok ? r.json() : null),
+          Promise.allSettled(
+            ['https://open.audio', 'https://demo.funkwhale.audio'].map(async (pod) => {
+              const endpoint = pod + '/api/v1/tracks/?q=' + encodeURIComponent(query) +
+                '&page_size=' + limit + '&page=' + (page + 1);
+              const response = await fetchWithTimeout(endpoint, 3200);
+              if (!response.ok) return [];
+              const json = await response.json() as { results?: FunkwhaleSearchTrackRaw[] };
+              return (json.results || []).map((track) => ({ track, pod }));
+            })
+          ).then((results) => results.flatMap((result) =>
+            result.status === 'fulfilled' ? result.value : []
+          )),
+          catalogueRequested
+            ? fetchMusicBrainzJson(
+                'https://musicbrainz.org/ws/2/recording/?query=' + encodeURIComponent(query) +
+                '&fmt=json&limit=' + limit + '&offset=' + offset + '&inc=releases'
+              )
+            : Promise.resolve(null),
+        ]);
 
       const saavnRaw = (
         saavnResult.status === 'fulfilled' && saavnResult.value
@@ -1853,63 +2025,185 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
               artists?: { primary?: Array<{ name?: string }> };
             }>)
           : []
-      ).filter((r) => {
-        const primary = (r.artists?.primary || []).map((a) => a.name || '').join(', ');
-        return !isRemixOrKnockoff(r.name || '', query, primary, query);
+      ).filter((item) => {
+        const primary = (item.artists?.primary || []).map((artist) => artist.name || '').join(', ');
+        return !isRemixOrKnockoff(item.name || '', query, primary, query);
       });
 
-      const itunesRaw =
-        itunesResult.status === 'fulfilled' && itunesResult.value
-          ? ((itunesResult.value.results || []) as ItunesTrackRaw[])
-          : [];
-
-      const deezerRaw =
-        deezerResult.status === 'fulfilled' && deezerResult.value
-          ? ((deezerResult.value.data || []) as DeezerTrackRaw[])
-          : [];
-
-      const audiusRaw =
-        audiusResult.status === 'fulfilled' && audiusResult.value
-          ? ((audiusResult.value.data || []) as AudiusTrackRaw[])
-          : [];
-      const musicBrainzRecordings: MusicBrainzRecordingRaw[] = [];
+      const itunesRaw = itunesResult.status === 'fulfilled' && itunesResult.value
+        ? (itunesResult.value.results || []) as ItunesTrackRaw[]
+        : [];
+      const deezerRaw = deezerResult.status === 'fulfilled' && deezerResult.value
+        ? (deezerResult.value.data || []) as DeezerTrackRaw[]
+        : [];
+      const audiusRaw = audiusResult.status === 'fulfilled' ? audiusResult.value : [];
+      const jamendoRaw = jamendoResult.status === 'fulfilled' && jamendoResult.value
+        ? (jamendoResult.value.results || []) as JamendoSearchTrackRaw[]
+        : [];
+      const funkwhaleRaw = funkwhaleResult.status === 'fulfilled' ? funkwhaleResult.value : [];
+      const musicBrainzRecordings = catalogueRequested && catalogueResult.status === 'fulfilled'
+        ? (catalogueResult.value?.recordings || []) as MusicBrainzRecordingRaw[]
+        : [];
 
       const itunesTracks = itunesRaw
-        .map((r) => mapItunesTrack(r, country))
+        .map((item) => mapItunesTrack(item, country))
         .filter(
-          (t) =>
-            !isInstrumentalOrSpam(t.name, t.albumName) &&
-            !isRemixOrKnockoff(`${t.name} ${t.albumName}`, query, t.artist, query)
+          (track) =>
+            !isInstrumentalOrSpam(track.name, track.albumName) &&
+            !isRemixOrKnockoff(track.name + ' ' + track.albumName, query, track.artist, query)
         );
 
       const deezerTracks = deezerRaw
         .filter(
-          (r) =>
-            !isInstrumentalOrSpam(r.title || r.title_short || '', r.album?.title || '') &&
-            !isRemixOrKnockoff(`${r.title || r.title_short || ''} ${r.album?.title || ''}`, query, r.artist?.name || '', query)
+          (item) =>
+            !isInstrumentalOrSpam(item.title || item.title_short || '', item.album?.title || '') &&
+            !isRemixOrKnockoff(
+              (item.title || item.title_short || '') + ' ' + (item.album?.title || ''),
+              query,
+              item.artist?.name || '',
+              query
+            )
         )
-        .map((r) => mapDeezerTrack(r, country));
+        .map((item) => mapDeezerTrack(item, country));
 
       const audiusTracks = audiusRaw
-        .filter((r) => (r.duration || 0) >= 75)
-        .map((r) => mapAudiusTrack(r, country))
+        .filter((item) => (item.duration || 0) >= 75)
+        .map((item) => mapAudiusTrack(item, country))
         .filter(
-          (t) =>
-            Boolean(t.image) &&
-            !isInstrumentalOrSpam(t.name, t.albumName) &&
-            !isRemixOrKnockoff(`${t.name} ${t.albumName}`, query, t.artist, query)
+          (track) =>
+            Boolean(track.image) &&
+            !isInstrumentalOrSpam(track.name, track.albumName) &&
+            !isRemixOrKnockoff(track.name + ' ' + track.albumName, query, track.artist, query)
         );
 
-      const payload = {
+      const jamendoTracks = jamendoRaw
+        .map((item): StoredTrack | null => {
+          const title = String(item.name || '').trim();
+          const artist = String(item.artist_name || '').trim();
+          const duration = Number(item.duration || 0);
+          const audio = String(item.audio || '').trim();
+          const pageUrl = String(item.shareurl || '').trim().replace(/^http:/i, 'https:');
+          const licenseUrl = String(item.license_ccurl || '').trim().replace(/^http:/i, 'https:');
+          let safePageUrl = '';
+          let safeAudioUrl = '';
+          try {
+            const page = new URL(pageUrl);
+            const audioTarget = new URL(audio);
+            if (
+              page.protocol !== 'https:' ||
+              page.hostname !== 'www.jamendo.com' ||
+              !page.pathname.startsWith('/track/') ||
+              audioTarget.protocol !== 'https:' ||
+              !audioTarget.hostname.toLowerCase().endsWith('.jamendo.com')
+            ) return null;
+            safePageUrl = page.toString();
+            safeAudioUrl = audioTarget.toString();
+          } catch {
+            return null;
+          }
+          if (
+            !title ||
+            !artist ||
+            !safeAudioUrl ||
+            !isPlausibleSongDuration(duration) ||
+            !isAllowedJamendoNonCommercialLicense(licenseUrl)
+          ) return null;
+          if (
+            !isRelevantSongSearchCandidate(title, artist, query) ||
+            isRemixOrKnockoff(title, query, artist, query)
+          ) return null;
+          return {
+            id: 'jamendo-' + String(item.id || title + '-' + artist),
+            name: title,
+            artist,
+            albumName: String(item.album_name || 'Jamendo Release'),
+            year: item.releasedate?.slice(0, 4),
+            duration,
+            image: String(item.album_image || item.image || ''),
+            language: inferLanguage(title + ' ' + artist, ''),
+            region: 'GLOBAL',
+            genre: 'Jamendo',
+            streamUrls: { '160kbps': safeAudioUrl },
+            sourceProvider: 'Jamendo',
+            sourceAvailability: 'full',
+            sourcePageUrl: safePageUrl,
+            sourceLicense: licenseUrl,
+            offlineAvailable: false,
+          };
+        })
+        .filter((track): track is StoredTrack => track !== null);
+
+      const funkwhaleTracks = funkwhaleRaw
+        .map(({ track, pod }): StoredTrack | null => {
+          const title = String(track.title || track.name || '').trim();
+          const artist = String(
+            track.artist_name ||
+            track.artists?.map((entry) => String(entry.name || '').trim()).filter(Boolean).join(', ') ||
+            ''
+          ).trim();
+          const duration = Number(track.duration || 0);
+          const listenPath =
+            track.listen_url ||
+            track.uploads?.find((entry) => entry.listen_url)?.listen_url ||
+            track.uploads?.find((entry) => entry.audio_file?.listen_url)?.audio_file?.listen_url ||
+            '';
+          if (
+            !title || !artist || !listenPath || track.is_playable === false ||
+            !isPlausibleSongDuration(duration)
+          ) return null;
+
+          if (
+            !isRelevantSongSearchCandidate(title, artist, query) ||
+            isRemixOrKnockoff(title, query, artist, query)
+          ) return null;
+
+          let streamUrl = '';
+          try {
+            const parsed = new URL(listenPath, pod);
+            if (parsed.protocol !== 'https:' || parsed.origin !== pod) return null;
+            streamUrl = parsed.toString();
+          } catch {
+            return null;
+          }
+
+          return {
+            id: 'funkwhale-' + String(track.id || title + '-' + artist),
+            name: title,
+            artist,
+            albumName: String(track.album?.title || 'Funkwhale Release'),
+            duration,
+            image: String(track.album?.cover_url || track.album?.cover || track.cover || ''),
+            language: inferLanguage(title + ' ' + artist, ''),
+            region: 'GLOBAL',
+            genre: 'Funkwhale',
+            hasLyrics: true,
+            streamUrls: { '160kbps': streamUrl },
+            sourceProvider: 'Funkwhale',
+            sourceAvailability: 'full',
+          };
+        })
+        .filter((track): track is StoredTrack => track !== null);
+
+      res.setHeader('Cache-Control', 'no-store');
+      res.json({
         ok:
           saavnRaw.length > 0 ||
           itunesTracks.length > 0 ||
           deezerTracks.length > 0 ||
-          audiusTracks.length > 0,
-        data: { results: saavnRaw, itunesTracks, deezerTracks, audiusTracks, musicBrainzRecordings },
-      };
-      res.setHeader('Cache-Control', 'public, max-age=20, s-maxage=20');
-      res.json(payload);
+          audiusTracks.length > 0 ||
+          jamendoTracks.length > 0 ||
+          funkwhaleTracks.length > 0 ||
+          musicBrainzRecordings.length > 0,
+        data: {
+          results: saavnRaw,
+          itunesTracks,
+          deezerTracks,
+          audiusTracks,
+          jamendoTracks,
+          funkwhaleTracks,
+          musicBrainzRecordings,
+        },
+      });
       return;
     }
 

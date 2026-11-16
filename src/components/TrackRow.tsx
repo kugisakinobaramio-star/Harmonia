@@ -1,6 +1,6 @@
 import { Heart, ListPlus, Play, Plus, Video } from 'lucide-react';
 import type { Track } from '../types/music';
-import { formatPlayCount, formatTime } from '../utils/playerEngine';
+import { formatPlayCount, formatTime, hasFullAudioStream } from '../utils/playerEngine';
 import { CoverImage } from './CoverImage';
 import { DownloadButton } from './DownloadButton';
 
@@ -36,6 +36,17 @@ export function TrackRow({
   onOpenVideo,
 }: TrackRowProps) {
   const playLabel = formatPlayCount(track.playCount);
+  const sourceLabel =
+    track.sourceAvailability === 'metadata' || track.metadataOnly
+      ? 'Catalogue info only · source not confirmed'
+      : track.sourceAvailability === 'preview'
+        ? 'Preview only'
+        : track.sourceAvailability === 'full' || hasFullAudioStream(track)
+          ? 'Full stream listed'
+          : 'Checks more sources when played';
+  const sourceText = track.sourceProvider
+    ? sourceLabel + ' · ' + track.sourceProvider
+    : sourceLabel;
   const metaParts = [
     track.artist,
     track.albumName,
@@ -75,20 +86,51 @@ export function TrackRow({
         </span>
       </button>
 
-      <button type="button" onClick={onPlay} className="min-w-0 text-left focus:outline-none">
+      <div className="min-w-0">
+        <button type="button" onClick={onPlay} className="block min-w-0 text-left focus:outline-none">
+          <div
+            className={`truncate text-sm font-semibold ${
+              isCurrent ? 'text-[#1DB954]' : 'text-white'
+            }`}
+          >
+            {track.name}
+          </div>
+          <div className="truncate text-xs text-zinc-400">{metaParts.join(' · ')}</div>
+        </button>
         <div
-          className={`truncate text-sm font-semibold ${
-            isCurrent ? 'text-[#1DB954]' : 'text-white'
-          }`}
+          className="truncate text-[10px] text-zinc-500"
+          title={sourceText}
+          aria-label={sourceText}
         >
-          {track.name}
+          {sourceText}
         </div>
-        <div className="truncate text-xs text-zinc-400">{metaParts.join(' · ')}</div>
-      </button>
+        {track.sourceProvider === 'Jamendo' && track.sourcePageUrl && (
+          <div className="flex flex-wrap gap-x-2 text-[10px]">
+            <a
+              href={track.sourcePageUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="text-[#86dba4] underline underline-offset-2"
+            >
+              Jamendo track
+            </a>
+            {track.sourceLicense && (
+              <a
+                href={track.sourceLicense}
+                target="_blank"
+                rel="noreferrer"
+                className="text-zinc-500 underline underline-offset-2"
+              >
+                Creative Commons licence
+              </a>
+            )}
+          </div>
+        )}
+      </div>
 
       <div className="flex items-center gap-1 sm:gap-1.5">
         <span className="mr-1 hidden font-mono-num text-xs text-zinc-400 sm:inline">
-          {formatTime(track.duration)}
+          {track.duration > 0 ? formatTime(track.duration) : '—'}
         </span>
 
         <DownloadButton
@@ -96,6 +138,8 @@ export function TrackRow({
           downloaded={isDownloaded}
           downloading={isDownloading}
           onClick={onToggleDownload}
+          disabled={track.offlineAvailable === false}
+          disabledReason="This provider supports online listening only"
           size="xs"
         />
 

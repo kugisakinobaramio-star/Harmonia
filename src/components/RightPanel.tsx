@@ -116,12 +116,27 @@ export function RightPanel({
                     {currentTrack.albumName}
                     {currentTrack.language ? ` · ${currentTrack.language}` : ''}
                   </p>
+                  {currentTrack.sourceProvider && (
+                    <p className="mt-1 truncate text-[10px] text-zinc-500">
+                      Source: {currentTrack.sourceProvider}
+                    </p>
+                  )}
+                  {currentTrack.sourceProvider === 'Jamendo' && currentTrack.sourcePageUrl && (
+                    <div className="mt-1 flex flex-wrap gap-x-2 text-[10px]">
+                      <a href={currentTrack.sourcePageUrl} target="_blank" rel="noreferrer" className="text-[#86dba4] underline underline-offset-2">Jamendo track</a>
+                      {currentTrack.sourceLicense && (
+                        <a href={currentTrack.sourceLicense} target="_blank" rel="noreferrer" className="text-zinc-500 underline underline-offset-2">Licence</a>
+                      )}
+                    </div>
+                  )}
                 </div>
                 <DownloadButton
                   trackName={currentTrack.name}
                   downloaded={downloadedIds.has(currentTrack.id)}
                   downloading={downloadingIds.has(currentTrack.id)}
                   onClick={() => onToggleDownload(currentTrack)}
+                  disabled={currentTrack.offlineAvailable === false}
+                  disabledReason="This provider supports online listening only"
                   size="sm"
                   className="mt-0.5"
                 />
@@ -249,6 +264,8 @@ export function RightPanel({
                         downloaded={downloadedIds.has(track.id)}
                         downloading={downloadingIds.has(track.id)}
                         onClick={() => onToggleDownload(track)}
+                        disabled={track.offlineAvailable === false}
+                        disabledReason="This provider supports online listening only"
                         size="xs"
                         className="mr-0.5"
                       />

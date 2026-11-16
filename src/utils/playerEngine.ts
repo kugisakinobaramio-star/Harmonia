@@ -31,6 +31,16 @@ export function isPlausibleSongDuration(seconds: number): boolean {
   return Number.isFinite(seconds) && seconds >= 45 && seconds <= 15 * 60;
 }
 
+export function isSearchableTrackDuration(track: Pick<Track, 'duration' | 'metadataOnly' | 'previewUrl' | 'streamUrls'>): boolean {
+  if (isPlausibleSongDuration(track.duration)) return true;
+  if (track.duration !== 0) return false;
+  return Boolean(
+    track.metadataOnly ||
+    track.previewUrl ||
+    (track.streamUrls && Object.values(track.streamUrls).some(Boolean))
+  );
+}
+
 export function formatTime(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds < 0) return '0:00';
   const total = Math.floor(seconds);
@@ -217,14 +227,72 @@ export function resolveNextTrackIndex(params: {
   return Math.max(0, Math.min(queueLength - 1, next));
 }
 
+export function isAllowedJamendoNonCommercialLicense(value: string): boolean {
+  try {
+    const url = new URL(value);
+    if (
+      !['http:', 'https:'].includes(url.protocol) ||
+      url.hostname.toLowerCase() !== 'creativecommons.org'
+    ) return false;
+    const parts = url.pathname.toLowerCase().split('/').filter(Boolean);
+    return (
+      parts.length === 3 &&
+      parts[0] === 'licenses' &&
+      /^by-nc(?:-sa|-nd)?$/.test(parts[1]) &&
+      /^\d+(?:\.\d+)*$/.test(parts[2])
+    );
+  } catch {
+    return false;
+  }
+}
+
 export function getSearchFallbackQueries(query: string): string[] {
-  const tokens = query.trim().split(/\s+/).filter(Boolean);
+  const trimmed = query.trim();
+  if (!trimmed) return [];
+
+  // Explicit "title - artist", "artist - title", "title by artist", and
+  // comma-separated searches give us a reliable boundary to try both sides.
+  const parts = trimmed.split(/\s+(?:-|–|—|by)\s+|,\s*/i).map((part) => part.trim()).filter(Boolean);
+  if (parts.length === 2) {
+    return [...new Set([parts[0], parts[1], `${parts[1]} ${parts[0]}`])];
+  }
+
+  const tokens = trimmed.split(/\s+/).filter(Boolean);
   if (tokens.length < 3) return [];
-  // Try removing one trailing artist token, then two. This handles both
-  // one-word and two-word artist names without assuming every artist has
-  // the same number of words.
-  return [tokens.slice(0, -1).join(' '), tokens.slice(0, -2).join(' ')]
-    .filter((candidate, index, all) => Boolean(candidate) && all.indexOf(candidate) === index);
+
+  // Free-text searches have no dependable title/artist boundary. Try
+  // prefixes and suffixes so title-first and artist-first input both work.
+  return [
+    tokens.slice(0, -1).join(' '),
+    tokens.slice(0, -2).join(' '),
+    tokens.slice(-1).join(' '),
+    tokens.slice(-2).join(' '),
+  ].filter((candidate, index, all) => Boolean(candidate) && all.indexOf(candidate) === index);
+}
+
+export function isRelevantSongSearchCandidate(
+  itemTitle: string,
+  itemArtist: string,
+  query: string
+): boolean {
+  const normalize = (value: string) =>
+    decodeHtmlEntities(value)
+      .toLowerCase()
+      .normalize('NFKD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, ' ')
+      .trim()
+      .split(/\s+/)
+      .filter((token) => token.length > 1);
+  const queryTokens = [...new Set(normalize(query))];
+  const titleTokens = new Set(normalize(itemTitle));
+  const artistTokens = new Set(normalize(itemArtist));
+  if (!queryTokens.length) return false;
+  const titleHits = queryTokens.filter((token) => titleTokens.has(token));
+  const artistHits = queryTokens.filter((token) => artistTokens.has(token));
+  const totalHits = new Set([...titleHits, ...artistHits]).size;
+  const minimumHits = queryTokens.length <= 2 ? queryTokens.length : Math.ceil(queryTokens.length * 0.65);
+  return totalHits >= minimumHits && (titleHits.length > 0 || artistHits.length > 0);
 }
 
 export function isMatchingLyricsCandidate(

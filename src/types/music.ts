@@ -33,6 +33,16 @@ export interface Track {
   hasLyrics?: boolean;
   /** Catalogue-only entries; playback must be resolved through a separate audio provider. */
   metadataOnly?: boolean;
+  /** Provider that supplied this catalogue entry or its confirmed stream. */
+  sourceProvider?: string;
+  /** Stream availability advertised by the source; playback can still fail if a provider withdraws a URL. */
+  sourceAvailability?: 'full' | 'preview' | 'lookup' | 'metadata';
+  /** Canonical provider page, when the provider supplies one. */
+  sourcePageUrl?: string;
+  /** Recording licence URI supplied by the source catalogue. */
+  sourceLicense?: string;
+  /** False when the source does not permit Harmonia offline copies. */
+  offlineAvailable?: boolean;
   synthMood?: 'synthwave' | 'sunset' | 'lofi' | 'energetic' | 'ambient' | 'pop' | 'hindi' | 'jpop';
   previewUrl?: string;
   streamUrls?: Partial<Record<'320kbps' | '160kbps' | '96kbps' | '48kbps' | '12kbps', string>>;

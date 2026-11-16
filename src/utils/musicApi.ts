@@ -25,6 +25,7 @@ import {
   hasFullAudioStream,
   isRemixOrKnockoff,
   isPlausibleSongDuration,
+  isSearchableTrackDuration,
   isRelevantTrackTitle,
   isUnnecessaryNoLyricsTrack,
   toProxiedImageUrl,
@@ -76,13 +77,14 @@ function mapMusicBrainzRecording(raw: MusicBrainzRecordingRaw): Track {
     artist: credits.join(', ') || 'Unknown Artist',
     albumName: decodeHtmlEntities(raw.releases?.[0]?.title || 'Recording'),
     year: raw.releases?.[0]?.date?.slice(0, 4),
-    duration: raw.length ? Math.round(raw.length / 1000) : 195,
+    duration: raw.length ? Math.round(raw.length / 1000) : 0,
     image: ARTWORK.englishVinyl,
     language: 'Other',
     region: 'GLOBAL',
     genre: 'MusicBrainz metadata',
-    hasLyrics: true,
     metadataOnly: true,
+    sourceProvider: 'MusicBrainz',
+    sourceAvailability: 'metadata',
   };
 }
 
@@ -161,7 +163,7 @@ function mapSaavnSong(raw: SaavnSongRaw): Track {
     artist: names.slice(0, 3).join(', ') || 'Unknown Artist',
     albumName,
     year: raw.year,
-    duration: Number(raw.duration) || 195,
+    duration: Number(raw.duration) || 0,
     playCount: Number(raw.playCount) || undefined,
     image: pickSaavnImage(raw.image),
     language: mapSaavnLanguage(raw.language),
@@ -174,6 +176,8 @@ function mapSaavnSong(raw: SaavnSongRaw): Track {
       image: '',
     }),
     streamUrls,
+    sourceProvider: 'JioSaavn',
+    sourceAvailability: Object.values(streamUrls).some(Boolean) ? 'full' : 'lookup',
     synthMood: mapSaavnLanguage(raw.language) === 'Hindi' ? 'hindi' : 'pop',
   };
 }
@@ -232,113 +236,156 @@ export async function fetchRegionalDiscovery(region: MusicRegion, refresh = fals
 
 export async function searchSongs(
   query: string,
-  options: { region?: MusicRegion; prioritizeLyrics?: boolean; languageFilter?: MusicLanguage | 'All' } = {}
+  options: {
+    region?: MusicRegion;
+    prioritizeLyrics?: boolean;
+    languageFilter?: MusicLanguage | 'All';
+    includeCatalogue?: boolean;
+    page?: number;
+  } = {}
 ): Promise<{ tracks: Track[]; source: 'live' | 'catalog' }> {
-  const { region = 'IN', prioritizeLyrics = true, languageFilter = 'All' } = options;
+  const {
+    region = 'IN',
+    prioritizeLyrics = true,
+    languageFilter = 'All',
+    includeCatalogue = false,
+    page = 0,
+  } = options;
   const trimmed = query.trim();
+  const safePage = Math.max(0, Math.floor(Number(page) || 0));
   if (!trimmed) {
     return {
-      tracks: filterAndRankTracks(SEED_TRACKS, '', { prioritizeLyrics, languageFilter }),
+      tracks: safePage === 0
+        ? filterAndRankTracks(SEED_TRACKS, '', { prioritizeLyrics, languageFilter })
+        : [],
       source: 'catalog',
     };
   }
 
-  const localMatches = filterAndRankTracks(SEED_TRACKS, trimmed, {
-    prioritizeLyrics,
-    languageFilter,
-  });
+  const localMatches = safePage === 0
+    ? filterAndRankTracks(SEED_TRACKS, trimmed, { prioritizeLyrics, languageFilter })
+    : [];
 
   try {
-    const providerQueries = [...new Set([trimmed, ...getSearchFallbackQueries(trimmed)])];
+    // Query variants run together so a provider that ranks title-first and
+    // artist-first searches differently does not force a long serial retry chain.
+    const providerQueries = safePage === 0
+      ? [...new Set([trimmed, ...getSearchFallbackQueries(trimmed).slice(0, 3)])]
+      : [trimmed];
 
-    for (const providerQuery of providerQueries) {
-      const res = await fetch(
-        apiUrl(`/api/music/search?type=songs&query=${encodeURIComponent(providerQuery)}&region=${encodeURIComponent(region)}&limit=16`)
-      );
-      if (!res.ok) continue;
-      const json = (await res.json()) as {
-        ok?: boolean;
-        data?: {
-          results?: SaavnSongRaw[];
-          itunesTracks?: Track[];
-          deezerTracks?: Track[];
-          audiusTracks?: Track[];
-          musicBrainzRecordings?: MusicBrainzRecordingRaw[];
+    const settled = await Promise.allSettled(
+      providerQueries.map(async (providerQuery, index) => {
+        const catalogueParam = includeCatalogue && index === 0 ? '&catalogue=1' : '';
+        const response = await fetch(
+          apiUrl(
+            '/api/music/search?type=songs&query=' + encodeURIComponent(providerQuery) +
+            '&region=' + encodeURIComponent(region) + '&page=' + safePage + '&limit=20' + catalogueParam
+          )
+        );
+        if (!response.ok) return null;
+        return (await response.json()) as {
+          data?: {
+            results?: SaavnSongRaw[];
+            itunesTracks?: Track[];
+            deezerTracks?: Track[];
+            audiusTracks?: Track[];
+            jamendoTracks?: Track[];
+            funkwhaleTracks?: Track[];
+            musicBrainzRecordings?: MusicBrainzRecordingRaw[];
+          };
         };
-      };
-      const saavnRaw = json.data?.results || [];
-      const deezerRaw = (json.data?.deezerTracks || []).map(normalizeRemoteTrack);
-      const itunesRaw = (json.data?.itunesTracks || []).map(normalizeRemoteTrack);
-      const audiusRaw = (json.data?.audiusTracks || []).map(normalizeRemoteTrack);
+      })
+    );
 
-      const mappedSaavn = saavnRaw
+    const remoteCandidates: Track[] = [];
+    for (const result of settled) {
+      if (result.status !== 'fulfilled' || !result.value?.data) continue;
+      const data = result.value.data;
+
+      const mappedSaavn = (data.results || [])
         .map(mapSaavnSong)
         .filter(
-          (t) =>
-            isPlausibleSongDuration(t.duration) &&
-            !isRemixOrKnockoff(`${t.name} ${t.albumName}`, trimmed, t.artist, trimmed)
+          (track) =>
+            isSearchableTrackDuration(track) &&
+            !isRemixOrKnockoff(
+              track.name + ' ' + track.albumName,
+              trimmed,
+              track.artist,
+              trimmed
+            )
         );
 
-      const musicBrainzTracks = languageFilter === 'All'
-        ? (json.data?.musicBrainzRecordings || [])
+      const musicBrainzTracks = includeCatalogue && languageFilter === 'All'
+        ? (data.musicBrainzRecordings || [])
             .map(mapMusicBrainzRecording)
-            .filter((t) => isPlausibleSongDuration(t.duration) && isRelevantSearchCandidate(t, trimmed))
+            .filter(
+              (track) =>
+                isSearchableTrackDuration(track) &&
+                isRelevantSearchCandidate(track, trimmed)
+            )
         : [];
 
-      const combinedRemote = [...deezerRaw, ...itunesRaw, ...mappedSaavn, ...audiusRaw, ...musicBrainzTracks]
-        .filter(
-          (t) =>
-            isPlausibleSongDuration(t.duration) &&
-            isRelevantSearchCandidate(t, trimmed) &&
-            (languageFilter === 'All' || t.language === languageFilter) &&
-            !isRemixOrKnockoff(`${t.name} ${t.albumName}`, trimmed, t.artist, trimmed)
-        )
-        .sort((a, b) => {
-          const lyricsPreference = (track: Track) =>
-            prioritizeLyrics
-              ? isUnnecessaryNoLyricsTrack(track) ? -80 : 20
-              : 0;
-          return (
-            scoreSearchCandidate(b, trimmed) + lyricsPreference(b) -
-            scoreSearchCandidate(a, trimmed) - lyricsPreference(a)
-          );
-        });
+      remoteCandidates.push(
+        ...(data.deezerTracks || []).map(normalizeRemoteTrack),
+        ...(data.itunesTracks || []).map(normalizeRemoteTrack),
+        ...mappedSaavn,
+        ...(data.audiusTracks || []).map(normalizeRemoteTrack),
+        ...(data.jamendoTracks || []).map(normalizeRemoteTrack),
+        ...(data.funkwhaleTracks || []).map(normalizeRemoteTrack),
+        ...musicBrainzTracks
+      );
+    }
 
-      const seen = new Set<string>();
-      const dedupedRemote: Track[] = [];
-      for (const item of combinedRemote) {
-        const key = `${item.name.toLowerCase()}::${item.artist.toLowerCase()}`;
-        if (!seen.has(key)) {
-          seen.add(key);
-          dedupedRemote.push(item);
-        }
-      }
-
-      // Retry a title-plus-artist query as title-only only when the first provider
-      // pass produced no relevant remote match. All returned results are still
-      // checked against the complete original query before being shown.
-      if (dedupedRemote.length > 0) {
+    const combinedRemote = remoteCandidates
+      .filter(
+        (track) =>
+          (isPlausibleSongDuration(track.duration) || (track.metadataOnly && track.duration === 0)) &&
+          isRelevantSearchCandidate(track, trimmed) &&
+          (languageFilter === 'All' || track.language === languageFilter) &&
+          !isRemixOrKnockoff(
+            track.name + ' ' + track.albumName,
+            trimmed,
+            track.artist,
+            trimmed
+          )
+      )
+      .sort((a, b) => {
         const lyricsPreference = (track: Track) =>
           prioritizeLyrics ? (isUnnecessaryNoLyricsTrack(track) ? -80 : 20) : 0;
-        const merged = [...dedupedRemote, ...localMatches]
-          .sort(
-            (a, b) =>
-              scoreSearchCandidate(b, trimmed) + lyricsPreference(b) -
-              scoreSearchCandidate(a, trimmed) - lyricsPreference(a)
-          )
-          .slice(0, 30);
-        return { tracks: merged, source: 'live' };
-      }
+        return (
+          scoreSearchCandidate(b, trimmed) + lyricsPreference(b) -
+          scoreSearchCandidate(a, trimmed) - lyricsPreference(a)
+        );
+      });
+
+    const seen = new Set<string>();
+    const dedupedRemote: Track[] = [];
+    for (const track of combinedRemote) {
+      const key =
+        searchTextTokens(track.name).join(' ') + '::' +
+        searchTextTokens(track.artist).join(' ');
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      dedupedRemote.push(track);
     }
+
+    const merged = [...dedupedRemote, ...localMatches]
+      .sort((a, b) => {
+        const lyricsPreference = (track: Track) =>
+          prioritizeLyrics ? (isUnnecessaryNoLyricsTrack(track) ? -80 : 20) : 0;
+        return (
+          scoreSearchCandidate(b, trimmed) + lyricsPreference(b) -
+          scoreSearchCandidate(a, trimmed) - lyricsPreference(a)
+        );
+      })
+      .slice(0, 60);
+
+    if (merged.length > 0) return { tracks: merged, source: 'live' };
   } catch {
-    // Fallback
+    // Keep the local catalogue available when provider APIs are unreachable.
   }
 
-  // Never show unrelated demo tracks for a real search query.
-  return {
-    tracks: localMatches,
-    source: 'catalog',
-  };
+  return { tracks: localMatches, source: 'catalog' };
 }
 
 export async function searchAlbums(query: string): Promise<{
@@ -780,7 +827,18 @@ export function getArtistProfileById(id: string): ArtistProfile | undefined {
 }
 
 type ResolvedTrackCacheValue = Partial<
-  Pick<Track, 'streamUrls' | 'previewUrl' | 'youtubeId' | 'youtubeAlternates'>
+  Pick<
+    Track,
+    | 'streamUrls'
+    | 'previewUrl'
+    | 'youtubeId'
+    | 'youtubeAlternates'
+    | 'sourceProvider'
+    | 'sourceAvailability'
+    | 'sourcePageUrl'
+    | 'sourceLicense'
+    | 'offlineAvailable'
+  >
 > & { alternates?: string[] };
 
 const resolvedTrackCache = new Map<
@@ -828,6 +886,13 @@ export async function resolveTrackStreams(
       alternates: cached.alternates,
       youtubeId: cached.youtubeId || track.youtubeId,
       youtubeAlternates: cached.youtubeAlternates || track.youtubeAlternates,
+      sourceProvider: cached.sourceProvider || track.sourceProvider,
+      sourceAvailability: cached.sourceAvailability || track.sourceAvailability,
+      sourcePageUrl: cached.sourcePageUrl || track.sourcePageUrl,
+      sourceLicense: cached.sourceLicense || track.sourceLicense,
+      offlineAvailable: typeof cached.offlineAvailable === 'boolean'
+        ? cached.offlineAvailable
+        : track.offlineAvailable,
     };
   }
 
@@ -856,6 +921,11 @@ export async function resolveTrackStreams(
           alternates?: string[];
           youtubeId?: string;
           youtubeAlternates?: string[];
+          sourceProvider?: string;
+          sourceAvailability?: Track['sourceAvailability'];
+          sourcePageUrl?: string;
+          sourceLicense?: string;
+          offlineAvailable?: boolean;
         };
         if (
           json.ok &&
@@ -872,11 +942,20 @@ export async function resolveTrackStreams(
             alternates: json.alternates,
             youtubeId: json.youtubeId || track.youtubeId,
             youtubeAlternates: json.youtubeAlternates || track.youtubeAlternates,
+            sourceProvider: json.sourceProvider || track.sourceProvider,
+            sourceAvailability: json.sourceAvailability || track.sourceAvailability,
+            sourcePageUrl: json.sourcePageUrl || track.sourcePageUrl,
+            sourceLicense: json.sourceLicense || track.sourceLicense,
+            offlineAvailable: typeof json.offlineAvailable === 'boolean'
+              ? json.offlineAvailable
+              : track.offlineAvailable,
           };
-          resolvedTrackCache.set(track.id, {
-            value: entry,
-            expiresAt: Date.now() + 5 * 60_000,
-          });
+          if (entry.sourceProvider !== 'Jamendo') {
+            resolvedTrackCache.set(track.id, {
+              value: entry,
+              expiresAt: Date.now() + 5 * 60_000,
+            });
+          }
           failedResolveUntil.delete(track.id);
           return { ...track, ...entry };
         }

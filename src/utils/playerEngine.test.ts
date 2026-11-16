@@ -13,7 +13,10 @@ import {
   isRemixOrKnockoff,
   isMatchingLyricsCandidate,
   getSearchFallbackQueries,
+  isRelevantSongSearchCandidate,
+  isAllowedJamendoNonCommercialLicense,
   isPlausibleSongDuration,
+  isSearchableTrackDuration,
   isRelevantTrackTitle,
   isShortPreviewUrl,
   isSpotifyLinkOrUri,
@@ -540,10 +543,36 @@ test('removeQueueItem preserves the current track index and reports when playbac
   assert.equal(invalid.removedCurrent, false);
 });
 
-test('search fallback tries title prefixes with one- and two-word artist names', () => {
-  assert.deepEqual(getSearchFallbackQueries('Maharani Arpit Bala'), ['Maharani Arpit', 'Maharani']);
-  assert.deepEqual(getSearchFallbackQueries('lovely Billie Eilish'), ['lovely Billie', 'lovely']);
-  assert.deepEqual(getSearchFallbackQueries('A Sky Full of Stars Coldplay'), ['A Sky Full of Stars', 'A Sky Full of']);
+test('search fallback covers title-first, artist-first, and explicit title/artist queries', () => {
+  assert.deepEqual(getSearchFallbackQueries('Maharani Arpit Bala'), ['Maharani Arpit', 'Maharani', 'Bala', 'Arpit Bala']);
+  assert.deepEqual(getSearchFallbackQueries('Arpit Bala Maharani'), ['Arpit Bala', 'Arpit', 'Maharani', 'Bala Maharani']);
+  assert.deepEqual(getSearchFallbackQueries('A Sky Full of Stars Coldplay'), ['A Sky Full of Stars', 'A Sky Full of', 'Coldplay', 'Stars Coldplay']);
+  assert.deepEqual(getSearchFallbackQueries('Maharani - Arpit Bala'), ['Maharani', 'Arpit Bala', 'Arpit Bala Maharani']);
+  assert.deepEqual(getSearchFallbackQueries('Arpit Bala by Maharani'), ['Arpit Bala', 'Maharani', 'Maharani Arpit Bala']);
   assert.deepEqual(getSearchFallbackQueries('Billie Eilish'), []);
   assert.deepEqual(getSearchFallbackQueries('Maharani'), []);
+});
+
+test('song search candidate matching uses title and artist tokens for both query orders', () => {
+  assert.equal(isRelevantSongSearchCandidate('Maharani', 'Arpit Bala', 'Maharani Arpit Bala'), true);
+  assert.equal(isRelevantSongSearchCandidate('Maharani', 'Arpit Bala', 'Arpit Bala Maharani'), true);
+  assert.equal(isRelevantSongSearchCandidate('Birds of a Feather', 'Billie Eilish', 'Billie Eilish Birds of a Feather'), true);
+  assert.equal(isRelevantSongSearchCandidate('A Different Song', 'Another Artist', 'Maharani Arpit Bala'), false);
+});
+
+test('Jamendo candidate licensing accepts only recognized Creative Commons non-commercial URLs', () => {
+  assert.equal(isAllowedJamendoNonCommercialLicense('http://creativecommons.org/licenses/by-nc-nd/3.0/'), true);
+  assert.equal(isAllowedJamendoNonCommercialLicense('https://creativecommons.org/licenses/by-nc/4.0/'), true);
+  assert.equal(isAllowedJamendoNonCommercialLicense('https://creativecommons.org/licenses/by/4.0/'), false);
+  assert.equal(isAllowedJamendoNonCommercialLicense('https://example.com/license'), false);
+  assert.equal(isAllowedJamendoNonCommercialLicense('javascript:alert(1)'), false);
+});
+
+test('unknown duration is retained only when a catalogue entry or playable source exists', () => {
+  assert.equal(isSearchableTrackDuration({ duration: 0, metadataOnly: true }), true);
+  assert.equal(isSearchableTrackDuration({ duration: 0, previewUrl: 'https://example.com/preview.mp3' }), true);
+  assert.equal(isSearchableTrackDuration({ duration: 0, streamUrls: { '160kbps': 'https://example.com/full.mp3' } }), true);
+  assert.equal(isSearchableTrackDuration({ duration: 0 }), false);
+  assert.equal(isSearchableTrackDuration({ duration: 20 }), false);
+  assert.equal(isSearchableTrackDuration({ duration: 180 }), true);
 });

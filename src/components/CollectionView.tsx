@@ -269,6 +269,8 @@ export function CollectionView({
                       downloaded={isDownloaded}
                       downloading={isDownloading}
                       onClick={() => onToggleDownload(track)}
+                      disabled={track.offlineAvailable === false}
+                      disabledReason="This provider supports online listening only"
                       size="xs"
                       className={
                         isDownloaded || isDownloading
