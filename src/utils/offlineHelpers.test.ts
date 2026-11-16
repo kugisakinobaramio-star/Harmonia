@@ -72,6 +72,13 @@ test('isCollectionFullyDownloaded returns true only when every downloadable trac
     ),
     false
   );
+  assert.equal(
+    isCollectionFullyDownloaded(
+      [{ id: 'sc-1', offlineAvailable: false, sourceProvider: 'SoundCloud' }],
+      new Set(['sc-1'])
+    ),
+    false
+  );
   assert.equal(isCollectionFullyDownloaded([{ id: 'a' }, { id: 'c' }], downloaded), false);
 });
 
