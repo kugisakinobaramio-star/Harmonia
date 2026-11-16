@@ -223,6 +223,10 @@ function scoreSearchCandidate(track: Track, query: string): number {
   score += artistText === qText ? 105 : q.filter((token) => artist.includes(token)).length * 16;
   score += q.filter((token) => album.includes(token)).length * 4;
   score += Math.min(8, Math.log10(Math.max(1, track.playCount || 1)) * 2);
+  const hay = `${track.name} ${track.albumName}`.toLowerCase();
+  if (/\b(mashup|remix|sped\s*up|slowed|lo-fi|cover)\b/.test(hay) && !/\b(mashup|remix|sped|lo-fi|cover)\b/.test(query.toLowerCase())) {
+    score -= 40;
+  }
   return score;
 }
 function normalizeRemoteTrack(raw: Track): Track {
@@ -304,6 +308,7 @@ export async function searchSongs(
             audiusTracks?: Track[];
             jamendoTracks?: Track[];
             funkwhaleTracks?: Track[];
+            soundcloudTracks?: Track[];
             musicBrainzRecordings?: MusicBrainzRecordingRaw[];
             editionPlan?: CanonicalEditionPlan;
           };
@@ -350,6 +355,7 @@ export async function searchSongs(
         ...(data.audiusTracks || []).map(normalizeRemoteTrack),
         ...(data.jamendoTracks || []).map(normalizeRemoteTrack),
         ...(data.funkwhaleTracks || []).map(normalizeRemoteTrack),
+        ...(data.soundcloudTracks || []).map(normalizeRemoteTrack),
         ...musicBrainzTracks
       );
     }
@@ -412,9 +418,8 @@ export async function searchSongs(
     const dedupedRemote: Track[] = [];
     const audioProviderPriority = (track: Track): number => {
       if (!hasFullAudioStream(track)) return 0;
-      // Keep JioSaavn as the preferred full-stream source, with Audius next.
-      // Other full-stream catalogues remain eligible as later fallbacks.
       const priorities: Record<string, number> = {
+        SoundCloud: 65,
         JioSaavn: 50,
         Audius: 40,
         Jamendo: 30,

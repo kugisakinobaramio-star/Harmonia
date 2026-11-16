@@ -5,6 +5,7 @@ import { isIP } from 'node:net';
 import { isPublicAddress } from './src/utils/networkSecurity.ts';
 import { fileURLToPath } from 'node:url';
 import {
+  decodeHtmlEntities,
   isPlausibleSongDuration,
   isRelevantSongSearchCandidate,
   isAllowedJamendoNonCommercialLicense,
@@ -1039,6 +1040,144 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
     }
   });
 
+  const SC_CLIENT_ID = 'qLcgHhXgeEFFaSolTB9I71LBsqncsD93';
+
+  interface SoundCloudTrackRaw {
+    id: number;
+    title?: string;
+    duration?: number;
+    permalink_url?: string;
+    artwork_url?: string;
+    user?: { username?: string };
+    media?: {
+      transcodings?: Array<{
+        preset?: string;
+        format?: { protocol?: string; mime_type?: string };
+        url?: string;
+      }>;
+    };
+  }
+
+  async function fetchSoundCloudTracks(query: string, limit = 10): Promise<StoredTrack[]> {
+    try {
+      const res = await fetchWithTimeout(
+        `https://api-v2.soundcloud.com/search/tracks?q=${encodeURIComponent(query)}&client_id=${SC_CLIENT_ID}&limit=${limit}`,
+        3500
+      );
+      if (!res.ok) return [];
+      const json = (await res.json()) as { collection?: SoundCloudTrackRaw[] };
+      const items = json.collection || [];
+      const out: StoredTrack[] = [];
+      for (const item of items) {
+        if (!item.id || !item.title) continue;
+        const durationSec = Math.round((item.duration || 0) / 1000);
+        if (durationSec < 45 || durationSec > 1800) continue;
+        const titleParts = item.title.split(/[-–—]|(?:\s+by\s+)/i).map((s) => s.trim()).filter(Boolean);
+        let name = item.title;
+        let artist = item.user?.username || 'SoundCloud Artist';
+        if (titleParts.length >= 2 && item.title.includes('-')) {
+          artist = titleParts[0];
+          name = titleParts.slice(1).join(' - ');
+        }
+        const artwork = (item.artwork_url || '').replace('-large.', '-t500x500.');
+        out.push({
+          id: `sc-${item.id}`,
+          name: decodeHtmlEntities(name),
+          artist: decodeHtmlEntities(artist),
+          albumName: 'SoundCloud Release',
+          duration: durationSec,
+          image: artwork,
+          streamUrls: { '160kbps': `/api/music/soundcloud/audio?id=${item.id}` },
+          sourceProvider: 'SoundCloud',
+          sourceAvailability: 'full',
+          sourcePageUrl: item.permalink_url,
+          offlineAvailable: true,
+        });
+      }
+      return out;
+    } catch {
+      return [];
+    }
+  }
+
+  app.get('/api/music/soundcloud/audio', async (req, res) => {
+    const trackId = String(req.query.id || '').trim();
+    if (!trackId) {
+      res.status(400).end();
+      return;
+    }
+    try {
+      const trackRes = await fetchWithTimeout(
+        `https://api-v2.soundcloud.com/tracks/${encodeURIComponent(trackId)}?client_id=${SC_CLIENT_ID}`,
+        4000
+      );
+      if (!trackRes.ok) {
+        res.status(404).end();
+        return;
+      }
+      const track = (await trackRes.json()) as SoundCloudTrackRaw;
+      const hlsTc =
+        track.media?.transcodings?.find((x) => x.preset === 'aac_160k' && x.format?.protocol === 'hls') ||
+        track.media?.transcodings?.find((x) => x.preset === 'aac_96k' && x.format?.protocol === 'hls') ||
+        track.media?.transcodings?.find((x) => x.format?.protocol === 'hls');
+      if (!hlsTc?.url) {
+        res.status(404).end();
+        return;
+      }
+      const resolvedRes = await fetchWithTimeout(`${hlsTc.url}?client_id=${SC_CLIENT_ID}`, 3500);
+      if (!resolvedRes.ok) {
+        res.status(502).end();
+        return;
+      }
+      const resolvedJson = (await resolvedRes.json()) as { url?: string };
+      const playlistUrl = resolvedJson.url;
+      if (!playlistUrl) {
+        res.status(502).end();
+        return;
+      }
+      const playlistRes = await fetchWithTimeout(playlistUrl, 4000);
+      if (!playlistRes.ok) {
+        res.status(502).end();
+        return;
+      }
+      const m3u8 = await playlistRes.text();
+      const mapMatch = m3u8.match(/#EXT-X-MAP:URI="([^"]+)"/);
+      const mapUrl = mapMatch ? mapMatch[1] : null;
+      const segUrls = m3u8
+        .split('\n')
+        .map((l) => l.trim())
+        .filter((l) => l.startsWith('https://'));
+
+      res.setHeader('Content-Type', 'audio/mp4');
+      res.setHeader('Accept-Ranges', 'bytes');
+      res.setHeader('Cache-Control', 'no-store');
+
+      if (mapUrl) {
+        const mapRes = await fetch(mapUrl);
+        if (mapRes.ok && mapRes.body) {
+          const buf = Buffer.from(await mapRes.arrayBuffer());
+          res.write(buf);
+        }
+      }
+      for (const segUrl of segUrls) {
+        if (res.writableEnded) break;
+        try {
+          const segRes = await fetch(segUrl);
+          if (segRes.ok && segRes.body) {
+            const buf = Buffer.from(await segRes.arrayBuffer());
+            res.write(buf);
+          }
+        } catch {
+          // Skip failed segment
+        }
+      }
+      res.end();
+    } catch {
+      if (!res.headersSent) res.status(502).end();
+      else res.end();
+    }
+  });
+
   // Direct audio download proxy endpoint (forces attachment download with clean filename)
   app.get('/api/music/download', async (req, res) => {
     const rawUrl = String(req.query.url || '').trim();
@@ -1608,6 +1747,29 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
         streamUrls['160kbps'] = funkwhaleCandidate;
         fullAlternates.push(funkwhaleCandidate);
         resolvedSourceProvider = 'Funkwhale';
+      } else {
+        const scTracks = await fetchSoundCloudTracks(query, 6);
+        const bestSc = scTracks
+          .map((t) => ({
+            t,
+            score: scoreAuthenticTrackCandidate({
+              itemTitle: t.name,
+              itemArtist: t.artist,
+              requestedTitle: cleanTitle,
+              requestedArtist: primaryArtist,
+              itemDurationSec: t.duration,
+              targetDurationSec,
+            }),
+          }))
+          .filter((x): x is { t: StoredTrack; score: number } => x.score !== null)
+          .sort((a, b) => b.score - a.score)[0]?.t;
+        if (bestSc?.streamUrls?.['160kbps']) {
+          streamUrls['160kbps'] = bestSc.streamUrls['160kbps'];
+          fullAlternates.push(bestSc.streamUrls['160kbps']);
+          resolvedSourceProvider = 'SoundCloud';
+          resolvedSourcePageUrl = bestSc.sourcePageUrl;
+          resolvedOfflineAvailable = true;
+        }
       }
     }
 
@@ -2060,7 +2222,7 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
         return tracks;
       });
 
-      const [saavnResult, itunesResult, deezerResult, audiusResult, jamendoResult, funkwhaleResult, catalogueResult] =
+      const [saavnResult, itunesResult, deezerResult, audiusResult, jamendoResult, funkwhaleResult, soundcloudResult, catalogueResult] =
         await Promise.allSettled([
           fetchSaavnSongsCombined(query, page, limit, 3400),
           fetchWithTimeout(
@@ -2092,6 +2254,7 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
           ).then((results) => results.flatMap((result) =>
             result.status === 'fulfilled' ? result.value : []
           )),
+          fetchSoundCloudTracks(query, limit),
           catalogueRequested
             ? fetchMusicBrainzJson(
                 'https://musicbrainz.org/ws/2/recording/?query=' + encodeURIComponent(query) +
@@ -2118,6 +2281,15 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
         ? (jamendoResult.value.results || []) as JamendoSearchTrackRaw[]
         : [];
       const funkwhaleRaw = funkwhaleResult.status === 'fulfilled' ? funkwhaleResult.value : [];
+      const soundcloudTracks = (
+        soundcloudResult.status === 'fulfilled' ? soundcloudResult.value : []
+      ).filter((track) => {
+        return (
+          isPlausibleSongDuration(track.duration) &&
+          isRelevantSongSearchCandidate(track.name, track.artist, query) &&
+          !isRemixOrKnockoff(track.name + ' ' + track.albumName, query, track.artist, query)
+        );
+      });
       const musicBrainzRecordings = catalogueRequested && catalogueResult.status === 'fulfilled'
         ? (catalogueResult.value?.recordings || []) as MusicBrainzRecordingRaw[]
         : [];
@@ -2369,6 +2541,7 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
           audiusTracks.length > 0 ||
           jamendoTracks.length > 0 ||
           funkwhaleTracks.length > 0 ||
+          soundcloudTracks.length > 0 ||
           musicBrainzRecordings.length > 0,
         data: {
           results: saavnRaw,
@@ -2377,6 +2550,7 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
           audiusTracks,
           jamendoTracks,
           funkwhaleTracks,
+          soundcloudTracks,
           musicBrainzRecordings,
           ...(editionPlan ? { editionPlan } : {}),
         },
