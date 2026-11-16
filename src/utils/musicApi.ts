@@ -358,15 +358,80 @@ export async function searchSongs(
         );
       });
 
-    const seen = new Set<string>();
+    const dedupedIndexByKey = new Map<string, number>();
     const dedupedRemote: Track[] = [];
+    const audioProviderPriority = (track: Track): number => {
+      if (!hasFullAudioStream(track)) return 0;
+      // Keep JioSaavn as the preferred full-stream source, with Audius next.
+      // Other full-stream catalogues remain eligible as later fallbacks.
+      const priorities: Record<string, number> = {
+        JioSaavn: 50,
+        Audius: 40,
+        Jamendo: 30,
+        Funkwhale: 20,
+      };
+      return priorities[track.sourceProvider || ''] || 10;
+    };
+
     for (const track of combinedRemote) {
       const key =
         searchTextTokens(track.name).join(' ') + '::' +
         searchTextTokens(track.artist).join(' ');
-      if (!key || seen.has(key)) continue;
-      seen.add(key);
-      dedupedRemote.push(track);
+      if (!key) continue;
+
+      const existingIndex = dedupedIndexByKey.get(key);
+      if (existingIndex === undefined) {
+        dedupedIndexByKey.set(key, dedupedRemote.length);
+        dedupedRemote.push(track);
+        continue;
+      }
+
+      const existing = dedupedRemote[existingIndex];
+      const preferIncoming =
+        audioProviderPriority(track) > audioProviderPriority(existing);
+      const preferred = preferIncoming ? track : existing;
+      const fallback = preferIncoming ? existing : track;
+      const preferredStreamUrls = Object.values(preferred.streamUrls || {}).filter(
+        (url): url is string => Boolean(url)
+      );
+      const fallbackStreamUrls = Object.values(fallback.streamUrls || {}).filter(
+        (url): url is string => Boolean(url)
+      );
+      const preferredAlternates =
+        (preferred as Track & { alternates?: string[] }).alternates || [];
+      const fallbackAlternates =
+        (fallback as Track & { alternates?: string[] }).alternates || [];
+      const preferredUrlSet = new Set(preferredStreamUrls);
+      const alternates = [...new Set([
+        ...preferredAlternates,
+        ...fallbackAlternates,
+        ...fallbackStreamUrls,
+      ])].filter((url) => !preferredUrlSet.has(url));
+
+      // Merge duplicate catalogue entries instead of discarding later providers.
+      // This prevents a preview-only Apple/Deezer result from hiding a full
+      // JioSaavn stream, while retaining alternate full streams for failover.
+      dedupedRemote[existingIndex] = {
+        ...fallback,
+        ...preferred,
+        image: preferred.image || fallback.image,
+        albumName: preferred.albumName || fallback.albumName,
+        year: preferred.year || fallback.year,
+        playCount: Math.max(preferred.playCount || 0, fallback.playCount || 0) || undefined,
+        streamUrls: preferred.streamUrls,
+        previewUrl: preferred.previewUrl || fallback.previewUrl,
+        sourceProvider: preferred.sourceProvider || fallback.sourceProvider,
+        sourceAvailability: hasFullAudioStream(preferred)
+          ? 'full'
+          : preferred.sourceAvailability || fallback.sourceAvailability,
+        sourcePageUrl: preferred.sourcePageUrl || fallback.sourcePageUrl,
+        sourceLicense: preferred.sourceLicense || fallback.sourceLicense,
+        offlineAvailable: typeof preferred.offlineAvailable === 'boolean'
+          ? preferred.offlineAvailable
+          : fallback.offlineAvailable,
+        metadataOnly: Boolean(preferred.metadataOnly && fallback.metadataOnly),
+        alternates,
+      } as Track;
     }
 
     const merged = [...dedupedRemote, ...localMatches]
