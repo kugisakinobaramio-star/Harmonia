@@ -110,7 +110,7 @@ export function OfflineDownloadsView({
     } finally {
       setBusy(false);
     }
-  };;
+  };
 
   const play = (index: number) => {
     const tracks: Track[] = items.map((item) => {
