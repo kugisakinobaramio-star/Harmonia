@@ -10,6 +10,7 @@ import {
   formatTime,
   getGreetingForHour,
   hasFullAudioStream,
+  hasFullPlaybackSource,
   isRemixOrKnockoff,
   isMatchingLyricsCandidate,
   getSearchFallbackQueries,
@@ -264,6 +265,23 @@ test('isShortPreviewUrl and hasFullAudioStream distinguish 30s previews from ful
   };
   assert.equal(hasFullAudioStream(fullStreamTrack), true);
   assert.equal(hasFullAudioStream(sampleTracks[1]), true);
+});
+
+test('YouTube video IDs never count as an audio playback source', () => {
+  const videoOnlyTrack: Track = {
+    ...sampleTracks[0],
+    streamUrls: undefined,
+    previewUrl: undefined,
+    youtubeId: 'video-only-id',
+  };
+  assert.equal(hasFullAudioStream(videoOnlyTrack), false);
+  assert.equal(hasFullPlaybackSource(videoOnlyTrack), false);
+
+  const audioAndVideoTrack: Track = {
+    ...videoOnlyTrack,
+    streamUrls: { '320kbps': 'https://audio.example.com/full-track.mp3' },
+  };
+  assert.equal(hasFullPlaybackSource(audioAndVideoTrack), true);
 });
 
 test('scoreTrackForUser boosts tracks matching explicit favoriteArtists and preferredMoods', () => {
