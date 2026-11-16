@@ -47,6 +47,9 @@ jobs:
       - name: Type-check
         run: npm run lint
 
+      - name: Test Android release Gradle configuration
+        run: python3 scripts/test-configure-android-release.py
+
       - name: Build web app for Android
         run: npm run build
         env:
