@@ -76,5 +76,5 @@ test('preview-only and metadata-only tracks never win provider deduplication pri
     sourceProvider: 'SoundCloud',
     streamUrls: { '160kbps': 'https://audio.example.com/full.m4a' },
     metadataOnly: true,
-  }), 10);
+  }), 0);
 });
