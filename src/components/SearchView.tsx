@@ -92,18 +92,21 @@ export function SearchView({
   >([]);
   const [videos, setVideos] = useState<VideoResult[]>([]);
   const [drillMeta, setDrillMeta] = useState<{ title: string; subtitle: string } | null>(null);
+  const [searchError, setSearchError] = useState('');
 
   useEffect(() => {
     const seq = ++seqRef.current;
     const rawQuery = query.trim();
     if (!drillCollection && activeTab === 'videos' && !rawQuery) {
       setVideos([]);
+      setSearchError('');
       setLoading(false);
       return;
     }
 
     const timer = window.setTimeout(async () => {
       setLoading(true);
+      setSearchError('');
       try {
         if (drillCollection) {
           const detail = await loadCollectionTracks(drillCollection.kind, drillCollection.id);
@@ -143,6 +146,18 @@ export function SearchView({
             if (seq !== seqRef.current) return;
             setVideos(res);
           }
+        }
+      } catch {
+        if (seq === seqRef.current) {
+          setSearchError('Search is temporarily unavailable. Check your connection and try again.');
+          setSongs([]);
+          setAlbums([]);
+          setPlaylists([]);
+          setArtists([]);
+          setVideos([]);
+          setDrillMeta(null);
+          setCanLoadMoreSongs(false);
+          setLoadMoreError('');
         }
       } finally {
         if (seq === seqRef.current) setLoading(false);
@@ -367,6 +382,10 @@ export function SearchView({
           {Array.from({ length: 5 }).map((_, i) => (
             <div key={i} className="h-14 animate-pulse rounded-md bg-white/[0.04]" />
           ))}
+        </div>
+      ) : searchError ? (
+        <div role="alert" className="rounded-lg border border-amber-500/20 bg-amber-500/[0.06] p-4 text-sm text-amber-200">
+          {searchError}
         </div>
       ) : activeTab === 'songs' || drillCollection ? (
         songs.length === 0 ? (
