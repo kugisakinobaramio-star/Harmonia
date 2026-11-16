@@ -117,6 +117,8 @@ jobs:
 
       - name: Verify release APK signature
         if: startsWith(github.ref, 'refs/tags/android-v')
+        env:
+          ANDROID_HOME: /usr/local/lib/android/sdk
         run: |
           APK="android/app/build/outputs/apk/release/app-release.apk"
           test -s "$APK"
