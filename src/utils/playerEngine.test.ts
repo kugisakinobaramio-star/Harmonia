@@ -408,12 +408,14 @@ test('isPlausibleSongDuration rejects long-form and invalid catalogue results', 
 });
 
 
-test('isRelevantTrackTitle blocks unrelated search results while allowing title-plus-artist queries', () => {
+test('isRelevantTrackTitle blocks unrelated results and supports title-plus-artist queries', () => {
   assert.equal(isRelevantTrackTitle('Pasoori', 'Training Season'), false);
   assert.equal(isRelevantTrackTitle('Training Season', 'Training Season'), true);
   assert.equal(isRelevantTrackTitle('Training Season (Official Audio)', 'Training Season'), true);
-  assert.equal(isRelevantTrackTitle('Training Season', 'Dua Lipa Training Season'), true);
+  assert.equal(isRelevantTrackTitle('Training Season', 'Dua Lipa Training Season', 'Dua Lipa'), true);
   assert.equal(isRelevantTrackTitle('Training Season - Dua Lipa', 'Dua Lipa Training Season'), true);
+  assert.equal(isRelevantTrackTitle('Maharani', 'Maharani Arpit Bala', 'Arpit Bala'), true);
+  assert.equal(isRelevantTrackTitle('Maharani', 'Maharani Arpit Bala', 'Unrelated Artist'), false);
   assert.equal(isRelevantTrackTitle('Sapphire', 'Training Season'), false);
 });
 
