@@ -24,7 +24,7 @@ Harmonia combines a React interface, a small Express API and a Cloudflare Worker
 
 **🌐 Live app:** https://harmonia.kugisakinobaramio.workers.dev  
 **💻 Source:** https://github.com/kugisakinobaramio-star/Harmonia  
-**📱 Android build:** [Latest debug APK workflow artifact](https://github.com/kugisakinobaramio-star/Harmonia/actions/workflows/android.yml) *(testing build; temporary artifact)*
+**📱 Android releases:** [Stable signed APK releases](https://github.com/kugisakinobaramio-star/Harmonia/releases) *(published only from version tags)*
 
 ---
 
@@ -99,58 +99,55 @@ Provider integrations should be added only when their API, licensing, authentica
 - Wrangler
 - Node.js 22+ for local development
 
-## 📱 Android app (testing build)
+## 📱 Android app (stable releases)
 
-Harmonia now has a Capacitor-based Android packaging path. The first automated **debug-signed APK** was built successfully by GitHub Actions.
+Harmonia publishes **stable, signed APKs only** as GitHub Releases. Pull requests and ordinary branch builds may still create short-lived debug artifacts for CI verification, but they are never published as app releases.
 
-<details>
-<summary><strong>Get the current testing APK</strong></summary>
+### Release requirements
 
-1. Open the [Android APK workflow run](https://github.com/kugisakinobaramio-star/Harmonia/actions/runs/43725868017).
-2. Scroll to **Artifacts** and download `harmonia-android-debug`.
-3. Extract the ZIP and locate `app-debug.apk`.
-4. Transfer the APK to your Android phone and open it.
-5. If Android asks, allow the file manager or browser you used to install this app, then continue with installation.
+Before creating the first release, configure these four repository Actions secrets under **Settings → Secrets and variables → Actions**:
 
-The workflow artifact is temporary and expires after 30 days. It is a **debug/testing build**, not a Play Store release. It uses the standard debug signing key, so a future APK signed with a different release key may not install as an in-place update; back up any local-only data before changing builds.
+- `ANDROID_KEYSTORE_BASE64` — base64-encoded release keystore
+- `ANDROID_KEYSTORE_PASSWORD` — keystore password
+- `ANDROID_KEY_ALIAS` — key alias
+- `ANDROID_KEY_PASSWORD` — key password
 
-</details>
-
-### What has been verified
-
-- [x] Unit tests passed in the Android workflow
-- [x] TypeScript type-check passed
-- [x] Vite production build passed
-- [x] Capacitor Android project generation and sync passed
-- [x] Gradle produced an installable debug APK
-- [x] APK artifact upload completed
-- [ ] Install and regression-test on a physical Android device
-- [ ] Confirm playback, background audio, lock-screen controls, artwork, and local imports on the target phone
-- [ ] Configure a protected release-signing key and publish a durable signed release
-
-**Device-testing status:** the APK is built and ready for device testing; successful installation or playback on a Redmi Y3 has not yet been confirmed.
-
-### Build it yourself
-
-The repository's Android workflow regenerates the native project during CI:
+Create the signing keystore locally and keep the original file in a secure backup. Never commit the keystore, passwords, or base64 output to the repository. Example command:
 
 ```bash
-npm install
-npm run build
-npx cap add android
-npx cap sync android
-cd android
-./gradlew assembleDebug
+keytool -genkeypair -v -keystore harmonia-release.jks -alias harmonia -keyalg RSA -keysize 2048 -validity 10000
 ```
 
-For an existing generated Android project, use:
+Encode the keystore as one base64 value for the `ANDROID_KEYSTORE_BASE64` secret:
 
 ```bash
-npm run android:sync
-npm run android:open
+base64 -w 0 harmonia-release.jks
 ```
 
-The packaged app uses `VITE_API_BASE_URL` to reach the deployed Worker. Browser builds keep same-origin API requests when this variable is unset.
+Keep the same keystore and key for every future update. Losing or changing the signing key can prevent users from installing updates over an existing release.
+
+### Publish a stable release
+
+1. Ensure all four signing secrets are configured.
+2. Create and push a semantic-version tag, for example:
+
+```bash
+git tag android-v1.1.0
+git push origin android-v1.1.0
+```
+
+3. GitHub Actions runs tests and type-checking, builds the Android release APK, verifies its signature, and publishes `app-release.apk` as a **non-prerelease** GitHub Release.
+4. Download the APK from [Harmonia Releases](https://github.com/kugisakinobaramio-star/Harmonia/releases).
+
+Only tags matching `android-vMAJOR.MINOR.PATCH` (with an optional prerelease suffix) trigger the stable release path. A missing signing secret or failed signature verification stops publication; the workflow does not fall back to an unsigned/debug APK.
+
+### CI verification builds
+
+Pull requests, main-branch pushes and manual workflow runs build a debug APK artifact for automated testing. These artifacts expire after 14 days and are **not** GitHub Releases or stable app updates.
+
+### Current verification status
+
+The signed-release workflow is being added. A stable APK is not available until the repository signing secrets are configured and a version tag successfully completes the workflow. CI builds do not prove installation or playback on a physical Android device.
 
 ## 🛠️ Run locally
 
