@@ -1091,7 +1091,8 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
           sourceProvider: 'SoundCloud',
           sourceAvailability: 'full',
           sourcePageUrl: item.permalink_url,
-          offlineAvailable: true,
+          // SoundCloud availability does not grant permission to store offline copies.
+          offlineAvailable: false,
         });
       }
       return out;
@@ -1768,7 +1769,7 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
           fullAlternates.push(bestSc.streamUrls['160kbps']);
           resolvedSourceProvider = 'SoundCloud';
           resolvedSourcePageUrl = bestSc.sourcePageUrl;
-          resolvedOfflineAvailable = true;
+          resolvedOfflineAvailable = false;
         }
       }
     }

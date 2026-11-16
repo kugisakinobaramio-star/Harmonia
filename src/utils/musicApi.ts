@@ -1,4 +1,5 @@
 import { preserveTrackAfterFailedRefresh } from './streamRefresh.ts';
+import { getAudioProviderPriority } from './streamCandidates';
 import { apiUrl } from './apiUrl';
 import {
   ARTWORK,
@@ -416,18 +417,6 @@ export async function searchSongs(
 
     const dedupedIndexByKey = new Map<string, number>();
     const dedupedRemote: Track[] = [];
-    const audioProviderPriority = (track: Track): number => {
-      if (!hasFullAudioStream(track)) return 0;
-      const priorities: Record<string, number> = {
-        SoundCloud: 65,
-        JioSaavn: 50,
-        Audius: 40,
-        Jamendo: 30,
-        Funkwhale: 20,
-      };
-      return priorities[track.sourceProvider || ''] || 10;
-    };
-
     for (const track of combinedRemote) {
       const key =
         searchTextTokens(track.name).join(' ') + '::' +
@@ -443,7 +432,7 @@ export async function searchSongs(
 
       const existing = dedupedRemote[existingIndex];
       const preferIncoming =
-        audioProviderPriority(track) > audioProviderPriority(existing);
+        getAudioProviderPriority(track) > getAudioProviderPriority(existing);
       const preferred = preferIncoming ? track : existing;
       const fallback = preferIncoming ? existing : track;
       const preferredStreamUrls = Object.values(preferred.streamUrls || {}).filter(
