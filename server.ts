@@ -997,7 +997,13 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
     try {
       const headers: Record<string, string> = {};
       if (req.headers.range) headers.Range = String(req.headers.range);
-      const upstream = await fetchPublicHttpsUrl(rawUrl, 12000, headers);
+      let upstream: Response;
+      try {
+        upstream = await fetchPublicHttpsUrl(rawUrl, 12000, headers);
+      } catch (firstErr) {
+        if (req.closed) throw firstErr;
+        upstream = await fetchPublicHttpsUrl(rawUrl, 12000, headers);
+      }
       res.status(upstream.status);
       const ct = upstream.headers.get('content-type');
       const cl = upstream.headers.get('content-length');
@@ -2537,7 +2543,7 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
             artistMeta?.picture_big ||
             artistMeta?.picture_medium ||
             '';
-          const mapped = rawTracks
+          let mapped = rawTracks
             .map((item) => {
               const t = mapDeezerTrack(item, 'GLOBAL');
               return !t.image && albumCover ? { ...t, image: albumCover } : t;
@@ -2547,6 +2553,51 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
                 !isInstrumentalOrSpam(t.name, t.albumName) &&
                 !isRemixOrKnockoff(t.name, '', t.artist, '')
             );
+
+          // Enrich Deezer artist discography tracks with full-length JioSaavn IN streams when available
+          if (type === 'artists' && artistName && mapped.length > 0) {
+            try {
+              const saavnNative = await fetchSaavnNativeSongs(artistName, 0, limit, 2800);
+              const saavnByKey = new Map<string, SaavnNormalizedSong>();
+              const normArtist = artistName.normalize('NFKC').toLowerCase().trim();
+              const normTitle = (v: string) =>
+                v
+                  .normalize('NFKC')
+                  .toLowerCase()
+                  .replace(/\([^)]*\)|\[[^\]]*\]/g, ' ')
+                  .replace(/[^\p{L}\p{N}]+/gu, ' ')
+                  .trim();
+              for (const s of saavnNative) {
+                const sPrimary = s.artists.primary.map((a) => (a.name || '').normalize('NFKC').toLowerCase()).join(', ');
+                const sFeatured = s.artists.featured.map((a) => (a.name || '').normalize('NFKC').toLowerCase()).join(', ');
+                if (!sPrimary.includes(normArtist) && !sFeatured.includes(normArtist)) continue;
+                const k = normTitle(s.name);
+                if (k && !saavnByKey.has(k) && s.downloadUrl.length > 0) {
+                  saavnByKey.set(k, s);
+                }
+              }
+              mapped = mapped.map((track) => {
+                const match = saavnByKey.get(normTitle(track.name));
+                if (!match) return track;
+                const streamUrls: Record<string, string> = {};
+                for (const d of match.downloadUrl) {
+                  if (d.quality && d.url) streamUrls[d.quality] = d.url;
+                }
+                if (!Object.values(streamUrls).some(Boolean)) return track;
+                return {
+                  ...track,
+                  duration: match.duration > 0 ? match.duration : track.duration,
+                  streamUrls,
+                  sourceProvider: 'JioSaavn',
+                  sourceAvailability: 'full',
+                  offlineAvailable: true,
+                };
+              });
+            } catch {
+              // Keep Deezer tracks if optional JioSaavn enrichment fails
+            }
+          }
+
           res.json({
             ok: mapped.length > 0,
             source: 'deezer',

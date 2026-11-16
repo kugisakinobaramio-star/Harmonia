@@ -482,7 +482,13 @@ export async function searchAlbums(query: string): Promise<{
       const json = (await res.json()) as {
         ok?: boolean;
         data?: {
-          results?: Array<{ id: string; name?: string; year?: string; image?: SaavnImage[] }>;
+          results?: Array<{
+            id: string;
+            name?: string;
+            year?: string;
+            image?: SaavnImage[];
+            artists?: { primary?: Array<{ name?: string }> };
+          }>;
           deezerItems?: Array<{
             id?: number;
             title?: string;
@@ -502,14 +508,31 @@ export async function searchAlbums(query: string): Promise<{
           image: toProxiedImageUrl(a.cover_big || a.cover_medium) || ARTWORK.englishVinyl,
           isLocal: false,
         }));
-        const remote = saavnRaw.map((a) => ({
-          id: `saavn-alb:${a.id}`,
-          name: decodeHtmlEntities(a.name || 'Album'),
-          subtitle: a.year ? `${a.year} · Album` : 'Album',
-          image: pickSaavnImage(a.image, ARTWORK.englishVinyl),
-          isLocal: false,
-        }));
-        return { albums: [...localAlbums, ...dzMapped, ...remote].slice(0, 18) };
+        const qTokens = searchTextTokens(query);
+        const remote = saavnRaw
+          .filter((a) => {
+            if (!qTokens.length) return true;
+            const hay = searchTextTokens(
+              `${a.name || ''} ${(a.artists?.primary || []).map((p) => p.name || '').join(' ')}`
+            );
+            return qTokens.some((tok) => hay.includes(tok));
+          })
+          .map((a) => ({
+            id: `saavn-alb:${a.id}`,
+            name: decodeHtmlEntities(a.name || 'Album'),
+            subtitle: a.year ? `${a.year} · Album` : 'Album',
+            image: pickSaavnImage(a.image, ARTWORK.englishVinyl),
+            isLocal: false,
+          }));
+        const seenAlbumKeys = new Set<string>();
+        const mergedAlbums = [...localAlbums, ...dzMapped, ...remote].filter((alb) => {
+          const key = searchTextTokens(alb.name).join(' ');
+          if (!key) return true;
+          if (seenAlbumKeys.has(key)) return false;
+          seenAlbumKeys.add(key);
+          return true;
+        });
+        return { albums: mergedAlbums.slice(0, 18) };
       }
     }
   } catch {
@@ -640,7 +663,7 @@ export async function searchArtists(query: string): Promise<{
           }));
         const seenArtists = new Set<string>();
         const mergedArtists = [...localArtists, ...dzMapped, ...remote, ...musicBrainzMapped].filter((artist) => {
-          const key = artist.name.toLowerCase();
+          const key = artist.name.normalize('NFKC').toLowerCase().trim();
           if (seenArtists.has(key)) return false;
           seenArtists.add(key);
           return true;

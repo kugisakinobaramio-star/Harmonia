@@ -247,14 +247,14 @@ export function CollectionView({
                     type="button"
                     onClick={() => { if (!collection.spotifyEmbedUrl) onPlayList(sorted, idx); }}
                     disabled={Boolean(collection.spotifyEmbedUrl)}
-                    className="flex min-w-0 items-center gap-3 text-left"
+                    className="flex w-full min-w-0 items-center gap-3 text-left"
                   >
                     <CoverImage
                       src={track.image}
                       alt={track.name}
                       className="h-10 w-10 shrink-0 rounded object-cover"
                     />
-                    <div className="min-w-0">
+                    <div className="min-w-0 flex-1">
                       <div
                         className={`truncate text-sm font-semibold ${
                           isCurrent ? 'text-[#1DB954]' : 'text-white'
