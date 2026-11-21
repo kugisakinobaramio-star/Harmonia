@@ -187,7 +187,7 @@ export function HomeView({
             return (
               <div
                 key={`${title}-${track.id}`}
-                className="group relative rounded-lg bg-[#161619] p-3 transition-colors hover:bg-[#222227]"
+                className="harmonia-music-card group relative rounded-xl p-3"
               >
                 <button
                   type="button"
@@ -279,7 +279,7 @@ export function HomeView({
           {quickPicks.map((item) => (
             <div
               key={item.id}
-              className="group flex items-center overflow-hidden rounded-md bg-white/[0.06] pr-3 transition-colors hover:bg-white/[0.12]"
+              className="harmonia-quick-pick group flex items-center overflow-hidden rounded-xl pr-3"
             >
               <button
                 type="button"
@@ -352,7 +352,7 @@ export function HomeView({
               .map((pl) => (
                 <div
                   key={pl.id}
-                  className="group relative rounded-lg bg-[#161619] p-3 transition-colors hover:bg-[#222227]"
+                  className="harmonia-music-card group relative rounded-xl p-3"
                 >
                   <button
                     type="button"
