@@ -744,9 +744,8 @@ export default function App() {
         startupTimer = 0;
         stallTimer = 0;
         setIsPlaying(true);
-        // Keep the error listener attached after startup so a later decode/network
-        // failure can still advance to the next candidate.
-        incoming.removeEventListener('playing', onCandidatePlaying);
+        // Keep listening after startup: seeking can emit waiting/stalled followed by
+        // playing. That resumed playing event must cancel the stall-recovery timer.
       };
       const onCandidateWaiting = () => {
         // A stream can begin successfully and then stall indefinitely. Give it
@@ -771,7 +770,7 @@ export default function App() {
         incoming.load();
         loadAndPlayCandidate(idx + 1, playSeq, onAllFailed, resumePosition);
       };
-      incoming.addEventListener('playing', onCandidatePlaying, { once: true });
+      incoming.addEventListener('playing', onCandidatePlaying);
       incoming.addEventListener('error', onCandidateError, { once: true });
       incoming.addEventListener('waiting', onCandidateWaiting);
       incoming.addEventListener('stalled', onCandidateWaiting);
