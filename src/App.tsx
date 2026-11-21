@@ -1973,7 +1973,7 @@ export default function App() {
           onCloseMobile={() => setMobileMenuOpen(false)}
         />
 
-        <main className="relative flex min-w-0 flex-1 flex-col overflow-hidden rounded-lg bg-[#121212]">
+        <main className="harmonia-main-panel relative flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl">
           <div ref={mainScrollRef} className="min-h-0 flex-1 overflow-y-auto px-4 pt-2 sm:px-6">
             {activeView === 'home' && (
               <HomeView

@@ -51,7 +51,7 @@ export function Sidebar({
 
       <aside
         aria-label="Your Library sidebar"
-        className={`fixed inset-y-2 left-2 z-50 flex w-[280px] flex-col rounded-lg bg-[#121212] p-3 transition-transform duration-200 lg:static lg:h-full lg:w-[272px] lg:translate-x-0 ${
+        className={`harmonia-sidebar fixed inset-y-2 left-2 z-50 flex w-[280px] flex-col rounded-xl p-3 transition-transform duration-200 lg:static lg:h-full lg:w-[272px] lg:translate-x-0 ${
           mobileOpen ? 'translate-x-0' : '-translate-x-[112%]'
         }`}
       >
