@@ -127,7 +127,7 @@ export function ExpandedPlayer({
             <CoverImage
               src={track.image}
               alt={track.name}
-              className="aspect-square w-full object-cover"
+              className="aspect-square w-full object-contain"
             />
           </div>
 
