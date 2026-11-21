@@ -88,7 +88,7 @@ export function PlayerBar({
   const progressPct = Math.min(100, Math.max(0, (currentTime / safeDuration) * 100));
 
   return (
-    <footer aria-label="Harmonia playback bar" className="z-30 shrink-0 bg-black">
+    <footer aria-label="Harmonia playback bar" className="harmonia-player-shell z-30 shrink-0">
       {/* Mobile Spotify Floating Mini-Player Pill (tappable to expand into full player) */}
       <div className="mx-2 mb-1 overflow-hidden rounded-lg bg-[#222227] md:hidden">
         <div className="flex items-center gap-2.5 px-2.5 py-2">
