@@ -248,10 +248,10 @@ export function HomeView({
                   key={lang}
                   type="button"
                   onClick={() => onLanguageFilterChange(lang)}
-                  className={`rounded-full px-3.5 py-1.5 text-xs font-bold transition-colors ${
+                  className={`harmonia-chip rounded-full px-3.5 py-1.5 text-xs font-bold transition-colors ${
                     active
-                      ? 'bg-white text-black'
-                      : 'bg-[#232327] text-zinc-200 hover:bg-[#2e2e33]'
+                      ? 'border-white bg-white text-black'
+                      : 'bg-[#232327] text-zinc-200 hover:border-white/20 hover:bg-[#2e2e33]'
                   }`}
                 >
                   {lang}
