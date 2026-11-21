@@ -101,7 +101,7 @@ export function Header({
   }, [openMenu]);
 
   return (
-    <header className="z-30 flex h-14 shrink-0 items-center justify-between gap-1.5 bg-black px-2.5 sm:h-16 sm:gap-3 sm:px-4">
+    <header className="harmonia-header z-30 flex h-14 shrink-0 items-center justify-between gap-1.5 px-2.5 sm:h-16 sm:gap-3 sm:px-4">
       {/* Left: Brand + Mobile Drawer + Spotify Back/Forward */}
       <div className="flex shrink-0 items-center gap-2">
         <button
