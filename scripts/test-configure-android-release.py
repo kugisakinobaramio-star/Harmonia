@@ -60,6 +60,6 @@ with tempfile.TemporaryDirectory() as directory:
         text=True,
     )
     assert duplicate.returncode != 0
-    assert "already be configured" in duplicate.stderr or "already be configured" in duplicate.stdout
+    assert "configured already" in duplicate.stderr or "configured already" in duplicate.stdout
 
 print("Android release Gradle configuration test passed.")
