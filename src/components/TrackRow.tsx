@@ -57,9 +57,7 @@ export function TrackRow({
   return (
     <div
       data-current={isCurrent ? 'true' : 'false'}
-      className={`harmonia-track-row group grid grid-cols-[24px_40px_minmax(0,1fr)_auto] items-center gap-2 rounded-lg px-2 py-2 ${
-        isCurrent ? 'bg-white/[0.1]' : 'hover:bg-white/[0.06]'
-      }`}
+      className="harmonia-track-row group grid grid-cols-[24px_40px_minmax(0,1fr)_auto] items-center gap-2 rounded-lg px-2 py-2"
     >
       <div className="font-mono-num text-center text-xs font-medium text-zinc-400">
         {isCurrent && isPlaying ? (
