@@ -685,7 +685,7 @@ export default function App() {
   }, [navHistory.length]);
 
   const loadAndPlayCandidate = useCallback(
-    (idx: number, playSeq: number, onAllFailed: () => void) => {
+    (idx: number, playSeq: number, onAllFailed: () => void, resumeAt = 0) => {
       const a1 = audioRef.current;
       const a2 = audioRef2.current;
       if (!a1 || !a2 || playSeq !== playbackSeqRef.current) return;
@@ -707,6 +707,18 @@ export default function App() {
       // makes browsers output silence when the host omits Access-Control-Allow-Origin.
       incoming.removeAttribute('crossOrigin');
       incoming.src = url;
+      if (resumeAt > 0) {
+        const restorePosition = () => {
+          if (playSeq !== playbackSeqRef.current || candidateIdxRef.current !== idx) return;
+          try {
+            const seekableEnd = Number.isFinite(incoming.duration) ? incoming.duration : resumeAt;
+            incoming.currentTime = Math.max(0, Math.min(resumeAt, seekableEnd || resumeAt));
+          } catch {
+            // Some providers do not expose a seekable range immediately after metadata.
+          }
+        };
+        incoming.addEventListener('loadedmetadata', restorePosition, { once: true });
+      }
       incoming.volume = 0;
       incoming.muted = volume === 0;
 
@@ -732,9 +744,8 @@ export default function App() {
         startupTimer = 0;
         stallTimer = 0;
         setIsPlaying(true);
-        // Keep the error listener attached after startup so a later decode/network
-        // failure can still advance to the next candidate.
-        incoming.removeEventListener('playing', onCandidatePlaying);
+        // Keep listening after startup: seeking can emit waiting/stalled followed by
+        // playing. That resumed playing event must cancel the stall-recovery timer.
       };
       const onCandidateWaiting = () => {
         // A stream can begin successfully and then stall indefinitely. Give it
@@ -751,11 +762,15 @@ export default function App() {
         clearCandidateWatch();
         if (playSeq !== playbackSeqRef.current) return;
         incoming.pause();
+        const resumePosition = Math.max(
+          Number.isFinite(incoming.currentTime) ? incoming.currentTime : 0,
+          currentTimeRef.current || 0
+        );
         incoming.removeAttribute('src');
         incoming.load();
-        loadAndPlayCandidate(idx + 1, playSeq, onAllFailed);
+        loadAndPlayCandidate(idx + 1, playSeq, onAllFailed, resumePosition);
       };
-      incoming.addEventListener('playing', onCandidatePlaying, { once: true });
+      incoming.addEventListener('playing', onCandidatePlaying);
       incoming.addEventListener('error', onCandidateError, { once: true });
       incoming.addEventListener('waiting', onCandidateWaiting);
       incoming.addEventListener('stalled', onCandidateWaiting);
