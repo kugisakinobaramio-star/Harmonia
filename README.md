@@ -1,11 +1,11 @@
-# Harmonia
+# Musick
 
 <p align="center">
-  <img src="docs/harmonia-banner.svg" alt="Harmonia — find your sound" width="100%" />
+  <img src="docs/musick-banner.svg" alt="Musick — find your sound" width="100%" />
 </p>
 
 <p align="center">
-  <a href="https://github.com/kugisakinobaramio-star/Harmonia/actions"><img src="https://img.shields.io/badge/Build-GitHub%20Actions-2088FF?logo=githubactions&logoColor=white" alt="GitHub Actions" /></a>
+  <a href="https://github.com/kugisakinobaramio-star/Musick/actions"><img src="https://img.shields.io/badge/Build-GitHub%20Actions-2088FF?logo=githubactions&logoColor=white" alt="GitHub Actions" /></a>
   <a href="https://react.dev/"><img src="https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=111827" alt="React 19" /></a>
   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-7-3178C6?logo=typescript&logoColor=white" alt="TypeScript" /></a>
   <a href="https://developers.cloudflare.com/workers/"><img src="https://img.shields.io/badge/Cloudflare-Workers-F38020?logo=cloudflare&logoColor=white" alt="Cloudflare Workers" /></a>
@@ -18,24 +18,24 @@
 
 **A personal music-discovery and listening space.** ✨
 
-Harmonia combines a React interface, a small Express API and a Cloudflare Worker deployment. It is designed around listener-controlled preferences, a local music library, resilient provider fallbacks and a lightweight mobile-friendly experience.
+Musick combines a React interface, a small Express API and a Cloudflare Worker deployment. It is designed around listener-controlled preferences, a local music library, resilient provider fallbacks and a lightweight mobile-friendly experience.
 
 > **Provider reality check:** music catalogues and playback rights differ. Some services provide full streams, while others provide metadata, previews or an embedded player only. A successful search does not guarantee that a full track can be played.
 
 **🌐 Live app:** https://harmonia.kugisakinobaramio.workers.dev  
-**💻 Source:** https://github.com/kugisakinobaramio-star/Harmonia  
-**📱 Android releases:** [Stable signed APK releases](https://github.com/kugisakinobaramio-star/Harmonia/releases) *(published only from version tags)*
+**💻 Source:** https://github.com/kugisakinobaramio-star/Musick  
+**📱 Android releases:** [Signed Android APK releases](https://github.com/kugisakinobaramio-star/Musick/releases) *(published only from version tags)*
 
 ---
 
 
 ### 🌍 Federated open-audio provider
 
-Harmonia can also resolve public, playable recordings from **Funkwhale** (an open-source, federated music platform). The resolver queries public Funkwhale pods, checks playability, duration, title and artist similarity, and rejects remix/cover-style matches before adding a stream candidate. Pod availability and catalog coverage vary; this source is best treated as an independent-music discovery fallback, not a replacement for commercial catalogues.
+Musick can also resolve public, playable recordings from **Funkwhale** (an open-source, federated music platform). The resolver queries public Funkwhale pods, checks playability, duration, title and artist similarity, and rejects remix/cover-style matches before adding a stream candidate. Pod availability and catalog coverage vary; this source is best treated as an independent-music discovery fallback, not a replacement for commercial catalogues.
 
-Existing open/independent sources include Audius, Jamendo and license-filtered Internet Archive recordings. Each source is best-effort and only returns audio that its upstream makes publicly playable. Harmonia does not use remix-only catalogs as a substitute for original recordings, and provider metadata is never treated as proof that a commercial recording is licensed for redistribution.
+Existing open/independent sources include Audius, Jamendo and license-filtered Internet Archive recordings. Each source is best-effort and only returns audio that its upstream makes publicly playable. Musick does not use remix-only catalogs as a substitute for original recordings, and provider metadata is never treated as proof that a commercial recording is licensed for redistribution.
 
-## 🎶 What Harmonia includes
+## 🎶 What Musick includes
 
 - Music search and discovery across supported catalogues
 - Native audio playback from verified provider stream/preview URLs; YouTube videos remain in a user-initiated official embedded viewer
@@ -50,7 +50,7 @@ Existing open/independent sources include Audius, Jamendo and license-filtered I
 
 Recommendations should reflect the listener, not a preset artist list.
 
-Harmonia starts with an empty taste profile unless the listener has saved preferences. Signals are built from:
+Musick starts with an empty taste profile unless the listener has saved preferences. Signals are built from:
 - Tracks the listener plays and replays
 - Liked tracks
 - Explicitly selected artists, languages and moods
@@ -63,17 +63,17 @@ Taste signals are stored in the current browser. They are not uploaded to a shar
 
 ## 🎼 Music providers
 
-Harmonia uses multiple independent providers because no single catalogue offers every track or stable playback everywhere.
+Musick uses multiple independent providers because no single catalogue offers every track or stable playback everywhere.
 
 | Provider | Current role | Important limitation |
 | --- | --- | --- |
 | Audius / Open Audio Protocol | Search and full-track stream candidates | Open catalogue; availability and rights depend on each upload. Uses the canonical Audius API with a discovery-provider fallback. |
-| Internet Archive | Fallback for openly licensed audio | Used only when no full stream has been found. Harmonia filters to CC0, CC BY and CC BY-SA item licences and checks title, creator and available runtime metadata. The archive is not a substitute for commercial music catalogues. |
+| Internet Archive | Fallback for openly licensed audio | Used only when no full stream has been found. Musick filters to CC0, CC BY and CC BY-SA item licences and checks title, creator and available runtime metadata. The archive is not a substitute for commercial music catalogues. |
 | JioSaavn community API | Search metadata and candidate audio URLs | Third-party integration, not an official JioSaavn developer API. It can change or become unavailable. |
 | Jamendo | Candidate audio from its catalogue | API access is free for non-commercial use under the published terms; each recording has its own Creative Commons licence. Commercial use requires a separate agreement, and API access does not guarantee uptime. |
 | Deezer | Search metadata and short previews | Preview access is not full-track streaming access. |
 | Apple iTunes Search | Search metadata and short previews | Preview URLs are not full-length tracks. |
-| YouTube | User-initiated official embedded video player | Playback is subject to YouTube availability, embed permissions and regional restrictions. It is not used as a hidden music-audio fallback; Harmonia does not extract or bypass protected streams. |
+| YouTube | User-initiated official embedded video player | Playback is subject to YouTube availability, embed permissions and regional restrictions. It is not used as a hidden music-audio fallback; Musick does not extract or bypass protected streams. |
 | Spotify | Public playlist discovery metadata | Playlist metadata is not a Spotify playback entitlement. Playback uses a separately available source. |
 
 ### Open ecosystem direction
@@ -82,7 +82,7 @@ Audius is the active open music-network integration. Its read-only API supports 
 
 Other open projects are useful for different jobs, but they are not interchangeable streaming catalogues:
 
-- [Internet Archive](https://archive.org/developers/) provides an open collection of media. Harmonia uses it only as a best-effort fallback for recordings with an explicit CC0, CC BY or CC BY-SA licence.
+- [Internet Archive](https://archive.org/developers/) provides an open collection of media. Musick uses it only as a best-effort fallback for recordings with an explicit CC0, CC BY or CC BY-SA licence.
 - [Funkwhale](https://docs.funkwhale.audio/) is an open-source, federated, self-hosted audio platform. Connecting a pod requires a configured instance and its access rules; it is not a universal public catalogue.
 - [ListenBrainz](https://listenbrainz.org/) provides open listening-history and recommendation services. It is a recommendation/data source, not a source of audio streams. Its [recommendation API](https://listenbrainz.readthedocs.io/en/latest/users/api/recommendation.html) can be explored as an optional, user-authorised integration.
 - [MusicBrainz](https://musicbrainz.org/doc/MusicBrainz_API) provides open music metadata, not audio hosting or playback.
@@ -99,9 +99,9 @@ Provider integrations should be added only when their API, licensing, authentica
 - Wrangler
 - Node.js 22+ for local development
 
-## 📱 Android app (stable releases)
+## 📱 Android app (signed releases)
 
-Harmonia publishes **stable, signed APKs only** as GitHub Releases. Pull requests and ordinary branch builds may still create short-lived debug artifacts for CI verification, but they are never published as app releases.
+Musick publishes **stable, signed APKs only** as GitHub Releases. Pull requests and ordinary branch builds may still create short-lived debug artifacts for CI verification, but they are never published as app releases.
 
 ### Release requirements
 
@@ -128,7 +128,7 @@ Keep the same keystore and key for every future update. Losing or changing the s
 
 ### Publish a stable release
 
-1. Ensure all four signing secrets are configured.
+1. Ensure all four signing secrets are configured (already configured for the published releases).
 2. Create and push a semantic-version tag, for example:
 
 ```bash
@@ -137,7 +137,7 @@ git push origin android-v1.1.0
 ```
 
 3. GitHub Actions runs tests and type-checking, builds the Android release APK, verifies its signature, and publishes `app-release.apk` as a **non-prerelease** GitHub Release.
-4. Download the APK from [Harmonia Releases](https://github.com/kugisakinobaramio-star/Harmonia/releases).
+4. Download the APK from [Musick Releases](https://github.com/kugisakinobaramio-star/Musick/releases).
 
 Only tags matching `android-vMAJOR.MINOR.PATCH` (for example, `android-v1.2.3`) trigger the stable release path. Prerelease tags are intentionally not published by this workflow. A missing signing secret or failed signature verification stops publication; the workflow does not fall back to an unsigned/debug APK.
 
@@ -182,7 +182,7 @@ npm run dev:cloudflare
 
 ## ☁️ Deploy to Cloudflare Workers
 
-Harmonia runs as one full-stack Cloudflare Worker:
+Musick runs as one full-stack Cloudflare Worker:
 - Express handles the existing `/api/*` routes.
 - Workers Static Assets serves the Vite build.
 - The Worker uses the Node.js compatibility runtime and Cloudflare's Node HTTP server adapter.
@@ -268,4 +268,4 @@ Avoid broad dependency changes and unverified provider additions. Prefer small a
 
 ## 🚧 Project status
 
-Harmonia is an evolving personal project. External provider APIs, regional availability, preview policies and hosting quotas can change independently of the code. Passing CI confirms the repository builds and its automated checks pass; it does not prove that every third-party track is playable in every region or browser. The Android debug APK is available for manual device testing; a production release and device-tested status are still pending.
+Musick is an evolving personal project. External provider APIs, regional availability, preview policies and hosting quotas can change independently of the code. Passing CI confirms the repository builds and its automated checks pass; it does not prove that every third-party track is playable in every region or browser. The Android debug APK is available for manual device testing; a production release and device-tested status are still pending.
