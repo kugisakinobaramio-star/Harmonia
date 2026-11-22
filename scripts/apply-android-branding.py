@@ -37,6 +37,7 @@ adaptive.mkdir(parents=True, exist_ok=True)
 <foreground android:drawable="@drawable/ic_musick_foreground"/>
 </adaptive-icon>
 """, encoding="utf-8")
+(adaptive / "ic_launcher_round.xml").write_text((adaptive / "ic_launcher.xml").read_text(encoding="utf-8"), encoding="utf-8")
 
 fallback = res / "mipmap-anydpi"
 fallback.mkdir(parents=True, exist_ok=True)
@@ -46,4 +47,5 @@ fallback.mkdir(parents=True, exist_ok=True)
 <path android:fillColor="#62F58A" android:pathData="M25,91V37h16l23,28 23,-28h16v54H87V59L64,87 41,59v32H25Z"/>
 </vector>
 """, encoding="utf-8")
+(fallback / "ic_launcher_round.xml").write_text((fallback / "ic_launcher.xml").read_text(encoding="utf-8"), encoding="utf-8")
 print("Applied Musick app label and adaptive/fallback launcher icons.")
