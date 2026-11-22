@@ -327,7 +327,7 @@ export default function App() {
 
   const handleToggleDownload = useCallback(async (track: Track) => {
     if (track.offlineAvailable === false || track.sourceProvider === 'Jamendo') {
-      showToast('This provider supports online listening only in Harmonia.');
+      showToast('This provider supports online listening only in Musick.');
       return;
     }
     if (downloadingIds.has(track.id)) return;
@@ -364,7 +364,7 @@ export default function App() {
       (track) => track.offlineAvailable !== false && track.sourceProvider !== 'Jamendo'
     );
     if (!downloadableTracks.length) {
-      showToast('These tracks support online listening only in Harmonia.');
+      showToast('These tracks support online listening only in Musick.');
       return;
     }
 
@@ -1639,7 +1639,7 @@ export default function App() {
       const newPl: CuratedPlaylist = {
         id: `user-pl-${Date.now()}`,
         name,
-        description: 'Created by you on Harmonia',
+        description: 'Created by you on Musick',
         image: tracks[0]?.image || ARTWORK.englishVinyl,
         language: 'Mixed',
         tracks,
@@ -2207,7 +2207,7 @@ export default function App() {
         onToggleLike={() => currentTrack && handleToggleLike(currentTrack)}
         onShare={() => {
           if (!currentTrack) return;
-          const text = `${currentTrack.name} — ${currentTrack.artist} on Harmonia`;
+          const text = `${currentTrack.name} — ${currentTrack.artist} on Musick`;
           navigator.clipboard?.writeText(text).catch(() => {});
           showToast('Track info copied to clipboard');
         }}

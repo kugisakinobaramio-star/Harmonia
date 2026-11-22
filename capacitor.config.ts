@@ -2,7 +2,7 @@ import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
   appId: 'com.harmonia.music',
-  appName: 'Harmonia',
+  appName: 'Musick',
   webDir: 'dist',
   server: { androidScheme: 'https' },
   plugins: { CapacitorHttp: { enabled: true } },

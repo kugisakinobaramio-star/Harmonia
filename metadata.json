@@ -1,6 +1,6 @@
 {
-  "name": "Harmonia",
-  "description": "Spotify-inspired music streaming workspace with curated mixes, synced lyrics, dual audio visualizers, live search, playlists, and queue management.",
+  "name": "Musick",
+  "description": "Music streaming workspace with curated mixes, synced lyrics, dual audio visualizers, live search, playlists, and queue management.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

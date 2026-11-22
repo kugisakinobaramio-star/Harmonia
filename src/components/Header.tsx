@@ -116,16 +116,16 @@ export function Header({
         <button
           type="button"
           onClick={onGoHome}
-          aria-label="Harmonia Home"
+          aria-label="Musick Home"
           className="flex items-center gap-2 rounded-full pr-1 focus:outline-none"
         >
-          <span className="grid h-8 w-8 place-items-center rounded-full bg-white text-black">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-              <path d="M4 9h2v6H4V9zm4-4h2v14H8V5zm4 2h2v10h-2V7zm4-3h2v16h-2V4zm4 5h2v6h-2V9z" />
+          <span className="grid h-8 w-8 place-items-center rounded-xl border border-[#62F58A]/25 bg-[#07120B] text-[#62F58A] shadow-[0_0_18px_rgba(98,245,138,0.12)]">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M4 18V6h3.1l4.9 6.1L16.9 6H20v12h-3V10.7l-5 6.1-5-6.1V18H4Z" fill="currentColor" />
             </svg>
           </span>
           <span className="text-base font-extrabold tracking-tight text-white">
-            Harmonia
+            Musick
           </span>
         </button>
 

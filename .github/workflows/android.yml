@@ -61,6 +61,9 @@ jobs:
       - name: Sync Capacitor assets and plugins
         run: npx cap sync android
 
+      - name: Apply Musick Android launcher branding
+        run: python3 scripts/apply-android-branding.py
+
       # Pull requests and ordinary branch builds remain debug-only.
       - name: Build installable debug APK
         if: "!startsWith(github.ref, 'refs/tags/android-v')"
@@ -143,7 +146,7 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/android-v')
         uses: softprops/action-gh-release@v2
         with:
-          name: Harmonia v${{ env.HARMONIA_VERSION_NAME }}
+          name: Musick v${{ env.HARMONIA_VERSION_NAME }}
           prerelease: false
           generate_release_notes: true
           files: android/app/build/outputs/apk/release/app-release.apk
