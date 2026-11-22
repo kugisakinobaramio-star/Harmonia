@@ -104,19 +104,9 @@ def set_style_item(style, name, value):
 
 set_style_item(launch_theme, "android:background", "@drawable/musick_launch_background")
 set_style_item(launch_theme, "android:windowBackground", "@drawable/musick_launch_background")
+set_style_item(launch_theme, "windowSplashScreenBackground", "@color/musick_splash_background")
+set_style_item(launch_theme, "windowSplashScreenAnimatedIcon", "@drawable/musick_splash_icon")
+set_style_item(launch_theme, "postSplashScreenTheme", "@style/AppTheme.NoActionBar")
 styles_tree.write(styles, encoding="utf-8", xml_declaration=True)
-
-# Android 12+ draws the app's launcher icon in its system splash. Keep its
-# window background a solid color so the legacy centered logo is not doubled.
-v31 = res / "values-v31"
-v31.mkdir(parents=True, exist_ok=True)
-(v31 / "styles.xml").write_text("""<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <style name="AppTheme.NoActionBarLaunch" parent="AppTheme.NoActionBar">
-        <item name="android:background">@color/musick_splash_background</item>
-        <item name="android:windowBackground">@color/musick_splash_background</item>
-    </style>
-</resources>
-""", encoding="utf-8")
 
 print("Applied Musick launcher icons and native splash screen branding.")
