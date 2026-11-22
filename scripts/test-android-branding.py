@@ -10,7 +10,6 @@ required = [
     res / "drawable" / "musick_launch_background.xml",
     res / "values" / "colors.xml",
     res / "values" / "styles.xml",
-    res / "values-v31" / "styles.xml",
 ]
 missing = [str(path) for path in required if not path.is_file()]
 if missing:
@@ -28,24 +27,18 @@ styles = ET.parse(res / "values" / "styles.xml").getroot()
 theme = styles.find("./style[@name='AppTheme.NoActionBarLaunch']")
 if theme is None:
     sys.exit("Musick launch theme is missing")
-if theme.get("parent") == "Theme.SplashScreen":
-    sys.exit("Unexpected AndroidX splash theme dependency")
+if theme.get("parent") != "Theme.SplashScreen":
+    sys.exit("Musick launch theme must use the generated AndroidX splash theme")
 expected = {
     "android:background": "@drawable/musick_launch_background",
     "android:windowBackground": "@drawable/musick_launch_background",
+    "windowSplashScreenBackground": "@color/musick_splash_background",
+    "windowSplashScreenAnimatedIcon": "@drawable/musick_splash_icon",
+    "postSplashScreenTheme": "@style/AppTheme.NoActionBar",
 }
 for name, value in expected.items():
     item = theme.find(f"./item[@name='{name}']")
     if item is None or (item.text or "").strip() != value:
         sys.exit(f"Incorrect launch theme item: {name}")
-
-v31_styles = ET.parse(res / "values-v31" / "styles.xml").getroot()
-v31_theme = v31_styles.find("./style[@name='AppTheme.NoActionBarLaunch']")
-if v31_theme is None:
-    sys.exit("Android 12+ launch theme override is missing")
-for name in ("android:background", "android:windowBackground"):
-    item = v31_theme.find(f"./item[@name='{name}']")
-    if item is None or (item.text or "").strip() != "@color/musick_splash_background":
-        sys.exit(f"Incorrect Android 12+ launch theme item: {name}")
 
 print("Musick Android splash resources and theme verified.")
