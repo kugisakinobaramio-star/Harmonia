@@ -1,5 +1,5 @@
 import { Play, Sparkles } from 'lucide-react';
-import { useMemo } from 'react';
+import { memo, useMemo } from 'react';
 import { SEED_PLAYLISTS } from '../data/catalog';
 import type {
   CuratedPlaylist,
@@ -36,7 +36,7 @@ interface HomeViewProps {
   onOpenPersonalise: () => void;
 }
 
-export function HomeView({
+export const HomeView = memo(function HomeView({
   displayName,
   personalizedFeedTracks,
   region,
@@ -393,4 +393,4 @@ export function HomeView({
 
     </div>
   );
-}
+});
