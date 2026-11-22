@@ -50,8 +50,8 @@ fallback.mkdir(parents=True, exist_ok=True)
 """, encoding="utf-8")
 (fallback / "ic_launcher_round.xml").write_text((fallback / "ic_launcher.xml").read_text(encoding="utf-8"), encoding="utf-8")
 
-# Native launch artwork: Android 12+ uses the splash-screen icon/background
-# attributes; Android 11 and earlier use the centered layer-list background.
+# Native launch artwork: Android 12+ uses the system splash with the launcher
+# icon and a solid background; Android 11 and earlier use the centered layer-list.
 (drawable / "musick_splash_icon.xml").write_text("""<?xml version="1.0" encoding="utf-8"?>
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="128dp"
@@ -105,5 +105,18 @@ def set_style_item(style, name, value):
 set_style_item(launch_theme, "android:background", "@drawable/musick_launch_background")
 set_style_item(launch_theme, "android:windowBackground", "@drawable/musick_launch_background")
 styles_tree.write(styles, encoding="utf-8", xml_declaration=True)
+
+# Android 12+ draws the app's launcher icon in its system splash. Keep its
+# window background a solid color so the legacy centered logo is not doubled.
+v31 = res / "values-v31"
+v31.mkdir(parents=True, exist_ok=True)
+(v31 / "styles.xml").write_text("""<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="AppTheme.NoActionBarLaunch" parent="AppTheme.NoActionBar">
+        <item name="android:background">@color/musick_splash_background</item>
+        <item name="android:windowBackground">@color/musick_splash_background</item>
+    </style>
+</resources>
+""", encoding="utf-8")
 
 print("Applied Musick launcher icons and native splash screen branding.")
