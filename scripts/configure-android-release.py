@@ -56,4 +56,4 @@ if not re.search(r"(?m)^\s*versionCode\s+", text):
 text = re.sub(r'(?m)^(\s*versionName\s+).*$', lambda m: m.group(1) + '"' + version_name + '"', text, count=1)
 text = re.sub(r"(?m)^(\s*versionCode\s+).*?$", lambda m: m.group(1) + version_code, text, count=1)
 gradle.write_text(text)
-print(f"Configured signed Harmonia release v{version_name} (versionCode {version_code}).")
+print(f"Configured signed Musick release v{version_name} (versionCode {version_code}).")
