@@ -25,14 +25,13 @@ if color is None or (color.text or "").strip().lower() != "#050706":
 
 styles = ET.parse(res / "values" / "styles.xml").getroot()
 theme = styles.find("./style[@name='AppTheme.NoActionBarLaunch']")
-if theme is None or theme.get("parent") != "Theme.SplashScreen":
-    sys.exit("Musick launch theme does not use Theme.SplashScreen")
+if theme is None:
+    sys.exit("Musick launch theme is missing")
+if theme.get("parent") == "Theme.SplashScreen":
+    sys.exit("Unexpected AndroidX splash theme dependency")
 expected = {
     "android:background": "@drawable/musick_launch_background",
     "android:windowBackground": "@drawable/musick_launch_background",
-    "windowSplashScreenBackground": "@color/musick_splash_background",
-    "windowSplashScreenAnimatedIcon": "@drawable/musick_splash_icon",
-    "postSplashScreenTheme": "@style/AppTheme.NoActionBar",
 }
 for name, value in expected.items():
     item = theme.find(f"./item[@name='{name}']")
