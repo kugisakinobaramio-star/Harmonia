@@ -279,7 +279,8 @@ export default function App() {
     currentTrackRef.current = currentTrack;
   }, [currentTrack]);
 
-  // High-precision time sync for background YouTube studio player
+  // Keep progress polling lightweight on mobile WebViews. The player UI only
+  // needs whole-second updates; playback itself continues independently.
   useEffect(() => {
     if (!isPlaying) return;
     const interval = window.setInterval(() => {
@@ -290,6 +291,7 @@ export default function App() {
         const cur = player.getCurrentTime?.();
         const dur = player.getDuration?.();
         if (typeof cur === 'number' && Number.isFinite(cur) && cur >= 0) {
+          currentTimeRef.current = cur;
           setCurrentTime(cur);
         }
         if (typeof dur === 'number' && Number.isFinite(dur) && dur > 30) {
@@ -298,7 +300,7 @@ export default function App() {
       } catch {
         // Non-fatal
       }
-    }, 250);
+    }, 1000);
     return () => window.clearInterval(interval);
   }, [isPlaying]);
 
@@ -1154,6 +1156,8 @@ export default function App() {
       });
 
       setCurrentTime(0);
+      currentTimeRef.current = 0;
+      lastProgressUiUpdateRef.current = 0;
       synthTimeRef.current = 0;
       setDuration(track.duration || 200);
       // Do not label a native track as playing until the active media element
@@ -1404,7 +1408,14 @@ export default function App() {
         if (activeEngineRef.current !== 'audio' || !isActiveAudio(audio)) return;
         if (audio.src === SILENT_WAV_DATA_URI) return;
         if (Number.isFinite(audio.currentTime)) {
-          setCurrentTime(audio.currentTime);
+          // Keep an exact playback position for recovery/Media Session, but avoid
+          // re-rendering the entire app for every native timeupdate event.
+          currentTimeRef.current = audio.currentTime;
+          const now = Date.now();
+          if (now - lastProgressUiUpdateRef.current >= 1000) {
+            lastProgressUiUpdateRef.current = now;
+            setCurrentTime(audio.currentTime);
+          }
           if (Number.isFinite(audio.duration) && audio.duration > 0) setDuration(audio.duration);
         }
       };
@@ -1463,6 +1474,8 @@ export default function App() {
   const handleSeek = useCallback(
     (seconds: number) => {
       const clamped = Math.max(0, Math.min(duration || 200, seconds));
+      currentTimeRef.current = clamped;
+      lastProgressUiUpdateRef.current = 0;
       setCurrentTime(clamped);
       synthTimeRef.current = clamped;
       if (activeEngineRef.current === 'yt') {
@@ -1486,6 +1499,7 @@ export default function App() {
 
   const currentTimeRef = useRef(currentTime);
   const durationRef = useRef(duration);
+  const lastProgressUiUpdateRef = useRef(0);
   useEffect(() => {
     currentTimeRef.current = currentTime;
     durationRef.current = duration;
@@ -1900,6 +1914,8 @@ export default function App() {
   );
 
   const likedTracks = useMemo(() => Object.values(likedMap), [likedMap]);
+  const playedTracksForHome = useMemo(() => Object.values(playedTracks), [playedTracks]);
+  const openPersonalise = useCallback(() => setPersonaliseOpen(true), []);
 
   return (
     <div className="flex h-dvh flex-col overflow-hidden bg-black text-white">
@@ -2005,7 +2021,7 @@ export default function App() {
                 likedCount={likedTracks.length}
                 likedTracks={likedTracks}
                 playCounts={playCounts}
-                playedTracks={Object.values(playedTracks)}
+                playedTracks={playedTracksForHome}
                 downloadedIds={downloadedIds}
                 downloadingIds={downloadingIds}
                 onPlayTrackList={playTrackList}
@@ -2013,7 +2029,7 @@ export default function App() {
                 onOpenPlaylist={openPlaylistCollection}
                 onOpenLiked={openLikedCollection}
                 onOpenRecent={openRecentCollection}
-                onOpenPersonalise={() => setPersonaliseOpen(true)}
+                onOpenPersonalise={openPersonalise}
               />
             )}
 
