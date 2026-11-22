@@ -96,8 +96,6 @@ styles_root = styles_tree.getroot()
 launch_theme = styles_root.find("./style[@name='AppTheme.NoActionBarLaunch']")
 if launch_theme is None:
     sys.exit("Could not find AppTheme.NoActionBarLaunch in generated Android styles.xml")
-launch_theme.set("parent", "Theme.SplashScreen")
-
 def set_style_item(style, name, value):
     item = style.find(f"./item[@name='{name}']")
     if item is None:
@@ -106,9 +104,6 @@ def set_style_item(style, name, value):
 
 set_style_item(launch_theme, "android:background", "@drawable/musick_launch_background")
 set_style_item(launch_theme, "android:windowBackground", "@drawable/musick_launch_background")
-set_style_item(launch_theme, "windowSplashScreenBackground", "@color/musick_splash_background")
-set_style_item(launch_theme, "windowSplashScreenAnimatedIcon", "@drawable/musick_splash_icon")
-set_style_item(launch_theme, "postSplashScreenTheme", "@style/AppTheme.NoActionBar")
 styles_tree.write(styles, encoding="utf-8", xml_declaration=True)
 
 print("Applied Musick launcher icons and native splash screen branding.")
