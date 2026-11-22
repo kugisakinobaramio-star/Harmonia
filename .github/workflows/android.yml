@@ -64,6 +64,9 @@ jobs:
       - name: Apply Musick Android launcher branding
         run: python3 scripts/apply-android-branding.py
 
+      - name: Verify Musick Android splash and launcher branding
+        run: python3 scripts/test-android-branding.py
+
       # Pull requests and ordinary branch builds remain debug-only.
       - name: Build installable debug APK
         if: "!startsWith(github.ref, 'refs/tags/android-v')"
