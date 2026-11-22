@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Apply Musick launcher icon resources to the generated Capacitor Android project."""
+"""Apply Musick launcher and native Android splash branding to generated Capacitor resources."""
 from pathlib import Path
 import sys
 import xml.etree.ElementTree as ET
@@ -7,6 +7,7 @@ import xml.etree.ElementTree as ET
 res = Path("android/app/src/main/res")
 if not res.is_dir():
     sys.exit("Generated Android resources directory is missing")
+
 values = res / "values" / "strings.xml"
 if not values.is_file():
     sys.exit("Generated Android strings.xml is missing")
@@ -48,4 +49,66 @@ fallback.mkdir(parents=True, exist_ok=True)
 </vector>
 """, encoding="utf-8")
 (fallback / "ic_launcher_round.xml").write_text((fallback / "ic_launcher.xml").read_text(encoding="utf-8"), encoding="utf-8")
-print("Applied Musick app label and adaptive/fallback launcher icons.")
+
+# Native launch artwork: Android 12+ uses the splash-screen icon/background
+# attributes; Android 11 and earlier use the centered layer-list background.
+(drawable / "musick_splash_icon.xml").write_text("""<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="128dp"
+    android:height="128dp"
+    android:viewportWidth="128"
+    android:viewportHeight="128">
+    <path
+        android:fillColor="#62F58A"
+        android:pathData="M25,91V37h16l23,28 23,-28h16v54H87V59L64,87 41,59v32H25Z"/>
+</vector>
+""", encoding="utf-8")
+(drawable / "musick_launch_background.xml").write_text("""<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@color/musick_splash_background"/>
+    <item
+        android:width="112dp"
+        android:height="112dp"
+        android:gravity="center"
+        android:drawable="@drawable/musick_splash_icon"/>
+</layer-list>
+""", encoding="utf-8")
+
+colors = res / "values" / "colors.xml"
+colors.parent.mkdir(parents=True, exist_ok=True)
+if colors.exists():
+    colors_tree = ET.parse(colors)
+    colors_root = colors_tree.getroot()
+else:
+    colors_root = ET.Element("resources")
+    colors_tree = ET.ElementTree(colors_root)
+splash_color = colors_root.find("./color[@name='musick_splash_background']")
+if splash_color is None:
+    splash_color = ET.SubElement(colors_root, "color", {"name": "musick_splash_background"})
+splash_color.text = "#050706"
+colors_tree.write(colors, encoding="utf-8", xml_declaration=True)
+
+styles = res / "values" / "styles.xml"
+if not styles.is_file():
+    sys.exit("Generated Android styles.xml is missing")
+styles_tree = ET.parse(styles)
+styles_root = styles_tree.getroot()
+launch_theme = styles_root.find("./style[@name='AppTheme.NoActionBarLaunch']")
+if launch_theme is None:
+    sys.exit("Could not find AppTheme.NoActionBarLaunch in generated Android styles.xml")
+launch_theme.set("parent", "Theme.SplashScreen")
+
+def set_style_item(style, name, value):
+    item = style.find(f"./item[@name='{name}']")
+    if item is None:
+        item = ET.SubElement(style, "item", {"name": name})
+    item.text = value
+
+set_style_item(launch_theme, "android:background", "@drawable/musick_launch_background")
+set_style_item(launch_theme, "android:windowBackground", "@drawable/musick_launch_background")
+set_style_item(launch_theme, "windowSplashScreenBackground", "@color/musick_splash_background")
+set_style_item(launch_theme, "windowSplashScreenAnimatedIcon", "@drawable/musick_splash_icon")
+set_style_item(launch_theme, "postSplashScreenTheme", "@style/AppTheme.NoActionBar")
+styles_tree.write(styles, encoding="utf-8", xml_declaration=True)
+
+print("Applied Musick launcher icons and native splash screen branding.")
