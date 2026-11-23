@@ -612,7 +612,7 @@ test('Discover mood matching uses genre and tempo metadata, never title words', 
 });
 
 test('Discover mood matching does not infer language from a title', () => {
-  const track = {
+  const track: Partial<Track> = {
     id: 'm2', name: 'Hindi Nights', artist: 'Unknown', albumName: 'Single',
     duration: 180, image: '/cover.jpg',
   };
