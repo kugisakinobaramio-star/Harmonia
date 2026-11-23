@@ -1915,6 +1915,12 @@ export default function App() {
 
   const likedTracks = useMemo(() => Object.values(likedMap), [likedMap]);
   const playedTracksForHome = useMemo(() => Object.values(playedTracks), [playedTracks]);
+  // Keep the modal's initial settings reference stable across unrelated app renders.
+  // Otherwise playback progress updates can reset the modal's in-progress selections.
+  const personalisationSettings = useMemo<PersonalisationSettings>(
+    () => ({ displayName, region, preferredLanguages, favoriteArtists, preferredMoods, prioritizeLyrics }),
+    [displayName, region, preferredLanguages, favoriteArtists, preferredMoods, prioritizeLyrics]
+  );
   const openPersonalise = useCallback(() => setPersonaliseOpen(true), []);
 
   return (
@@ -2410,14 +2416,7 @@ export default function App() {
 
       <PersonaliseModal
         open={personaliseOpen}
-        initialSettings={{
-          displayName,
-          region,
-          preferredLanguages,
-          favoriteArtists,
-          preferredMoods,
-          prioritizeLyrics,
-        }}
+        initialSettings={personalisationSettings}
         detectingLocation={detectingLocation}
         onDetectLocation={handleDetectLocation}
         onClose={() => setPersonaliseOpen(false)}
