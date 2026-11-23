@@ -661,6 +661,12 @@ export default function App() {
     personalizedFeedTracks,
   ]);
 
+  // Keep Discover's input identity stable across unrelated player/time updates.
+  const discoverTracks = useMemo(
+    () => [...regionalTracks, ...personalizedFeedTracks, ...recommendedTracks],
+    [regionalTracks, personalizedFeedTracks, recommendedTracks]
+  );
+
   // Navigation helper with Forward/Back history
   const navigateTo = useCallback(
     (view: ViewName, collection: CollectionTarget | null = null) => {
@@ -2041,7 +2047,7 @@ export default function App() {
 
             {activeView === 'discover' && (
               <DiscoverView
-                tracks={[...regionalTracks, ...personalizedFeedTracks, ...recommendedTracks]}
+                tracks={discoverTracks}
                 recentlyPlayed={recentlyPlayed}
                 downloadedIds={downloadedIds}
                 downloadingIds={downloadingIds}
