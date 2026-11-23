@@ -236,3 +236,24 @@ input[type='range'].sp-range:hover::-webkit-slider-thumb {
     }
   }
 }
+
+
+/* Musick first-run welcome motion: subtle enough for low-powered Android devices. */
+@keyframes musick-mark-float {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-7px) scale(1.015); }
+}
+@keyframes musick-ring-pulse {
+  0%, 100% { opacity: 0.28; transform: scale(0.98); }
+  50% { opacity: 0.8; transform: scale(1.035); }
+}
+@keyframes musick-orb-breathe {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 0.9; }
+}
+.welcome-mark { animation: musick-mark-float 3.6s ease-in-out infinite; }
+.welcome-ring { animation: musick-ring-pulse 3.6s ease-in-out infinite; }
+.welcome-orb { animation: musick-orb-breathe 5s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .welcome-mark, .welcome-ring, .welcome-orb { animation: none !important; }
+}

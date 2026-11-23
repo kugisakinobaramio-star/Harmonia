@@ -45,7 +45,7 @@ export function CreatePlaylistModal({
       role="dialog"
       aria-modal="true"
       aria-label="Create new playlist"
-      className="fixed inset-0 z-50 grid place-items-center bg-black/80 p-4 backdrop-blur-xs"
+      className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-black/85 p-2.5 backdrop-blur-sm sm:p-4"
     >
       <div className="w-full max-w-md rounded-xl border border-white/10 bg-[#18181b] p-5 shadow-2xl">
         <div className="flex items-center justify-between">
@@ -559,7 +559,7 @@ const LANGUAGE_OPTIONS: MusicLanguage[] = [
   'Hindi', 'Punjabi', 'Haryanvi', 'Marathi', 'Bengali', 'Tamil', 'Telugu', 'Kannada',
   'Malayalam', 'Gujarati', 'Bhojpuri', 'Urdu', 'English', 'French', 'Spanish', 'Korean',
   'Japanese', 'Chinese', 'Arabic', 'Portuguese', 'German', 'Italian', 'Turkish', 'Thai',
-  'Indonesian', 'J-Pop',
+  'Indonesian',
 ];
 
 interface PersonaliseModalProps {
@@ -607,7 +607,7 @@ export function PersonaliseModal({
 
   const toggleLanguage = (lang: MusicLanguage) => {
     setPreferredLanguages((prev) =>
-      prev.includes(lang) ? (prev.length > 1 ? prev.filter((l) => l !== lang) : prev) : [...prev, lang]
+      prev.includes(lang) ? prev.filter((l) => l !== lang) : [...prev, lang]
     );
   };
 
@@ -640,10 +640,10 @@ export function PersonaliseModal({
     <div
       role="dialog"
       aria-modal="true"
-      aria-label="Personalise your Harmonia feed"
+      aria-label="Personalise your Musick feed"
       className="fixed inset-0 z-50 grid place-items-center bg-black/80 p-4 backdrop-blur-xs"
     >
-      <div className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-white/10 bg-[#18181b] shadow-2xl">
+      <div className="flex max-h-[min(92dvh,900px)] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#141715] shadow-2xl">
         <div className="flex items-center justify-between border-b border-white/[0.08] px-5 py-4">
           <div className="flex items-center gap-2">
             <span className="grid h-8 w-8 place-items-center rounded-full bg-[#1DB954]/15 text-[#1DB954]">
@@ -652,7 +652,7 @@ export function PersonaliseModal({
             <div>
               <h2 className="text-lg font-extrabold text-white">Personalise Your Feed</h2>
               <p className="text-xs text-zinc-400">
-                Tune your recommendations, language weights, and favorite artists
+                Choose the languages you actually listen to, then shape the sound of your feed
               </p>
             </div>
           </div>
@@ -719,9 +719,11 @@ export function PersonaliseModal({
 
           {/* Primary Languages */}
           <div>
-            <div className="mb-2 text-xs font-bold text-zinc-300">
-              Music Language Priorities (select at least one)
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <span className="text-xs font-bold text-zinc-300">Languages you want to hear</span>
+              <button type="button" onClick={() => setPreferredLanguages([])} className="text-[11px] font-semibold text-[#7ee2a8]">Clear all</button>
             </div>
+            <p className="mb-3 text-[11px] leading-relaxed text-zinc-500">These are song-language preferences, not title keywords. Tracks without reliable language metadata are left unclassified instead of being guessed.</p>
             <div className="flex flex-wrap gap-2">
               {LANGUAGE_OPTIONS.map((lang) => {
                 const active = preferredLanguages.includes(lang);
@@ -828,7 +830,8 @@ export function PersonaliseModal({
           {/* Moods & Vibes */}
           <div>
             <div className="mb-2 text-xs font-bold text-zinc-300">Mood &amp; Vibe Focus</div>
-            <div className="flex flex-wrap gap-1.5">
+            <p className="mb-3 text-[11px] leading-relaxed text-zinc-500">Pick the sound you enjoy. Discover uses available genre and tempo metadata—not words in a song title—to match these moods.</p>
+            <div className="flex flex-wrap gap-2">
               {MOOD_OPTIONS.map((mood) => {
                 const active = preferredMoods.includes(mood);
                 return (
@@ -836,7 +839,7 @@ export function PersonaliseModal({
                     key={mood}
                     type="button"
                     onClick={() => toggleMood(mood)}
-                    className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
+                    className={`rounded-full border px-3.5 py-2 text-xs font-semibold transition-colors ${
                       active
                         ? 'bg-white text-black'
                         : 'bg-[#242429] text-zinc-300 hover:bg-[#303036]'

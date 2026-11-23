@@ -1024,6 +1024,43 @@ export function sortTracks(
 }
 
 
+export type DiscoverMood =
+  | 'Bollywood Romantic'
+  | 'Anime & J-Pop'
+  | 'Late Night Dark'
+  | 'Acoustic Unplugged'
+  | 'Workout Energy'
+  | 'Indie & R&B';
+
+/**
+ * Match moods from explicit language/genre/tempo metadata only.
+ * Track titles and album names are deliberately excluded: their wording
+ * is not evidence of the sound or language of a recording.
+ */
+export function trackMatchesDiscoverMood(track: Track, mood: DiscoverMood): boolean {
+  const genre = (track.genre || '').toLocaleLowerCase();
+  const bpm = typeof track.bpm === 'number' ? track.bpm : null;
+  const language = track.language;
+  const synthMood = track.synthMood;
+
+  switch (mood) {
+    case 'Bollywood Romantic':
+      return /bollywood|romantic|love song|ballad/.test(genre);
+    case 'Anime & J-Pop':
+      return language === 'Japanese' || language === 'J-Pop' || /j-pop|anime/.test(genre) || synthMood === 'jpop';
+    case 'Late Night Dark':
+      return /ambient|dark|downtempo|lo-fi|lofi|chill|trip-hop/.test(genre) || synthMood === 'ambient' || synthMood === 'lofi';
+    case 'Acoustic Unplugged':
+      return /acoustic|unplugged|singer.?songwriter|folk/.test(genre);
+    case 'Workout Energy':
+      return /dance|edm|electronic|workout|hard rock|hip.?hop/.test(genre) || (bpm !== null && bpm >= 118) || synthMood === 'energetic';
+    case 'Indie & R&B':
+      return /indie|r.?&.?b|soul|alternative/.test(genre);
+    default:
+      return false;
+  }
+}
+
 export interface DiscoverTasteSignals {
   likedTracks: Track[];
   playCounts: Record<string, number>;
@@ -1051,7 +1088,7 @@ export function rankDiscoverTracks(
   const likedGenres = new Set(taste.likedTracks.map(genreKey).filter(Boolean));
   const favoriteArtists = taste.favoriteArtists.map(normalize).filter(Boolean);
   const preferredLanguages = taste.preferredLanguages.map(normalize);
-  const preferredMoods = taste.preferredMoods.map(normalize).filter(Boolean);
+  const preferredMoods = taste.preferredMoods;
   const artistWeights = Object.entries(taste.artistAffinity).map(([key, value]) => [normalize(key), value] as const);
   const genreWeights = Object.entries(taste.genreAffinity).map(([key, value]) => [normalize(key), value] as const);
 
@@ -1059,7 +1096,6 @@ export function rankDiscoverTracks(
     const artist = artistKey(track);
     const genre = genreKey(track);
     const language = normalize(track.language || '');
-    const context = normalize([track.name, track.albumName, track.genre || ''].join(' '));
     let value = 0;
     if (likedArtists.has(artist)) value += 3.5;
     if (favoriteArtists.some((name) => artist === name || artist.includes(name) || name.includes(artist))) value += 4.5;
@@ -1078,7 +1114,7 @@ export function rankDiscoverTracks(
     }
     const languageIndex = preferredLanguages.indexOf(language);
     if (languageIndex >= 0) value += Math.max(0.8, 2.8 - languageIndex * 0.35);
-    if (preferredMoods.some((mood) => mood.split(/[\s&/]+/).filter((token) => token.length > 2).some((token) => context.includes(token)))) value += 1.6;
+    if (preferredMoods.some((mood) => trackMatchesDiscoverMood(track, mood as DiscoverMood))) value += 1.6;
     const plays = Math.max(0, taste.playCounts[track.id] || 0);
     value -= Math.min(2.8, Math.log1p(plays) * 0.9);
     if (recentIds.has(track.id)) value -= 5;

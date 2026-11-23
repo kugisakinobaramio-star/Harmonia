@@ -1,7 +1,7 @@
 import { Compass, Play, Shuffle } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { MusicLanguage, Track } from '../types/music';
-import { rankDiscoverTracks } from '../utils/playerEngine';
+import { rankDiscoverTracks, trackMatchesDiscoverMood, type DiscoverMood } from '../utils/playerEngine';
 import { CoverImage } from './CoverImage';
 import { DownloadButton } from './DownloadButton';
 
@@ -22,7 +22,8 @@ interface DiscoverViewProps {
   preferredMoods: string[];
 }
 
-const LANGUAGES: Array<MusicLanguage | 'All'> = ['All', 'Hindi', 'Punjabi', 'Haryanvi', 'English', 'Japanese', 'J-Pop', 'Korean', 'Tamil', 'Telugu', 'Bengali'];
+const LANGUAGES: Array<MusicLanguage | 'All'> = ['All', 'Hindi', 'Punjabi', 'Haryanvi', 'Marathi', 'Bengali', 'Tamil', 'Telugu', 'Kannada', 'Malayalam', 'Gujarati', 'Bhojpuri', 'Urdu', 'English', 'Japanese', 'Korean', 'French', 'Spanish', 'Chinese', 'Arabic'];
+const MOODS: Array<DiscoverMood | 'All'> = ['All', 'Bollywood Romantic', 'Anime & J-Pop', 'Late Night Dark', 'Acoustic Unplugged', 'Workout Energy', 'Indie & R&B'];
 
 
 export function DiscoverView({
@@ -42,23 +43,27 @@ export function DiscoverView({
   preferredMoods,
 }: DiscoverViewProps) {
   const [language, setLanguage] = useState<MusicLanguage | 'All'>('All');
+  const [mood, setMood] = useState<DiscoverMood | 'All'>('All');
   const [rotation, setRotation] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const varied = useMemo(
     () => rankDiscoverTracks(tracks, recentlyPlayed, { likedTracks, playCounts, artistAffinity, genreAffinity, preferredLanguages, favoriteArtists, preferredMoods }, rotation),
     [tracks, recentlyPlayed, rotation, likedTracks, playCounts, artistAffinity, genreAffinity, preferredLanguages, favoriteArtists, preferredMoods]
   );
-  const visible = language === 'All' ? varied : varied.filter((track) => track.language === language);
+  const visible = varied.filter((track) =>
+    (language === 'All' || track.language === language) &&
+    (mood === 'All' || trackMatchesDiscoverMood(track, mood))
+  );
 
   return (
     <section className="space-y-5 pb-8" aria-label="Discover music">
       <div className="rounded-xl bg-gradient-to-br from-[#1d3028] via-[#171d20] to-[#171719] p-5 sm:p-7">
         <div className="flex items-center gap-2 text-[#7ee2a8]">
           <Compass className="h-5 w-5" />
-          <span className="text-xs font-bold uppercase tracking-[0.18em]">Harmonia Discover</span>
+          <span className="text-xs font-bold uppercase tracking-[0.18em]">Musick Discover</span>
         </div>
         <h1 className="mt-3 text-2xl font-extrabold text-white sm:text-3xl">Find your next favourite.</h1>
-        <p className="mt-2 max-w-2xl text-sm text-zinc-300">A wider mix beyond your usual rotation. Artists are spread out so one familiar name does not take over the feed.</p>
+        <p className="mt-2 max-w-2xl text-sm text-zinc-300">Explore by a song's catalogued language and sound profile. Unknown-language tracks won't be placed into a language category.</p>
         <button type="button" disabled={refreshing} onClick={async () => {
           setRefreshing(true);
           try { await onRefresh(); setRotation((value) => value + 7); }
@@ -68,12 +73,24 @@ export function DiscoverView({
         </button>
       </div>
 
-      <div className="flex flex-wrap gap-2">
-        {LANGUAGES.map((item) => (
-          <button key={item} type="button" onClick={() => setLanguage(item)} className={`rounded-full px-3 py-1.5 text-xs font-semibold ${language === item ? 'bg-white text-black' : 'bg-[#242428] text-zinc-300 hover:bg-[#333339]'}`}>
-            {item}
-          </button>
-        ))}
+      <div className="space-y-2">
+        <div className="text-[11px] font-bold uppercase tracking-wider text-zinc-500">Language</div>
+        <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {LANGUAGES.map((item) => (
+            <button key={item} type="button" onClick={() => setLanguage(item)} aria-pressed={language === item} className={`shrink-0 rounded-full border px-3 py-2 text-xs font-semibold ${language === item ? 'border-[#7ee2a8] bg-[#7ee2a8] text-black' : 'border-white/10 bg-[#242428] text-zinc-300'}`}>
+              {item}
+            </button>
+          ))}
+        </div>
+        <div className="text-[11px] font-bold uppercase tracking-wider text-zinc-500">Sound & mood</div>
+        <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {MOODS.map((item) => (
+            <button key={item} type="button" onClick={() => setMood(item)} aria-pressed={mood === item} className={`shrink-0 rounded-full border px-3 py-2 text-xs font-semibold ${mood === item ? 'border-[#7ee2a8] bg-[#7ee2a8] text-black' : 'border-white/10 bg-[#242428] text-zinc-300'}`}>
+              {item}
+            </button>
+          ))}
+        </div>
+        <p className="text-[11px] text-zinc-500">Filters combine: choose a language and a mood to narrow the same results. Mood matches use genre and tempo metadata, not title keywords.</p>
       </div>
 
       <div className="flex items-baseline justify-between gap-2">

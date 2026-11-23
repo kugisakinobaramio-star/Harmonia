@@ -29,6 +29,7 @@ import {
   reorderQueueItem,
   removeQueueItem,
   rankDiscoverTracks,
+  trackMatchesDiscoverMood,
   resolveActiveLyricPair,
   resolveNextTrackIndex,
   scoreAuthenticTrackCandidate,
@@ -595,4 +596,25 @@ test('unknown duration is retained only when a catalogue entry or playable sourc
   assert.equal(isSearchableTrackDuration({ duration: 0 }), false);
   assert.equal(isSearchableTrackDuration({ duration: 20 }), false);
   assert.equal(isSearchableTrackDuration({ duration: 180 }), true);
+});
+
+
+test('Discover mood matching uses genre and tempo metadata, never title words', () => {
+  const titleOnly = {
+    id: 'm1', name: 'Workout Energy Love Song', artist: 'Unknown', albumName: 'Single',
+    duration: 180, image: '/cover.jpg', language: 'English' as const,
+  };
+  assert.equal(trackMatchesDiscoverMood(titleOnly, 'Workout Energy'), false);
+  assert.equal(trackMatchesDiscoverMood({ ...titleOnly, bpm: 128 }, 'Workout Energy'), true);
+  assert.equal(trackMatchesDiscoverMood({ ...titleOnly, genre: 'Acoustic Folk' }, 'Acoustic Unplugged'), true);
+  assert.equal(trackMatchesDiscoverMood({ ...titleOnly, genre: 'Bollywood Romantic' }, 'Bollywood Romantic'), true);
+  assert.equal(trackMatchesDiscoverMood({ ...titleOnly, language: 'Japanese', genre: 'J-Pop' }, 'Anime & J-Pop'), true);
+});
+
+test('Discover mood matching does not infer language from a title', () => {
+  const track: Partial<Track> = {
+    id: 'm2', name: 'Hindi Nights', artist: 'Unknown', albumName: 'Single',
+    duration: 180, image: '/cover.jpg',
+  };
+  assert.equal(track.language, undefined);
 });
