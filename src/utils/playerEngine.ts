@@ -1049,7 +1049,7 @@ export function trackMatchesDiscoverMood(track: Track, mood: DiscoverMood): bool
     case 'Anime & J-Pop':
       return language === 'Japanese' || language === 'J-Pop' || /j-pop|anime/.test(genre) || synthMood === 'jpop';
     case 'Late Night Dark':
-      return /ambient|dark|downtempo|lo-fi|lofi|chill|trip-hop/.test(genre) || synthMood === 'ambient' || synthMood === 'lofi' || (bpm !== null && bpm <= 82);
+      return /ambient|dark|downtempo|lo-fi|lofi|chill|trip-hop/.test(genre) || synthMood === 'ambient' || synthMood === 'lofi';
     case 'Acoustic Unplugged':
       return /acoustic|unplugged|singer.?songwriter|folk/.test(genre);
     case 'Workout Energy':
