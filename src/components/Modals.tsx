@@ -607,7 +607,7 @@ export function PersonaliseModal({
 
   const toggleLanguage = (lang: MusicLanguage) => {
     setPreferredLanguages((prev) =>
-      prev.includes(lang) ? (prev.length > 1 ? prev.filter((l) => l !== lang) : prev) : [...prev, lang]
+      prev.includes(lang) ? prev.filter((l) => l !== lang) : [...prev, lang]
     );
   };
 
@@ -719,8 +719,9 @@ export function PersonaliseModal({
 
           {/* Primary Languages */}
           <div>
-            <div className="mb-2 text-xs font-bold text-zinc-300">
-              Languages you want to hear
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <span className="text-xs font-bold text-zinc-300">Languages you want to hear</span>
+              <button type="button" onClick={() => setPreferredLanguages([])} className="text-[11px] font-semibold text-[#7ee2a8]">Clear all</button>
             </div>
             <p className="mb-3 text-[11px] leading-relaxed text-zinc-500">These are song-language preferences, not title keywords. Tracks without reliable language metadata are left unclassified instead of being guessed.</p>
             <div className="flex flex-wrap gap-2">
