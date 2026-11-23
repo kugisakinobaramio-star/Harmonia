@@ -1088,7 +1088,7 @@ export function rankDiscoverTracks(
   const likedGenres = new Set(taste.likedTracks.map(genreKey).filter(Boolean));
   const favoriteArtists = taste.favoriteArtists.map(normalize).filter(Boolean);
   const preferredLanguages = taste.preferredLanguages.map(normalize);
-  const preferredMoods = taste.preferredMoods.map(normalize).filter(Boolean);
+  const preferredMoods = taste.preferredMoods;
   const artistWeights = Object.entries(taste.artistAffinity).map(([key, value]) => [normalize(key), value] as const);
   const genreWeights = Object.entries(taste.genreAffinity).map(([key, value]) => [normalize(key), value] as const);
 
@@ -1114,7 +1114,7 @@ export function rankDiscoverTracks(
     }
     const languageIndex = preferredLanguages.indexOf(language);
     if (languageIndex >= 0) value += Math.max(0.8, 2.8 - languageIndex * 0.35);
-    if (preferredMoods.some((mood) => mood.split(/[\s&/]+/).filter((token) => token.length > 2).some((token) => context.includes(token)))) value += 1.6;
+    if (preferredMoods.some((mood) => trackMatchesDiscoverMood(track, mood as DiscoverMood))) value += 1.6;
     const plays = Math.max(0, taste.playCounts[track.id] || 0);
     value -= Math.min(2.8, Math.log1p(plays) * 0.9);
     if (recentIds.has(track.id)) value -= 5;
