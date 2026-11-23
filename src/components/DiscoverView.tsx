@@ -22,7 +22,7 @@ interface DiscoverViewProps {
   preferredMoods: string[];
 }
 
-const LANGUAGES: Array<MusicLanguage | 'All'> = ['All', 'Hindi', 'Punjabi', 'Haryanvi', 'Marathi', 'Bengali', 'Tamil', 'Telugu', 'Kannada', 'Malayalam', 'Gujarati', 'Bhojpuri', 'Urdu', 'English', 'Japanese', 'J-Pop', 'Korean', 'French', 'Spanish', 'Chinese', 'Arabic'];
+const LANGUAGES: Array<MusicLanguage | 'All'> = ['All', 'Hindi', 'Punjabi', 'Haryanvi', 'Marathi', 'Bengali', 'Tamil', 'Telugu', 'Kannada', 'Malayalam', 'Gujarati', 'Bhojpuri', 'Urdu', 'English', 'Japanese', 'Korean', 'French', 'Spanish', 'Chinese', 'Arabic'];
 const MOODS: Array<DiscoverMood | 'All'> = ['All', 'Bollywood Romantic', 'Anime & J-Pop', 'Late Night Dark', 'Acoustic Unplugged', 'Workout Energy', 'Indie & R&B'];
 
 
