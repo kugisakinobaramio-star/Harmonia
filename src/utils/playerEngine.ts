@@ -1096,7 +1096,6 @@ export function rankDiscoverTracks(
     const artist = artistKey(track);
     const genre = genreKey(track);
     const language = normalize(track.language || '');
-    const moodGenre = normalize(track.genre || '');
     let value = 0;
     if (likedArtists.has(artist)) value += 3.5;
     if (favoriteArtists.some((name) => artist === name || artist.includes(name) || name.includes(artist))) value += 4.5;
