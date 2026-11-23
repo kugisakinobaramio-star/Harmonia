@@ -1024,6 +1024,43 @@ export function sortTracks(
 }
 
 
+export type DiscoverMood =
+  | 'Bollywood Romantic'
+  | 'Anime & J-Pop'
+  | 'Late Night Dark'
+  | 'Acoustic Unplugged'
+  | 'Workout Energy'
+  | 'Indie & R&B';
+
+/**
+ * Match moods from explicit language/genre/tempo metadata only.
+ * Track titles and album names are deliberately excluded: their wording
+ * is not evidence of the sound or language of a recording.
+ */
+export function trackMatchesDiscoverMood(track: Track, mood: DiscoverMood): boolean {
+  const genre = (track.genre || '').toLocaleLowerCase();
+  const bpm = typeof track.bpm === 'number' ? track.bpm : null;
+  const language = track.language;
+  const synthMood = track.synthMood;
+
+  switch (mood) {
+    case 'Bollywood Romantic':
+      return /bollywood|romantic|love song|ballad/.test(genre);
+    case 'Anime & J-Pop':
+      return language === 'Japanese' || language === 'J-Pop' || /j-pop|anime/.test(genre) || synthMood === 'jpop';
+    case 'Late Night Dark':
+      return /ambient|dark|downtempo|lo-fi|lofi|chill|trip-hop/.test(genre) || synthMood === 'ambient' || synthMood === 'lofi' || (bpm !== null && bpm <= 82);
+    case 'Acoustic Unplugged':
+      return /acoustic|unplugged|singer.?songwriter|folk/.test(genre);
+    case 'Workout Energy':
+      return /dance|edm|electronic|workout|hard rock|hip.?hop/.test(genre) || (bpm !== null && bpm >= 118) || synthMood === 'energetic';
+    case 'Indie & R&B':
+      return /indie|r.?&.?b|soul|alternative/.test(genre);
+    default:
+      return false;
+  }
+}
+
 export interface DiscoverTasteSignals {
   likedTracks: Track[];
   playCounts: Record<string, number>;
@@ -1059,7 +1096,7 @@ export function rankDiscoverTracks(
     const artist = artistKey(track);
     const genre = genreKey(track);
     const language = normalize(track.language || '');
-    const context = normalize([track.name, track.albumName, track.genre || ''].join(' '));
+    const moodGenre = normalize(track.genre || '');
     let value = 0;
     if (likedArtists.has(artist)) value += 3.5;
     if (favoriteArtists.some((name) => artist === name || artist.includes(name) || name.includes(artist))) value += 4.5;
