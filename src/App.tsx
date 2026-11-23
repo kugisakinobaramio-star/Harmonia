@@ -20,6 +20,7 @@ import {
 import { PlayerBar } from './components/PlayerBar';
 import { RightPanel } from './components/RightPanel';
 import { SearchView } from './components/SearchView';
+import { WelcomeExperience } from './components/WelcomeExperience';
 import { Sidebar } from './components/Sidebar';
 import { ARTWORK, SEED_ARTISTS, SEED_PLAYLISTS, SEED_TRACKS } from './data/catalog';
 import type {
@@ -136,6 +137,10 @@ function loadLocalSnapshot(): {
 
 export default function App() {
   const initialSnap = useMemo(() => loadLocalSnapshot(), []);
+  const [welcomeVisible, setWelcomeVisible] = useState(true);
+  const [welcomeSetupComplete] = useState(
+    () => typeof window !== 'undefined' && localStorage.getItem('musick_mood_setup_complete_v1') === 'true'
+  );
 
   // Navigation & history stack
   const [navHistory, setNavHistory] = useState<NavEntry[]>([{ view: 'home', collection: null }]);
@@ -2429,6 +2434,22 @@ export default function App() {
         onSave={handleSavePersonalisation}
         onReset={handleResetPersonalisation}
       />
+
+      {welcomeVisible && (
+        <WelcomeExperience
+          hasCompletedSetup={welcomeSetupComplete}
+          initialMoods={preferredMoods}
+          onComplete={(moods) => {
+            setPreferredMoods(moods);
+            try {
+              localStorage.setItem('musick_mood_setup_complete_v1', 'true');
+            } catch {
+              // Continue into the app even when local storage is unavailable.
+            }
+            setWelcomeVisible(false);
+          }}
+        />
+      )}
 
       {/* Subtle Toast */}
       {toastMsg && (
