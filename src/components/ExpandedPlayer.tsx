@@ -103,7 +103,7 @@ export function ExpandedPlayer({
       role="dialog"
       aria-modal="true"
       aria-label="Expanded Now Playing player"
-      className="fixed inset-0 z-50 flex flex-col overflow-y-auto bg-gradient-to-b from-[#1f2621] via-[#121212] to-black text-white"
+      className="fixed inset-0 z-50 flex h-dvh flex-col overflow-y-auto bg-gradient-to-b from-[#1f2621] via-[#121212] to-black text-white"
     >
       {/* Top Bar */}
       <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-2.5 sm:px-8 sm:py-4">
@@ -137,7 +137,7 @@ export function ExpandedPlayer({
       </div>
 
       {/* Main Content */}
-      <div className="mx-auto grid w-full max-w-6xl flex-1 items-center gap-5 px-5 pb-5 pt-1 sm:gap-8 sm:pb-8 sm:pt-2 lg:grid-cols-[minmax(300px,420px)_1fr] lg:px-10">
+      <div className="mx-auto grid w-full min-w-0 max-w-6xl flex-none items-start gap-5 px-5 pb-5 pt-1 sm:gap-8 sm:pb-8 sm:pt-2 lg:flex-1 lg:items-center lg:grid-cols-[minmax(300px,420px)_1fr] lg:px-10">
         {/* Left: Cover + Metadata + Full Transport */}
         <div className="mx-auto flex w-full max-w-[420px] flex-col">
           <div className="mx-auto w-full max-w-[min(420px,36dvh)] overflow-hidden rounded-lg bg-black shadow-2xl lg:max-w-[min(400px,44dvh)]">
@@ -306,7 +306,7 @@ export function ExpandedPlayer({
         </div>
 
         {/* Right: Synced Lyrics Card */}
-        <div className="flex h-full max-h-[540px] flex-col rounded-xl bg-[#181c1a]/90 p-5 sm:p-7">
+        <div className="flex min-h-[260px] max-h-[540px] min-w-0 flex-col rounded-xl bg-[#181c1a]/90 p-5 sm:p-7">
           <div className="mb-4 flex items-center justify-between">
             <span className="text-xs font-extrabold uppercase tracking-wider text-[#1DB954]">
               {lyricsSynced ? 'Time-Synced Lyrics' : 'Lyrics'}
@@ -338,18 +338,18 @@ export function ExpandedPlayer({
               })}
             </div>
           )}
-          <div className="mt-5 border-t border-white/10 pt-4">
-            <SuggestedMusic
-              title="Made for this sound"
-              description="Picked from the mood, language and sound of this track."
-              sourceTracks={[track]}
-              candidates={suggestionCandidates}
-              onPlay={onPlaySuggested}
-              onEnqueue={onEnqueueSuggested}
-              onAddToPlaylist={onAddSuggestedToPlaylist}
-            />
-          </div>
         </div>
+      </div>
+      <div className="mx-auto w-full min-w-0 max-w-6xl px-5 pb-10 sm:px-8 lg:px-10">
+        <SuggestedMusic
+          title="Made for this sound"
+          description="Picked from the mood, language and sound of this track."
+          sourceTracks={[track]}
+          candidates={suggestionCandidates}
+          onPlay={onPlaySuggested}
+          onEnqueue={onEnqueueSuggested}
+          onAddToPlaylist={onAddSuggestedToPlaylist}
+        />
       </div>
     </div>
   );
