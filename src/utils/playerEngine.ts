@@ -24,7 +24,7 @@ export const REGION_LABELS: Record<MusicRegion, string> = {
   JP: 'Japan (JP)',
   US: 'United States (US)',
   GB: 'United Kingdom (UK)',
-  GLOBAL: 'Global Mix',
+  GLOBAL: 'Worldwide',
 };
 
 export function isPlausibleSongDuration(seconds: number): boolean {
@@ -1125,7 +1125,7 @@ export function isQualityDiscoverTrack(track: Track): boolean {
     !track.metadataOnly &&
     track.sourceAvailability !== 'metadata' &&
     track.sourceAvailability !== 'preview' &&
-    (hasFullAudioStream(track) || track.sourceAvailability === 'full' || track.sourceAvailability === 'lookup') &&
+    hasFullAudioStream(track) &&
     isPlausibleSongDuration(track.duration) &&
     !isInstrumentalOrLowValueTrack(track)
   );

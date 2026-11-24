@@ -1,0 +1,44 @@
+name: Cloudflare Discover Preview
+
+on:
+  push:
+    branches:
+      - fix/v1.1.2-playable-discovery-pools
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-preview:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Verify Cloudflare deployment credentials
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          test -n "$CLOUDFLARE_API_TOKEN" || (echo "::error::Missing CLOUDFLARE_API_TOKEN repository secret" && exit 1)
+          test -n "$CLOUDFLARE_ACCOUNT_ID" || (echo "::error::Missing CLOUDFLARE_ACCOUNT_ID repository secret" && exit 1)
+      - name: Install dependencies
+        run: npm install
+      - name: Build frontend preview
+        run: npm run build
+        env:
+          VITE_API_BASE_URL: https://harmonia.kugisakinobaramio.workers.dev
+      - name: Create isolated Cloudflare Pages project if needed
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if ! npx wrangler pages project list | grep -q 'musick-discover-pr83'; then
+            npx wrangler pages project create musick-discover-pr83 --production-branch preview
+          fi
+      - name: Deploy static frontend preview
+        run: npx wrangler pages deploy dist --project-name musick-discover-pr83 --branch pr-83-preview
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
