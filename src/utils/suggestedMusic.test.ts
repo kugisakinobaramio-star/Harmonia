@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { Track } from '../types/music';
-import { rankSuggestedMusic } from '../components/SuggestedMusic';
+import { rankSuggestedMusic } from './suggestedMusic';
 
 function track(id: string, overrides: Partial<Track> = {}): Track {
   return {
