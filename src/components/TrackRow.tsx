@@ -57,7 +57,7 @@ export function TrackRow({
   return (
     <div
       data-current={isCurrent ? 'true' : 'false'}
-      className="harmonia-track-row group grid grid-cols-[24px_40px_minmax(0,1fr)_auto] items-center gap-2 rounded-lg px-2 py-2"
+      className="harmonia-track-row group grid grid-cols-[20px_40px_minmax(0,1fr)] items-center gap-x-2 gap-y-1 rounded-xl px-2 py-2.5 sm:grid-cols-[24px_40px_minmax(0,1fr)_auto] sm:gap-2 sm:rounded-lg sm:py-2"
     >
       <div className="font-mono-num text-center text-xs font-medium text-zinc-400">
         {isCurrent && isPlaying ? (
@@ -127,7 +127,7 @@ export function TrackRow({
         )}
       </div>
 
-      <div className="flex items-center gap-1 sm:gap-1.5">
+      <div className="col-start-2 col-span-2 flex w-full items-center justify-end gap-1 border-t border-white/[0.045] pt-1 sm:col-start-4 sm:col-span-1 sm:w-auto sm:gap-1.5 sm:border-0 sm:pt-0">
         <span className="mr-1 hidden font-mono-num text-xs text-zinc-400 sm:inline">
           {track.duration > 0 ? formatTime(track.duration) : '—'}
         </span>
