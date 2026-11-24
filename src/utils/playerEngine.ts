@@ -752,7 +752,7 @@ export function filterAndRankTracks(
         if (track.hasLyrics || (track.lyrics && track.lyrics.length > 0)) score += 12;
         if (isUnnecessaryNoLyricsTrack(track)) score -= 80;
       }
-      // Popularity breaks ties; it must not overpower artist/title relevance.
+      // Popularity is a tie-breaker, not a substitute for title/artist relevance.
       const popBoost = track.playCount ? Math.min(4, Math.log10(track.playCount) * 0.8) : 0;
       scored.push({ track, score: score + popBoost });
     }
@@ -817,6 +817,13 @@ export function scoreTrackForUser(track: Track, profile: UserTasteProfile): numb
       score += Math.min(24, Math.log1p(weight) * 8);
     }
   }
+  for (const favArt of profile.favoriteArtists || []) {
+    const tok = favArt.toLowerCase();
+    if (tok && (primaryArtist.includes(tok) || trackArtistLow.includes(tok))) {
+      score += 24;
+    }
+  }
+
   // Preferred moods & Genre affinity
   const genreOrAlbum = `${track.genre || ''} ${track.albumName || ''}`.toLowerCase();
   for (const mood of profile.preferredMoods || []) {
@@ -1081,6 +1088,7 @@ export function rankDiscoverTracks(
   const recentIds = new Set(recentlyPlayed.slice(0, 8).map((track) => track.id));
   const likedArtists = new Set(taste.likedTracks.map(artistKey));
   const likedGenres = new Set(taste.likedTracks.map(genreKey).filter(Boolean));
+  const favoriteArtists = taste.favoriteArtists.map(normalize).filter(Boolean);
   const preferredLanguages = taste.preferredLanguages.map(normalize);
   const preferredMoods = taste.preferredMoods;
   const artistWeights = Object.entries(taste.artistAffinity).map(([key, value]) => [normalize(key), value] as const);
@@ -1092,6 +1100,7 @@ export function rankDiscoverTracks(
     const language = normalize(track.language || '');
     let value = 0;
     if (likedArtists.has(artist)) value += 3.5;
+    if (favoriteArtists.some((name) => artist === name || artist.includes(name) || name.includes(artist))) value += 4.5;
     for (const [name, weight] of artistWeights) {
       if (name && (artist === name || artist.includes(name) || name.includes(artist))) {
         value += Math.min(4, Math.log1p(Math.max(0, weight)) * 1.5);
