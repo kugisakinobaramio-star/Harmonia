@@ -528,15 +528,23 @@ export default function App() {
     eqPreset,
   ]);
 
-  // Load a separate worldwide pool for Global Mix.
+  // Load worldwide discovery only when the listener opens Discover, keeping startup lighter.
   const [globalTracks, setGlobalTracks] = useState<Track[]>([]);
+  const [globalTracksLoaded, setGlobalTracksLoaded] = useState(false);
+  const [globalTracksLoading, setGlobalTracksLoading] = useState(false);
   useEffect(() => {
+    if (activeView !== 'discover' || globalTracksLoaded) return;
     let cancelled = false;
+    setGlobalTracksLoading(true);
     fetchRegionalDiscovery('GLOBAL').then((tracks) => {
-      if (!cancelled) setGlobalTracks(tracks);
+      if (cancelled) return;
+      setGlobalTracks(tracks);
+      setGlobalTracksLoaded(true);
+    }).finally(() => {
+      if (!cancelled) setGlobalTracksLoading(false);
     });
     return () => { cancelled = true; };
-  }, []);
+  }, [activeView, globalTracksLoaded]);
 
   // Fetch location-based tracks whenever region updates
   useEffect(() => {
@@ -2193,6 +2201,7 @@ export default function App() {
               <DiscoverView
                 tracks={discoverTracks}
                 globalTracks={globalTracks}
+                globalTracksLoading={globalTracksLoading}
                 regionalTracks={regionalTracks}
                 recentlyPlayed={recentlyPlayed}
                 downloadedIds={downloadedIds}
