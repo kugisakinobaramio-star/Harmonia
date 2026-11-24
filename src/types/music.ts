@@ -30,6 +30,10 @@ export interface Track {
   region?: MusicRegion;
   genre?: string;
   bpm?: number;
+  /** Normalized energy score from 0 to 1, when supplied by the catalogue. */
+  energy?: number;
+  /** Explicit mood tags supplied by track metadata; never inferred from title text. */
+  moods?: string[];
   hasLyrics?: boolean;
   /** Catalogue-only entries; playback must be resolved through a separate audio provider. */
   metadataOnly?: boolean;
