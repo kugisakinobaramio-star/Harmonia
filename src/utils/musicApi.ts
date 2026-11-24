@@ -55,6 +55,10 @@ interface SaavnSongRaw {
   year?: string;
   playCount?: number | string;
   language?: string;
+  genre?: string | string[];
+  bpm?: number | string;
+  energy?: number | string;
+  moods?: string[];
   album?: { name?: string };
   artists?: {
     primary?: Array<{ name?: string }>;
@@ -122,7 +126,7 @@ function mapSaavnLanguage(rawLang?: string): Track['language'] {
     [/kannada/, 'Kannada'], [/malayalam/, 'Malayalam'], [/gujarati/, 'Gujarati'],
     [/bhojpuri/, 'Bhojpuri'], [/urdu/, 'Urdu'], [/hindi/, 'Hindi'],
     [/french/, 'French'], [/spanish|español/, 'Spanish'], [/korean/, 'Korean'],
-    [/japanese/, 'Japanese'], [/j-?pop/, 'J-Pop'], [/chinese|mandarin|cantonese/, 'Chinese'],
+    [/japanese/, 'Japanese'], [/j-?pop/, 'Japanese'], [/chinese|mandarin|cantonese/, 'Chinese'],
     [/arabic/, 'Arabic'], [/portuguese/, 'Portuguese'], [/german/, 'German'],
     [/italian/, 'Italian'], [/turkish/, 'Turkish'], [/thai/, 'Thai'],
     [/indonesian|bahasa/, 'Indonesian'], [/english/, 'English'],
@@ -174,6 +178,12 @@ function mapSaavnSong(raw: SaavnSongRaw): Track {
     playCount: Number(raw.playCount) || undefined,
     image: pickSaavnImage(raw.image),
     language: mapSaavnLanguage(raw.language),
+    genre: Array.isArray(raw.genre) ? raw.genre.join(', ') : raw.genre || undefined,
+    bpm: Number.isFinite(Number(raw.bpm)) && Number(raw.bpm) > 0 ? Number(raw.bpm) : undefined,
+    energy: Number.isFinite(Number(raw.energy)) && Number(raw.energy) >= 0
+      ? (Number(raw.energy) > 1 ? Math.min(1, Number(raw.energy) / 100) : Number(raw.energy))
+      : undefined,
+    moods: Array.isArray(raw.moods) ? raw.moods.filter((mood): mood is string => typeof mood === 'string' && mood.trim().length > 0) : undefined,
     hasLyrics: !isUnnecessaryNoLyricsTrack({
       id: raw.id,
       name,
@@ -185,7 +195,6 @@ function mapSaavnSong(raw: SaavnSongRaw): Track {
     streamUrls,
     sourceProvider: 'JioSaavn',
     sourceAvailability: Object.values(streamUrls).some(Boolean) ? 'full' : 'lookup',
-    synthMood: mapSaavnLanguage(raw.language) === 'Hindi' ? 'hindi' : 'pop',
   };
 }
 
@@ -237,19 +246,42 @@ function normalizeRemoteTrack(raw: Track): Track {
   };
 }
 
+const DISCOVERY_CACHE_TTL_MS = 10 * 60 * 1000;
+const DISCOVERY_CACHE_PREFIX = 'musick_discovery_cache_v1:';
+
+function readDiscoveryCache(region: MusicRegion): { tracks: Track[]; savedAt: number } | null {
+  try {
+    if (typeof localStorage === 'undefined') return null;
+    const raw = localStorage.getItem(`${DISCOVERY_CACHE_PREFIX}${region}`);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { tracks?: Track[]; savedAt?: number };
+    if (!Array.isArray(parsed.tracks) || !parsed.tracks.length || typeof parsed.savedAt !== 'number') return null;
+    return { tracks: parsed.tracks.map(normalizeRemoteTrack), savedAt: parsed.savedAt };
+  } catch { return null; }
+}
+
+function writeDiscoveryCache(region: MusicRegion, tracks: Track[]): void {
+  try {
+    if (typeof localStorage === 'undefined' || !tracks.length) return;
+    localStorage.setItem(`${DISCOVERY_CACHE_PREFIX}${region}`, JSON.stringify({ tracks, savedAt: Date.now() }));
+  } catch { /* Discovery remains usable if storage is unavailable. */ }
+}
+
 export async function fetchRegionalDiscovery(region: MusicRegion, refresh = false): Promise<Track[]> {
+  const cached = readDiscoveryCache(region);
+  if (!refresh && cached && Date.now() - cached.savedAt < DISCOVERY_CACHE_TTL_MS) return cached.tracks;
   try {
     const res = await fetch(apiUrl(`/api/music/discover?region=${encodeURIComponent(region)}${refresh ? '&refresh=1' : ''}`));
     if (res.ok) {
       const json = (await res.json()) as { ok?: boolean; tracks?: Track[] };
       if (json.ok && json.tracks?.length) {
-        return json.tracks.map(normalizeRemoteTrack);
+        const tracks = json.tracks.map(normalizeRemoteTrack);
+        writeDiscoveryCache(region, tracks);
+        return tracks;
       }
     }
-  } catch {
-    // Fallback to curated catalog
-  }
-  return [];
+  } catch { /* Use cached discovery when the network is unavailable. */ }
+  return cached?.tracks || [];
 }
 
 export async function searchSongs(
