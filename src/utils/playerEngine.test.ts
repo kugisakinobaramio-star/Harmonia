@@ -672,7 +672,13 @@ test('Discover eligibility rejects previews, metadata-only entries and instrumen
   assert.equal(isQualityDiscoverTrack({ ...full, metadataOnly: true }), false);
   assert.equal(isQualityDiscoverTrack({ ...full, duration: 0 }), false);
   assert.equal(isQualityDiscoverTrack({ ...full, name: 'Ambient instrumental', genre: 'instrumental' }), false);
-  assert.equal(isQualityDiscoverTrack({ ...full, sourceAvailability: 'lookup', streamUrls: {} }), true);
+  assert.equal(isQualityDiscoverTrack({ ...full, sourceAvailability: 'lookup', streamUrls: {} }), false);
+  assert.equal(isQualityDiscoverTrack({ ...full, sourceAvailability: 'full', streamUrls: {} }), false);
+  assert.equal(isQualityDiscoverTrack({
+    ...full,
+    sourceAvailability: 'lookup',
+    streamUrls: { '160kbps': 'https://audio.example.com/lookup-full.mp3' },
+  }), true);
 });
 
 test('Discover mood matching does not infer language from a title', () => {
