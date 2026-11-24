@@ -105,10 +105,10 @@ export function PlayerBar({
             />
             <div className="min-w-0 flex-1">
               <div className="truncate text-xs font-bold text-white">
-                {currentTrack?.name || 'Kesariya'}
+                {currentTrack?.name || 'Nothing playing'}
               </div>
               <div className="truncate text-[11px] text-zinc-300">
-                {currentTrack?.artist || 'Arijit Singh, Pritam'}
+                {currentTrack?.artist || 'Choose a song to get started'}
               </div>
             </div>
           </button>
@@ -200,10 +200,10 @@ export function PlayerBar({
               onClick={onOpenExpanded}
               className="block max-w-full truncate text-left text-sm font-bold text-white hover:underline"
             >
-              {currentTrack?.name || 'Kesariya'}
+              {currentTrack?.name || 'Nothing playing'}
             </button>
             <div className="truncate text-xs text-zinc-400">
-              {currentTrack?.artist || 'Arijit Singh, Pritam'}
+              {currentTrack?.artist || 'Choose a song to get started'}
               {currentTrack?.sourceAvailability === 'preview' && !isDownloaded && (
                 <span className="ml-1.5 text-[10px] font-semibold text-amber-300/90">
                   · 30s preview

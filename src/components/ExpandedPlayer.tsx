@@ -110,7 +110,7 @@ export function ExpandedPlayer({
 
         <div className="min-w-0 text-center">
           <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-zinc-400">
-            Playing From Harmonia
+            Playing From MusicKK
           </div>
           <div className="truncate text-xs font-bold text-white">{track.albumName}</div>
         </div>

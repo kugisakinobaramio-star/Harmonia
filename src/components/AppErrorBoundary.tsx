@@ -17,7 +17,7 @@ export class AppErrorBoundary extends Component<AppErrorBoundaryProps, AppErrorB
 
   componentDidCatch(error: Error, info: ErrorInfo) {
     // Keep diagnostics local; never send listener data or playback history to a server.
-    console.error('Harmonia UI recovered from a render error.', error, info.componentStack);
+    console.error('MusicKK UI recovered from a render error.', error, info.componentStack);
   }
 
   render() {
@@ -25,7 +25,7 @@ export class AppErrorBoundary extends Component<AppErrorBoundaryProps, AppErrorB
       return (
         <main className="grid min-h-screen place-items-center bg-[#09090b] px-6 text-white">
           <section role="alert" className="w-full max-w-md rounded-2xl border border-white/10 bg-[#18181b] p-6 text-center">
-            <h1 className="text-xl font-bold">Harmonia hit an unexpected error</h1>
+            <h1 className="text-xl font-bold">MusicKK hit an unexpected error</h1>
             <p className="mt-2 text-sm leading-relaxed text-zinc-400">
               Your saved library and offline files have not been intentionally cleared. Reload the app to try again.
             </p>
@@ -34,7 +34,7 @@ export class AppErrorBoundary extends Component<AppErrorBoundaryProps, AppErrorB
               onClick={() => window.location.reload()}
               className="mt-5 rounded-full bg-[#1DB954] px-5 py-2.5 text-sm font-bold text-black"
             >
-              Reload Harmonia
+              Reload MusicKK
             </button>
           </section>
         </main>
