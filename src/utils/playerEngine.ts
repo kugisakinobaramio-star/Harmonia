@@ -1094,8 +1094,8 @@ export function trackMatchesDiscoverMood(track: Track, mood: DiscoverMood): bool
   switch (mood) {
     case 'Bollywood Romantic':
       return hasTag(/bollywood|romantic|love|ballad/) ||
-        /bollywood.*(romantic|love|ballad)|(romantic|love|ballad).*bollywood/.test(genre) ||
-        (normalizeDiscoverLanguage(track.language) === 'Hindi' && /romantic|ballad/.test(genre));
+        /bollywood.*(romance|romantic|love|ballad)|(romance|romantic|love|ballad).*bollywood/.test(genre) ||
+        (normalizeDiscoverLanguage(track.language) === 'Hindi' && /romance|romantic|ballad/.test(genre));
     case 'Anime & J-Pop':
       return hasTag(/anime|j-?pop/) || /j-?pop|anime/.test(genre) || synthMood === 'jpop';
     case 'Late Night Dark':
