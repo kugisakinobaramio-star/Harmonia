@@ -25,12 +25,20 @@ jobs:
           test -n "$CLOUDFLARE_ACCOUNT_ID" || (echo "::error::Missing CLOUDFLARE_ACCOUNT_ID repository secret" && exit 1)
       - name: Install dependencies
         run: npm install
-      - name: Build preview frontend
+      - name: Build frontend preview
         run: npm run build
         env:
           VITE_API_BASE_URL: https://harmonia.kugisakinobaramio.workers.dev
-      - name: Deploy isolated Cloudflare preview Worker
-        run: npx wrangler deploy --name harmonia-discovery-pr83
+      - name: Create isolated Cloudflare Pages project if needed
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if ! npx wrangler pages project list | grep -q 'musick-discover-pr83'; then
+            npx wrangler pages project create musick-discover-pr83 --production-branch preview
+          fi
+      - name: Deploy static frontend preview
+        run: npx wrangler pages deploy dist --project-name musick-discover-pr83 --branch pr-83-preview
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
