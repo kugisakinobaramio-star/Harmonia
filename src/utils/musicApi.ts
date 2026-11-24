@@ -26,6 +26,7 @@ import {
   hasFullAudioStream,
   isRemixOrKnockoff,
   isPlausibleSongDuration,
+  isQualityDiscoverTrack,
   isSearchableTrackDuration,
   isRelevantTrackTitle,
   isUnnecessaryNoLyricsTrack,
@@ -282,6 +283,86 @@ export async function fetchRegionalDiscovery(region: MusicRegion, refresh = fals
     }
   } catch { /* Use cached discovery when the network is unavailable. */ }
   return cached?.tracks || [];
+}
+
+const PLAYABLE_DISCOVERY_CACHE_TTL_MS = 15 * 60 * 1000;
+const PLAYABLE_DISCOVERY_CACHE_KEY = 'musick_playable_discovery_v1:';
+
+const GLOBAL_DISCOVERY_ARTISTS = [
+  'Arijit Singh',
+  'The Weeknd',
+  'YOASOBI',
+  'BTS',
+  'Taylor Swift',
+  'Diljit Dosanjh',
+];
+
+const REGIONAL_DISCOVERY_ARTISTS: Record<MusicRegion, string[]> = {
+  IN: ['Arijit Singh', 'Diljit Dosanjh', 'Anuv Jain', 'Shreya Ghoshal'],
+  JP: ['YOASOBI', 'Ado', 'Kenshi Yonezu', 'LiSA'],
+  US: ['The Weeknd', 'Taylor Swift', 'Billie Eilish', 'Bruno Mars'],
+  GB: ['Adele', 'Ed Sheeran', 'Dua Lipa', 'Sam Smith'],
+  GLOBAL: GLOBAL_DISCOVERY_ARTISTS,
+};
+
+/**
+ * Build Discover shelves from actual song-search results, then keep only tracks
+ * with a confirmed full-length audio URL. This is client-only and uses the
+ * existing search endpoint without changing any server behavior.
+ */
+export async function fetchPlayableDiscoveries(region: MusicRegion, refresh = false): Promise<Track[]> {
+  const cacheKey = `${PLAYABLE_DISCOVERY_CACHE_KEY}${region}`;
+  let cached: { tracks: Track[]; savedAt: number } | null = null;
+  try {
+    const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(cacheKey) : null;
+    if (raw) {
+      const parsed = JSON.parse(raw) as { tracks?: Track[]; savedAt?: number };
+      if (Array.isArray(parsed.tracks) && parsed.tracks.length && typeof parsed.savedAt === 'number') {
+        cached = { tracks: parsed.tracks, savedAt: parsed.savedAt };
+      }
+    }
+  } catch { /* Discovery remains usable when storage is unavailable. */ }
+
+  if (!refresh && cached && Date.now() - cached.savedAt < PLAYABLE_DISCOVERY_CACHE_TTL_MS) {
+    return cached.tracks.filter(isQualityDiscoverTrack);
+  }
+
+  const queries = region === 'GLOBAL'
+    ? GLOBAL_DISCOVERY_ARTISTS
+    : REGIONAL_DISCOVERY_ARTISTS[region] || GLOBAL_DISCOVERY_ARTISTS;
+  try {
+    const settled = await Promise.allSettled(
+      queries.map((query) => searchSongs(query, { region, prioritizeLyrics: false }))
+    );
+    const byRecording = new Map<string, Track>();
+    for (const result of settled) {
+      if (result.status !== 'fulfilled') continue;
+      for (const track of result.value.tracks) {
+        if (!isQualityDiscoverTrack(track)) continue;
+        const normalize = (value: string) => value.toLocaleLowerCase()
+          .normalize('NFKD').replace(/[\\u0300-\\u036f]/g, '').replace(/[^\\p{L}\\p{N}]+/gu, ' ').trim();
+        const key = `${normalize(track.name)}::${normalize(track.artist.split(',')[0] || track.artist)}`;
+        const existing = byRecording.get(key);
+        if (!existing || (track.playCount || 0) > (existing.playCount || 0)) {
+          byRecording.set(key, track);
+        }
+      }
+    }
+
+    const tracks = [...byRecording.values()]
+      .sort((a, b) => (b.playCount || 0) - (a.playCount || 0))
+      .slice(0, 80);
+    if (tracks.length) {
+      try {
+        if (typeof localStorage !== 'undefined') {
+          localStorage.setItem(cacheKey, JSON.stringify({ tracks, savedAt: Date.now() }));
+        }
+      } catch { /* Ignore cache quota or privacy-mode failures. */ }
+      return tracks;
+    }
+  } catch { /* Use the last successful playable pool when providers are unavailable. */ }
+
+  return cached?.tracks.filter(isQualityDiscoverTrack) || [];
 }
 
 export async function searchSongs(
