@@ -3,6 +3,7 @@ import test from 'node:test';
 import {
   addTrackToPlaylist,
   cycleQuality,
+  createShuffleBag,
   decodeHtmlEntities,
   extractSpotifySearchHint,
   filterAndRankTracks,
@@ -653,4 +654,18 @@ test('Discover mood matching does not infer language from a title', () => {
     duration: 180, image: '/cover.jpg',
   };
   assert.equal(track.language, undefined);
+});
+
+test('shuffle bag contains each queued track once and excludes the current track', () => {
+  const bag = createShuffleBag(sampleTracks, 't1', () => 0.5);
+  assert.equal(bag.length, sampleTracks.length - 1);
+  assert.equal(new Set(bag).size, bag.length);
+  assert.equal(bag.includes('t1'), false);
+  assert.deepEqual([...bag].sort(), sampleTracks.slice(1).map((track) => track.id).sort());
+});
+
+test('shuffle bag handles empty queues and duplicate track IDs', () => {
+  assert.deepEqual(createShuffleBag([], undefined, () => 0.25), []);
+  const duplicateQueue = [sampleTracks[0], sampleTracks[0], sampleTracks[1]];
+  assert.deepEqual(createShuffleBag(duplicateQueue, 'missing', () => 0.25).sort(), ['t1', 't2']);
 });

@@ -58,6 +58,7 @@ import {
 import {
   addTrackToPlaylist,
   cycleQuality,
+  createShuffleBag,
   deriveDynamicTasteHighlights,
   hasFullAudioStream,
   hasFullPlaybackSource,
@@ -276,6 +277,10 @@ export default function App() {
   const isYtReadyRef = useRef<boolean>(false);
   const pendingYtVideoIdRef = useRef<string | null>(null);
   const advanceTrackRef = useRef<(direction: 1 | -1, autoAdvance: boolean) => void>(() => {});
+  // Track IDs, rather than queue positions, keep shuffle history stable when
+  // users reorder or remove queue entries.
+  const shuffleHistoryRef = useRef<string[]>([]);
+  const shuffleFutureRef = useRef<string[]>([]);
 
   useEffect(() => {
     isPlayingRef.current = isPlaying;
@@ -306,9 +311,9 @@ export default function App() {
       } catch {
         // Non-fatal
       }
-    }, 1000);
+    }, expandedPlayerOpen || activeView === 'lyrics' ? 250 : 1000);
     return () => window.clearInterval(interval);
-  }, [isPlaying]);
+  }, [isPlaying, expandedPlayerOpen, activeView]);
 
   const showToast = useCallback((msg: string) => {
     setToastMsg(msg);
@@ -1386,25 +1391,87 @@ export default function App() {
     (tracks: Track[], startIndex: number, useShuffle = false) => {
       if (!tracks.length) return;
       const safeIndex = Math.max(0, Math.min(tracks.length - 1, startIndex));
-      if (useShuffle) setShuffle(true);
+      const shouldShuffle = useShuffle || shuffle;
+      shuffleHistoryRef.current = [];
+      shuffleFutureRef.current = shouldShuffle
+        ? createShuffleBag(tracks, tracks[safeIndex]?.id)
+        : [];
+      setShuffle(shouldShuffle);
       setQueue(tracks);
       setCurrentIndex(safeIndex);
       startTrackPlayback(tracks[safeIndex]);
     },
-    [startTrackPlayback]
+    [startTrackPlayback, shuffle]
   );
+
+  const handleToggleShuffle = useCallback(() => {
+    if (shuffle) {
+      shuffleHistoryRef.current = [];
+      shuffleFutureRef.current = [];
+      setShuffle(false);
+      showToast('Shuffle off');
+      return;
+    }
+    shuffleHistoryRef.current = [];
+    shuffleFutureRef.current = createShuffleBag(queue, currentTrack?.id);
+    setShuffle(true);
+    showToast('Shuffle on — no repeats until the queue cycles');
+  }, [shuffle, queue, currentTrack?.id, showToast]);
 
   const advanceTrack = useCallback(
     (direction: 1 | -1, autoAdvance: boolean) => {
-      const nextIdx = resolveNextTrackIndex({
-        queueLength: queue.length,
-        currentIndex,
-        direction,
-        shuffle,
-        repeatMode,
-        autoAdvance,
-      });
-      if (nextIdx === null) {
+      let nextIdx: number | null;
+      const currentId = queue[currentIndex]?.id;
+
+      if (shuffle && queue.length > 1) {
+        if (autoAdvance && direction === 1 && repeatMode === 2) {
+          nextIdx = currentIndex;
+        } else if (direction === -1) {
+          let previousId: string | undefined;
+          while (shuffleHistoryRef.current.length && !previousId) {
+            const candidate = shuffleHistoryRef.current.pop()!;
+            if (queue.some((item) => item.id === candidate)) previousId = candidate;
+          }
+          if (previousId) {
+            if (currentId) shuffleFutureRef.current.unshift(currentId);
+            nextIdx = queue.findIndex((item) => item.id === previousId);
+          } else {
+            nextIdx = resolveNextTrackIndex({
+              queueLength: queue.length, currentIndex, direction,
+              shuffle: false, repeatMode, autoAdvance: false,
+            });
+          }
+        } else {
+          let nextId: string | undefined;
+          while (shuffleFutureRef.current.length && !nextId) {
+            const candidate = shuffleFutureRef.current.shift()!;
+            if (candidate !== currentId && queue.some((item) => item.id === candidate)) {
+              nextId = candidate;
+            }
+          }
+          if (!nextId && (repeatMode === 1 || !autoAdvance)) {
+            shuffleFutureRef.current = createShuffleBag(queue, currentId);
+            nextId = shuffleFutureRef.current.shift();
+          }
+          if (nextId) {
+            if (currentId) shuffleHistoryRef.current.push(currentId);
+            nextIdx = queue.findIndex((item) => item.id === nextId);
+          } else {
+            nextIdx = null;
+          }
+        }
+      } else {
+        nextIdx = resolveNextTrackIndex({
+          queueLength: queue.length,
+          currentIndex,
+          direction,
+          shuffle: false,
+          repeatMode,
+          autoAdvance,
+        });
+      }
+
+      if (nextIdx === null || nextIdx < 0) {
         setIsPlaying(false);
         audioRef.current?.pause();
         audioRef2.current?.pause();
@@ -1446,7 +1513,7 @@ export default function App() {
           // re-rendering the entire app for every native timeupdate event.
           currentTimeRef.current = audio.currentTime;
           const now = Date.now();
-          if (now - lastProgressUiUpdateRef.current >= 1000) {
+          if (now - lastProgressUiUpdateRef.current >= (expandedPlayerOpen || activeView === 'lyrics' ? 250 : 1000)) {
             lastProgressUiUpdateRef.current = now;
             setCurrentTime(audio.currentTime);
           }
@@ -1468,7 +1535,7 @@ export default function App() {
       };
     });
     return () => cleanups.forEach((cleanup) => cleanup());
-  }, [advanceTrack, loadAndPlayCandidate, showToast]);
+  }, [advanceTrack, loadAndPlayCandidate, showToast, expandedPlayerOpen, activeView]);
 
   const handleTogglePlay = useCallback(() => {
     if (!currentTrack) return;
@@ -1763,9 +1830,12 @@ export default function App() {
   const handleEnqueue = useCallback(
     (track: Track) => {
       setQueue((prev) => [...prev, track]);
+      if (shuffle && !shuffleFutureRef.current.includes(track.id) && !shuffleHistoryRef.current.includes(track.id)) {
+        shuffleFutureRef.current.push(track.id);
+      }
       showToast(`Added "${track.name}" to Queue`);
     },
-    [showToast]
+    [showToast, shuffle]
   );
 
   const handleCreatePlaylist = useCallback(
@@ -2401,7 +2471,7 @@ export default function App() {
         onTogglePlay={handleTogglePlay}
         onPrev={() => advanceTrack(-1, false)}
         onNext={() => advanceTrack(1, false)}
-        onToggleShuffle={() => setShuffle((s) => !s)}
+        onToggleShuffle={handleToggleShuffle}
         onCycleRepeat={() => setRepeatMode((r) => ((r + 1) % 3) as RepeatMode)}
         onToggleLike={() => currentTrack && handleToggleLike(currentTrack)}
         onShare={() => {

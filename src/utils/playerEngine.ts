@@ -181,6 +181,28 @@ export function selectStreamUrl(
   return track.previewUrl || '';
 }
 
+export function createShuffleBag(
+  tracks: Track[],
+  currentTrackId?: string,
+  randomFn: () => number = Math.random
+): string[] {
+  const seen = new Set<string>();
+  const bag = tracks
+    .map((track) => track.id)
+    .filter((id) => {
+      if (!id || id === currentTrackId || seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    });
+
+  for (let i = bag.length - 1; i > 0; i--) {
+    const random = Math.max(0, Math.min(0.999999999, randomFn()));
+    const j = Math.floor(random * (i + 1));
+    [bag[i], bag[j]] = [bag[j], bag[i]];
+  }
+  return bag;
+}
+
 export function resolveNextTrackIndex(params: {
   queueLength: number;
   currentIndex: number;
