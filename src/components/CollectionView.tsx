@@ -209,7 +209,7 @@ export function CollectionView({
         </div>
       ) : (
         <div className="mt-4">
-          <div className="grid grid-cols-[32px_1fr_auto] items-center gap-3 border-b border-white/[0.08] px-3 pb-2 text-xs font-semibold uppercase tracking-wider text-zinc-400 md:grid-cols-[32px_1.6fr_1fr_76px_184px]">
+          <div className="hidden grid-cols-[32px_minmax(0,1.6fr)_minmax(0,1fr)_76px_184px] items-center gap-3 border-b border-white/[0.08] px-3 pb-2 text-xs font-semibold uppercase tracking-wider text-zinc-400 md:grid">
             <span className="text-center">#</span>
             <span>Title</span>
             <span className="hidden md:block">Album</span>
@@ -228,7 +228,7 @@ export function CollectionView({
               return (
                 <div
                   key={`${collection.id}-${track.id}-${idx}`}
-                  className={`group grid grid-cols-[32px_1fr_auto] items-center gap-3 rounded-md px-3 py-2 transition-colors md:grid-cols-[32px_1.6fr_1fr_76px_184px] ${
+                  className={`group grid grid-cols-[24px_minmax(0,1fr)] items-center gap-x-3 gap-y-2 rounded-xl px-2 py-3 transition-colors md:grid-cols-[32px_minmax(0,1.6fr)_minmax(0,1fr)_76px_184px] md:gap-3 md:rounded-md md:px-3 md:py-2 ${
                     isCurrent ? 'bg-white/[0.1]' : 'hover:bg-white/[0.06]'
                   }`}
                 >
@@ -277,7 +277,7 @@ export function CollectionView({
                     {track.language || 'Vocal'}
                   </div>
 
-                  <div className="flex items-center justify-end gap-1.5">
+                  <div className="col-start-2 flex w-full items-center justify-end gap-1.5 border-t border-white/[0.05] pt-2 md:col-start-auto md:w-auto md:border-0 md:pt-0">
                     <DownloadButton
                       trackName={track.name}
                       downloaded={isDownloaded}
@@ -331,7 +331,7 @@ export function CollectionView({
                       onClick={() => onOpenVideo(track)}
                       aria-label={`Watch video for ${track.name}`}
                       title="Watch video"
-                      className="hidden p-1 text-zinc-400 opacity-0 transition-opacity group-hover:opacity-100 hover:text-white sm:inline-flex"
+                      className="hidden p-1 text-zinc-400 opacity-0 transition-opacity group-hover:opacity-100 hover:text-white md:inline-flex"
                     >
                       <Video className="h-3.5 w-3.5" />
                     </button>
