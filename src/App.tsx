@@ -139,10 +139,10 @@ function loadLocalSnapshot(): {
 
 export default function App() {
   const initialSnap = useMemo(() => loadLocalSnapshot(), []);
-  const [welcomeVisible, setWelcomeVisible] = useState(true);
   const [welcomeSetupComplete] = useState(
     () => typeof window !== 'undefined' && localStorage.getItem('musick_mood_setup_complete_v1') === 'true'
   );
+  const [welcomeVisible, setWelcomeVisible] = useState(() => !welcomeSetupComplete);
 
   // Navigation & history stack
   const [navHistory, setNavHistory] = useState<NavEntry[]>([{ view: 'home', collection: null }]);
