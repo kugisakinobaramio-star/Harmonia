@@ -1,7 +1,7 @@
 import { Compass, Play, Shuffle } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { MusicLanguage, Track } from '../types/music';
-import { rankDiscoverTracks, trackMatchesDiscoverMood, type DiscoverMood } from '../utils/playerEngine';
+import { isQualityDiscoverTrack, normalizeDiscoverLanguage, rankDiscoverTracks, trackMatchesDiscoverMood, type DiscoverMood } from '../utils/playerEngine';
 import { CoverImage } from './CoverImage';
 import { DownloadButton } from './DownloadButton';
 
@@ -72,13 +72,13 @@ export function DiscoverView({
     }
     const seen = new Set<string>();
     return pool.filter((track) => {
-      if (seen.has(track.id)) return false;
+      if (seen.has(track.id) || !isQualityDiscoverTrack(track)) return false;
       seen.add(track.id);
       return true;
     });
   }, [mode, globalTracks, regionalTracks, tracks, varied]);
   const visible = modePool.filter((track) =>
-    (mode !== 'Language Mix' || language === 'All' || track.language === language) &&
+    (mode !== 'Language Mix' || language === 'All' || normalizeDiscoverLanguage(track.language) === language) &&
     (mode !== 'Mood Mix' || mood === 'All' || trackMatchesDiscoverMood(track, mood))
   );
 
@@ -89,7 +89,7 @@ export function DiscoverView({
           <Compass className="h-5 w-5" />
           <span className="text-xs font-bold uppercase tracking-[0.18em]">MusicKK Discover</span>
         </div>
-        <h1 className="mt-3 text-2xl font-extrabold text-white sm:text-3xl">Global Mix</h1>
+        <h1 className="mt-3 text-2xl font-extrabold text-white sm:text-3xl">Discover by Language &amp; Mood</h1>
         <p className="mt-2 max-w-2xl text-sm text-zinc-300">Explore worldwide charts, new discoveries, language mixes, sound-based moods and regional music.</p>
         <button type="button" disabled={refreshing} onClick={async () => {
           setRefreshing(true);
@@ -124,7 +124,7 @@ export function DiscoverView({
           </div>
         </div>
       )}
-      <p className="text-[11px] text-zinc-500">Language and mood are separate classifications. Japanese-language music is not automatically anime or J-Pop.</p>
+      <p className="text-[11px] text-zinc-500">Filters use catalogue language, genre, tempo and explicit mood tags. Unknown metadata stays unclassified.</p>
 
       <div className="flex items-baseline justify-between gap-2">
         <div>
