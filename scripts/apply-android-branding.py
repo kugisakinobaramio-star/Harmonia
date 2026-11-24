@@ -23,7 +23,7 @@ drawable = res / "drawable"
 drawable.mkdir(parents=True, exist_ok=True)
 (drawable / "ic_musick_foreground.xml").write_text("""<?xml version="1.0" encoding="utf-8"?>
 <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="108dp" android:height="108dp" android:viewportWidth="128" android:viewportHeight="128">
-<path android:fillColor="#62F58A" android:pathData="M22,82V46c0,-3 2,-5 5,-5s5,2 5,5v36c0,3 -2,5 -5,5s-5,-2 -5,-5Z M44,96V32c0,-3 2,-5 5,-5s5,2 5,5v64c0,3 -2,5 -5,5s-5,-2 -5,-5Z M66,74V54c0,-3 2,-5 5,-5s5,2 5,5v20c0,3 -2,5 -5,5s-5,-2 -5,-5Z M88,88V40c0,-3 2,-5 5,-5s5,2 5,5v48c0,3 -2,5 -5,5s-5,-2 -5,-5Z"/>
+<path android:fillColor="#62F58A" android:pathData="M15,65h12l8,-19 12,39 12,-54 12,67 12,-49 9,26 8,-10h13"/>
 </vector>
 """, encoding="utf-8")
 (drawable / "ic_musick_background.xml").write_text("""<?xml version="1.0" encoding="utf-8"?>
@@ -45,7 +45,7 @@ fallback.mkdir(parents=True, exist_ok=True)
 (fallback / "ic_launcher.xml").write_text("""<?xml version="1.0" encoding="utf-8"?>
 <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="108dp" android:height="108dp" android:viewportWidth="128" android:viewportHeight="128">
 <path android:fillColor="#050706" android:pathData="M0,0h128v128H0z"/>
-<path android:fillColor="#62F58A" android:pathData="M22,82V46c0,-3 2,-5 5,-5s5,2 5,5v36c0,3 -2,5 -5,5s-5,-2 -5,-5Z M44,96V32c0,-3 2,-5 5,-5s5,2 5,5v64c0,3 -2,5 -5,5s-5,-2 -5,-5Z M66,74V54c0,-3 2,-5 5,-5s5,2 5,5v20c0,3 -2,5 -5,5s-5,-2 -5,-5Z M88,88V40c0,-3 2,-5 5,-5s5,2 5,5v48c0,3 -2,5 -5,5s-5,-2 -5,-5Z"/>
+<path android:fillColor="#62F58A" android:pathData="M15,65h12l8,-19 12,39 12,-54 12,67 12,-49 9,26 8,-10h13"/>
 </vector>
 """, encoding="utf-8")
 (fallback / "ic_launcher_round.xml").write_text((fallback / "ic_launcher.xml").read_text(encoding="utf-8"), encoding="utf-8")
@@ -60,7 +60,7 @@ fallback.mkdir(parents=True, exist_ok=True)
     android:viewportHeight="128">
     <path
         android:fillColor="#62F58A"
-        android:pathData="M22,82V46c0,-3 2,-5 5,-5s5,2 5,5v36c0,3 -2,5 -5,5s-5,-2 -5,-5Z M44,96V32c0,-3 2,-5 5,-5s5,2 5,5v64c0,3 -2,5 -5,5s-5,-2 -5,-5Z M66,74V54c0,-3 2,-5 5,-5s5,2 5,5v20c0,3 -2,5 -5,5s-5,-2 -5,-5Z M88,88V40c0,-3 2,-5 5,-5s5,2 5,5v48c0,3 -2,5 -5,5s-5,-2 -5,-5Z"/>
+        android:pathData="M15,65h12l8,-19 12,39 12,-54 12,67 12,-49 9,26 8,-10h13"/>
 </vector>
 """, encoding="utf-8")
 (drawable / "musick_launch_background.xml").write_text("""<?xml version="1.0" encoding="utf-8"?>
