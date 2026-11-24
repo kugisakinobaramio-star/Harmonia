@@ -60,9 +60,9 @@ export function DiscoverView({
   const modePool = useMemo(() => {
     if (mode === 'Global Charts') return [...(globalTracks.length ? globalTracks : tracks)].sort((a, b) => (b.playCount || 0) - (a.playCount || 0));
     if (mode === 'Regional Discover') return regionalTracks;
-    if (mode === 'Global Discover') return [...globalTracks, ...tracks];
+    if (mode === 'Global Discover') return [...globalTracks, ...varied];
     return tracks;
-  }, [mode, globalTracks, regionalTracks, tracks]);
+  }, [mode, globalTracks, regionalTracks, tracks, varied]);
   const visible = modePool.filter((track) =>
     (mode !== 'Language Mix' || language === 'All' || track.language === language) &&
     (mode !== 'Mood Mix' || mood === 'All' || trackMatchesDiscoverMood(track, mood))

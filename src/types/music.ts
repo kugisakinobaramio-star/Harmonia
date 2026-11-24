@@ -70,6 +70,8 @@ export interface CuratedPlaylist {
   region?: MusicRegion;
   tracks: Track[];
   isUserCreated?: boolean;
+  /** Original Spotify playlist page for attribution when imported. */
+  sourcePageUrl?: string;
 }
 
 export interface ArtistProfile {
@@ -124,6 +126,8 @@ export interface RecommendationShelf {
 export interface CollectionTarget {
   /** Official Spotify iframe player URL for Spotify-backed collections. */
   spotifyEmbedUrl?: string;
+  /** Original source page for imported playlist attribution. */
+  sourcePageUrl?: string;
   kind: 'playlist' | 'artist' | 'album' | 'liked' | 'recent' | 'recommendations';
   id: string;
   title: string;

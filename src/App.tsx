@@ -1909,6 +1909,7 @@ export default function App() {
         subtitle: pl.description,
         image: pl.tracks[0]?.image || pl.image || ARTWORK.englishVinyl,
         tracks: pl.tracks,
+        sourcePageUrl: pl.sourcePageUrl,
         spotifyEmbedUrl: pl.id.startsWith('spotify-pl-')
           ? `https://open.spotify.com/embed/playlist/${pl.id.slice('spotify-pl-'.length)}`
           : undefined,
@@ -2012,6 +2013,7 @@ export default function App() {
         language: 'Mixed',
         tracks: importedTracks,
         isUserCreated: true,
+        sourcePageUrl: res.id ? `https://open.spotify.com/playlist/${res.id}` : undefined,
       };
       setUserPlaylists((previous) => {
         if (previous.some((playlist) => playlist.id === playlistId)) {

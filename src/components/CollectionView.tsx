@@ -86,6 +86,11 @@ export function CollectionView({
             {collection.title}
           </h1>
           <p className="mt-2 text-sm text-zinc-300">{collection.subtitle}</p>
+          {collection.sourcePageUrl && (
+            <a href={collection.sourcePageUrl} target="_blank" rel="noopener noreferrer" className="mt-2 inline-flex text-xs font-semibold text-[#79e99f] hover:underline">
+              Imported from Spotify · View original playlist
+            </a>
+          )}
           <p className="mt-1 font-mono-num text-xs text-zinc-400">
             MusicKK · {sorted.length} {sorted.length === 1 ? 'song' : 'songs'}
             {totalMins > 0 ? ` · about ${totalMins} min` : ''}
