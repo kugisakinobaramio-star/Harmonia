@@ -1,7 +1,7 @@
 import type { Track } from '../types/music';
 
 const normalize = (value?: string) => (value || '').toLocaleLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '').trim();
-const primaryArtist = (track: Track) => normalize(track.artist.split(/,|&|\bfeat\\.?\b|\bft\\.?\b|\bwith\b/i)[0]);
+const primaryArtist = (track: Track) => normalize(track.artist.split(/,|&|\bfeat\.?\b|\bft\.?\b|\bwith\b/i)[0]);
 
 function similarityScore(candidate: Track, sources: Track[]): number {
   let score = 0;
