@@ -87,7 +87,7 @@ export function CollectionView({
           </h1>
           <p className="mt-2 text-sm text-zinc-300">{collection.subtitle}</p>
           <p className="mt-1 font-mono-num text-xs text-zinc-400">
-            Harmonia · {sorted.length} {sorted.length === 1 ? 'song' : 'songs'}
+            MusicKK · {sorted.length} {sorted.length === 1 ? 'song' : 'songs'}
             {totalMins > 0 ? ` · about ${totalMins} min` : ''}
           </p>
         </div>
