@@ -1645,37 +1645,47 @@ export default function App() {
 
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
-    const updateNativeSession = async () => {
+    const updateNativeMetadata = async () => {
       try {
-        if (currentTrack) {
-          const artwork = currentTrack.image
-            ? [{ src: new URL(currentTrack.image, window.location.href).href }]
-            : [];
-          await MediaSession.setMetadata({
-            title: currentTrack.name,
-            artist: currentTrack.artist,
-            album: currentTrack.albumName || '',
-            artwork,
-          });
-        } else {
+        if (!currentTrack) {
           await MediaSession.setMetadata({ title: '', artist: '', album: '', artwork: [] });
+          return;
         }
-        await MediaSession.setPlaybackState({
-          playbackState: currentTrack ? (isPlaying ? 'playing' : 'paused') : 'none',
+        const artwork = currentTrack.image
+          ? [{ src: new URL(currentTrack.image, window.location.href).href }]
+          : [];
+        await MediaSession.setMetadata({
+          title: currentTrack.name,
+          artist: currentTrack.artist,
+          album: currentTrack.albumName || '',
+          artwork,
         });
-        if (currentTrack && duration > 0 && Number.isFinite(duration)) {
-          await MediaSession.setPositionState({
-            duration,
-            playbackRate: 1,
-            position: Math.max(0, Math.min(duration, currentTime)),
-          });
-        }
       } catch {
-        // Native media UI is optional; never interrupt the active audio engine.
+        // Metadata failures must never interrupt playback.
       }
     };
-    void updateNativeSession();
-  }, [currentTrack?.id, currentTrack?.name, currentTrack?.artist, currentTrack?.albumName, currentTrack?.image, isPlaying, currentTime, duration]);
+    void updateNativeMetadata();
+  }, [currentTrack?.id, currentTrack?.name, currentTrack?.artist, currentTrack?.albumName, currentTrack?.image]);
+
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+    void MediaSession.setPlaybackState({
+      playbackState: currentTrack ? (isPlaying ? 'playing' : 'paused') : 'none',
+    }).catch(() => {
+      // Native media UI is optional; in-app playback remains available.
+    });
+  }, [currentTrack?.id, isPlaying]);
+
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform() || !currentTrack || duration <= 0 || !Number.isFinite(duration)) return;
+    void MediaSession.setPositionState({
+      duration,
+      playbackRate: 1,
+      position: Math.max(0, Math.min(duration, currentTime)),
+    }).catch(() => {
+      // Position reporting is optional on older Android versions.
+    });
+  }, [currentTrack?.id, currentTime, duration]);
 
   // Keyboard shortcuts
   useEffect(() => {
