@@ -302,7 +302,7 @@ export function CollectionView({
                       type="button"
                       onClick={() => onToggleLike(track)}
                       aria-label={isLiked ? `Unlike ${track.name}` : `Like ${track.name}`}
-                      className={`p-1 transition-colors ${
+                      className={`p-1 transition-colors focus-visible:opacity-100 ${
                         isLiked
                           ? 'text-[#1DB954] opacity-100'
                           : 'text-zinc-400 opacity-100 hover:text-white sm:opacity-0 sm:group-hover:opacity-100'
