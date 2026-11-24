@@ -1440,6 +1440,9 @@ export default function App() {
               queueLength: queue.length, currentIndex, direction,
               shuffle: false, repeatMode, autoAdvance: false,
             });
+            // If shuffle was enabled mid-queue, make the manually selected
+            // previous track part of history so Next returns to this track.
+            if (nextIdx !== null && currentId) shuffleFutureRef.current.unshift(currentId);
           }
         } else {
           let nextId: string | undefined;
