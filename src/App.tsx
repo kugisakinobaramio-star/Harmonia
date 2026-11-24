@@ -45,7 +45,7 @@ import type {
 import {
   buildTasteProfile,
   fetchBackendUserState,
-  fetchRegionalDiscovery,
+  fetchPlayableDiscoveries,
   fetchTrackLyrics,
   resolveSpotifyUrl,
   resolveTrackStreams,
@@ -557,7 +557,7 @@ export default function App() {
     if (globalTracksLoaded) return;
     let cancelled = false;
     setGlobalTracksLoading(true);
-    fetchRegionalDiscovery('GLOBAL').then((tracks) => {
+    fetchPlayableDiscoveries('GLOBAL').then((tracks) => {
       if (cancelled) return;
       setGlobalTracks(tracks);
       setGlobalTracksLoaded(true);
@@ -570,7 +570,7 @@ export default function App() {
   // Fetch location-based tracks whenever region updates
   useEffect(() => {
     let cancelled = false;
-    fetchRegionalDiscovery(region).then((tracks) => {
+    fetchPlayableDiscoveries(region).then((tracks) => {
       if (cancelled) return;
       // Keep tracks with missing lyric metadata discoverable; ranking handles the preference.
       setRegionalTracks(tracks);
@@ -2310,8 +2310,8 @@ export default function App() {
                 onToggleDownload={handleToggleDownload}
                 onRefresh={async () => {
                   const [freshGlobal, freshRegional] = await Promise.all([
-                    fetchRegionalDiscovery('GLOBAL', true),
-                    fetchRegionalDiscovery(region, true),
+                    fetchPlayableDiscoveries('GLOBAL', true),
+                    fetchPlayableDiscoveries(region, true),
                   ]);
                   setGlobalTracks(freshGlobal);
                   setGlobalTracksLoaded(true);
