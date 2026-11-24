@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/kugisakinobaramio-star/MusicKK/actions"><img src="https://img.shields.io/badge/Build-GitHub%20Actions-2088FF?logo=githubactions&logoColor=white" alt="GitHub Actions" /></a>
+  <a href="https://github.com/kugisakinobaramio-star/Musick/actions"><img src="https://img.shields.io/badge/Build-GitHub%20Actions-2088FF?logo=githubactions&logoColor=white" alt="GitHub Actions" /></a>
   <a href="https://react.dev/"><img src="https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=111827" alt="React 19" /></a>
   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-7-3178C6?logo=typescript&logoColor=white" alt="TypeScript" /></a>
   <a href="https://developers.cloudflare.com/workers/"><img src="https://img.shields.io/badge/Cloudflare-Workers-F38020?logo=cloudflare&logoColor=white" alt="Cloudflare Workers" /></a>
@@ -23,8 +23,8 @@ MusicKK combines a React interface, a small Express API and a Cloudflare Worker 
 > **Provider reality check:** music catalogues and playback rights differ. Some services provide full streams, while others provide metadata, previews or an embedded player only. A successful search does not guarantee that a full track can be played.
 
 **🌐 Live app:** https://harmonia.kugisakinobaramio.workers.dev  
-**💻 Source:** https://github.com/kugisakinobaramio-star/MusicKK  
-**📱 Android releases:** [Signed Android APK releases](https://github.com/kugisakinobaramio-star/MusicKK/releases) *(published only from version tags)*
+**💻 Source:** https://github.com/kugisakinobaramio-star/Musick  
+**📱 Android releases:** [Signed Android APK releases](https://github.com/kugisakinobaramio-star/Musick/releases) *(published only from version tags)*
 
 ---
 
@@ -137,7 +137,7 @@ git push origin android-v1.1.0
 ```
 
 3. GitHub Actions runs tests and type-checking, builds the Android release APK, verifies its signature, and publishes `app-release.apk` as a **non-prerelease** GitHub Release.
-4. Download the APK from [MusicKK Releases](https://github.com/kugisakinobaramio-star/MusicKK/releases).
+4. Download the APK from [MusicKK Releases](https://github.com/kugisakinobaramio-star/Musick/releases).
 
 Only tags matching `android-vMAJOR.MINOR.PATCH` (for example, `android-v1.2.3`) trigger the stable release path. Prerelease tags are intentionally not published by this workflow. A missing signing secret or failed signature verification stops publication; the workflow does not fall back to an unsigned/debug APK.
 
