@@ -1964,24 +1964,32 @@ export default function App() {
   const handleImportSpotifyUrl = useCallback(
     async (rawUrl: string): Promise<{ ok: boolean; error?: string }> => {
       const res = await resolveSpotifyUrl(rawUrl);
-      if (res.ok && res.tracks?.length) {
-        navigateTo('collection', {
-          kind: 'playlist',
-          id: `sp-import-${res.id || Date.now()}`,
-          title: res.title || 'Spotify Stream',
-          subtitle: res.subtitle || 'Ad-Free Spotify Streaming',
-          image: res.image || res.tracks[0].image || ARTWORK.englishVinyl,
-          tracks: res.tracks,
-          spotifyEmbedUrl: res.kind && res.id
-            ? `https://open.spotify.com/embed/${res.kind}/${res.id}`
-            : undefined,
-        });
-        showToast('Spotify player loaded. Use its Play button below to start playback.');
-        return { ok: true };
+      if (!res.ok || res.kind !== 'playlist' || !res.tracks?.length) {
+        return { ok: false, error: res.error || 'This link did not return an importable Spotify playlist.' };
       }
-      return { ok: false, error: res.error || 'Could not resolve Spotify link' };
+      const playlistId = `spotify-import-${res.id || Date.now()}`;
+      const importedPlaylist: CuratedPlaylist = {
+        id: playlistId,
+        name: res.title || 'Imported Spotify Playlist',
+        description: `Imported from Spotify · ${res.tracks.length} tracks`,
+        image: res.image || res.tracks[0]?.image || ARTWORK.englishVinyl,
+        language: 'Mixed',
+        tracks: res.tracks,
+        isUserCreated: true,
+      };
+      setUserPlaylists((previous) => {
+        if (previous.some((playlist) => playlist.id === playlistId)) {
+          showToast('This Spotify playlist is already in your Library.');
+          return previous;
+        }
+        const next = [importedPlaylist, ...previous];
+        syncBackendPlaylists(next);
+        return next;
+      });
+      showToast(`Imported “${importedPlaylist.name}” into your Library.`);
+      return { ok: true };
     },
-    [navigateTo, showToast]
+    [showToast]
   );
 
   // Video search uses request sequencing so slower older searches cannot overwrite newer results.
@@ -2485,12 +2493,6 @@ export default function App() {
       <SpotifyImportModal
         open={spotifyImportOpen}
         onClose={() => setSpotifyImportOpen(false)}
-        onSearchQuery={(q) => {
-          setSearchQuery(q);
-          setSearchTab('songs');
-          navigateTo('search', null);
-        }}
-        onSwitchToVideos={(q) => openVideosForQuery(q)}
         onImportSpotifyUrl={handleImportSpotifyUrl}
       />
 

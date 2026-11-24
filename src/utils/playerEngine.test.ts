@@ -421,6 +421,42 @@ test('isRelevantTrackTitle blocks unrelated results and supports title-plus-arti
 });
 
 
+
+test('Discover mood matching does not infer musical mood from language alone', () => {
+  const japanesePopLanguageOnly: Track = {
+    ...sampleTracks[2],
+    id: 'japanese-language-only',
+    language: 'Japanese',
+    genre: 'Pop',
+    synthMood: 'pop',
+  };
+  assert.equal(trackMatchesDiscoverMood(japanesePopLanguageOnly, 'Anime & J-Pop'), false);
+  assert.equal(trackMatchesDiscoverMood({ ...japanesePopLanguageOnly, genre: 'J-Pop' }, 'Anime & J-Pop'), true);
+});
+
+test('search ranking prioritizes full-length playable matches and limits popularity boost', () => {
+  const fullMatch: Track = {
+    ...sampleTracks[1],
+    id: 'full-match',
+    name: 'Blue Hour',
+    artist: 'Target Artist',
+    duration: 218,
+    playCount: 10_000,
+    streamUrls: { '320kbps': 'https://cdn.example.com/full.m4a' },
+  };
+  const previewMatch: Track = {
+    ...fullMatch,
+    id: 'preview-match',
+    artist: 'Target Artist',
+    duration: 30,
+    playCount: 900_000_000,
+    streamUrls: {},
+    previewUrl: 'https://p.scdn.co/mp3-preview/preview',
+  };
+  const ranked = filterAndRankTracks([previewMatch, fullMatch], 'Blue Hour Target Artist');
+  assert.equal(ranked[0]?.id, 'full-match');
+});
+
 test('rankDiscoverTracks uses local taste signals and suppresses recently played tracks', () => {
   const pool: Track[] = [
     { ...sampleTracks[0], id: 'fresh-a', name: 'Fresh A', artist: 'Arijit Singh', genre: 'Bollywood' },
