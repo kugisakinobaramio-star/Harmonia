@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Apply Musick launcher and native Android splash branding to generated Capacitor resources."""
+"""Apply MusicKK launcher and native Android splash branding to generated Capacitor resources."""
 from pathlib import Path
 import sys
 import xml.etree.ElementTree as ET
@@ -16,14 +16,14 @@ root = tree.getroot()
 app_name = root.find("./string[@name='app_name']")
 if app_name is None:
     sys.exit("Could not find app_name in generated Android strings.xml")
-app_name.text = "Musick"
+app_name.text = "MusicKK"
 tree.write(values, encoding="utf-8", xml_declaration=True)
 
 drawable = res / "drawable"
 drawable.mkdir(parents=True, exist_ok=True)
 (drawable / "ic_musick_foreground.xml").write_text("""<?xml version="1.0" encoding="utf-8"?>
 <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="108dp" android:height="108dp" android:viewportWidth="128" android:viewportHeight="128">
-<path android:fillColor="#62F58A" android:pathData="M22,91V39c0,-5 4,-9 9,-9h5c4,0 7,2 10,6l18,24 18,-24c3,-4 6,-6 10,-6h5c5,0 9,4 9,9v52H87V57L70,79c-3,4 -6,6 -9,6s-6,-2 -9,-6L35,57v34H22Z"/>
+<path android:fillColor="#62F58A" android:pathData="M22,82V46c0,-3 2,-5 5,-5s5,2 5,5v36c0,3 -2,5 -5,5s-5,-2 -5,-5Z M44,96V32c0,-3 2,-5 5,-5s5,2 5,5v64c0,3 -2,5 -5,5s-5,-2 -5,-5Z M66,74V54c0,-3 2,-5 5,-5s5,2 5,5v20c0,3 -2,5 -5,5s-5,-2 -5,-5Z M88,88V40c0,-3 2,-5 5,-5s5,2 5,5v48c0,3 -2,5 -5,5s-5,-2 -5,-5Z"/>
 </vector>
 """, encoding="utf-8")
 (drawable / "ic_musick_background.xml").write_text("""<?xml version="1.0" encoding="utf-8"?>
@@ -45,7 +45,7 @@ fallback.mkdir(parents=True, exist_ok=True)
 (fallback / "ic_launcher.xml").write_text("""<?xml version="1.0" encoding="utf-8"?>
 <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="108dp" android:height="108dp" android:viewportWidth="128" android:viewportHeight="128">
 <path android:fillColor="#050706" android:pathData="M0,0h128v128H0z"/>
-<path android:fillColor="#62F58A" android:pathData="M22,91V39c0,-5 4,-9 9,-9h5c4,0 7,2 10,6l18,24 18,-24c3,-4 6,-6 10,-6h5c5,0 9,4 9,9v52H87V57L70,79c-3,4 -6,6 -9,6s-6,-2 -9,-6L35,57v34H22Z"/>
+<path android:fillColor="#62F58A" android:pathData="M22,82V46c0,-3 2,-5 5,-5s5,2 5,5v36c0,3 -2,5 -5,5s-5,-2 -5,-5Z M44,96V32c0,-3 2,-5 5,-5s5,2 5,5v64c0,3 -2,5 -5,5s-5,-2 -5,-5Z M66,74V54c0,-3 2,-5 5,-5s5,2 5,5v20c0,3 -2,5 -5,5s-5,-2 -5,-5Z M88,88V40c0,-3 2,-5 5,-5s5,2 5,5v48c0,3 -2,5 -5,5s-5,-2 -5,-5Z"/>
 </vector>
 """, encoding="utf-8")
 (fallback / "ic_launcher_round.xml").write_text((fallback / "ic_launcher.xml").read_text(encoding="utf-8"), encoding="utf-8")
@@ -60,7 +60,7 @@ fallback.mkdir(parents=True, exist_ok=True)
     android:viewportHeight="128">
     <path
         android:fillColor="#62F58A"
-        android:pathData="M25,91V37h16l23,28 23,-28h16v54H87V59L64,87 41,59v32H25Z"/>
+        android:pathData="M22,82V46c0,-3 2,-5 5,-5s5,2 5,5v36c0,3 -2,5 -5,5s-5,-2 -5,-5Z M44,96V32c0,-3 2,-5 5,-5s5,2 5,5v64c0,3 -2,5 -5,5s-5,-2 -5,-5Z M66,74V54c0,-3 2,-5 5,-5s5,2 5,5v20c0,3 -2,5 -5,5s-5,-2 -5,-5Z M88,88V40c0,-3 2,-5 5,-5s5,2 5,5v48c0,3 -2,5 -5,5s-5,-2 -5,-5Z"/>
 </vector>
 """, encoding="utf-8")
 (drawable / "musick_launch_background.xml").write_text("""<?xml version="1.0" encoding="utf-8"?>
@@ -109,4 +109,4 @@ set_style_item(launch_theme, "windowSplashScreenAnimatedIcon", "@drawable/musick
 set_style_item(launch_theme, "postSplashScreenTheme", "@style/AppTheme.NoActionBar")
 styles_tree.write(styles, encoding="utf-8", xml_declaration=True)
 
-print("Applied Musick launcher icons and native splash screen branding.")
+print("Applied MusicKK launcher icons and native splash screen branding.")

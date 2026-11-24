@@ -1,18 +1,20 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="MusicKK">
   <defs>
     <linearGradient id="mint" x1="18" y1="16" x2="108" y2="112" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#B7FFD0"/>
-      <stop offset=".48" stop-color="#62F58A"/>
-      <stop offset="1" stop-color="#19B86A"/>
+      <stop stop-color="#B7FFD0"/><stop offset=".48" stop-color="#62F58A"/><stop offset="1" stop-color="#19B86A"/>
     </linearGradient>
     <radialGradient id="halo" cx="0" cy="0" r="1" gradientTransform="matrix(0 70 -70 0 64 20)" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#62F58A" stop-opacity=".2"/>
-      <stop offset="1" stop-color="#62F58A" stop-opacity="0"/>
+      <stop stop-color="#62F58A" stop-opacity=".2"/><stop offset="1" stop-color="#62F58A" stop-opacity="0"/>
     </radialGradient>
   </defs>
   <rect width="128" height="128" rx="32" fill="#070C09"/>
   <rect width="128" height="128" rx="32" fill="url(#halo)"/>
   <rect x="1" y="1" width="126" height="126" rx="31" fill="none" stroke="#8BFFAE" stroke-opacity=".22" stroke-width="2"/>
-  <path d="M22 91V39c0-5 4-9 9-9h5c4 0 7 2 10 6l18 24 18-24c3-4 6-6 10-6h5c5 0 9 4 9 9v52H87V57L70 79c-3 4-6 6-9 6s-6-2-9-6L35 57v34H22Z" fill="url(#mint)"/>
-  <path d="M25 101h78" stroke="#62F58A" stroke-opacity=".22" stroke-width="2" stroke-linecap="round"/>
+  <g fill="url(#mint)">
+    <rect x="22" y="43" width="10" height="42" rx="5"/>
+    <rect x="43" y="27" width="10" height="74" rx="5"/>
+    <rect x="64" y="51" width="10" height="26" rx="5"/>
+    <rect x="85" y="35" width="10" height="58" rx="5"/>
+  </g>
+  <path d="M20 108h88" stroke="#62F58A" stroke-opacity=".24" stroke-width="2" stroke-linecap="round"/>
 </svg>

@@ -60,7 +60,7 @@ export function DiscoverView({
       <div className="rounded-xl bg-gradient-to-br from-[#1d3028] via-[#171d20] to-[#171719] p-5 sm:p-7">
         <div className="flex items-center gap-2 text-[#7ee2a8]">
           <Compass className="h-5 w-5" />
-          <span className="text-xs font-bold uppercase tracking-[0.18em]">Musick Discover</span>
+          <span className="text-xs font-bold uppercase tracking-[0.18em]">MusicKK Discover</span>
         </div>
         <h1 className="mt-3 text-2xl font-extrabold text-white sm:text-3xl">Find your next favourite.</h1>
         <p className="mt-2 max-w-2xl text-sm text-zinc-300">Explore by a song's catalogued language and sound profile. Unknown-language tracks won't be placed into a language category.</p>

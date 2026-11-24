@@ -1,6 +1,8 @@
 {
-  "name": "Musick",
+  "name": "MusicKK",
   "description": "Music streaming workspace with curated mixes, synced lyrics, dual audio visualizers, live search, playlists, and queue management.",
   "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }

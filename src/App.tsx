@@ -1,4 +1,6 @@
 import { Compass, Home, Library, Search } from 'lucide-react';
+import { Capacitor } from '@capacitor/core';
+import { MediaSession } from '@capgo/capacitor-media-session';
 import { apiUrl } from './utils/apiUrl';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CollectionView } from './components/CollectionView';
@@ -334,7 +336,7 @@ export default function App() {
 
   const handleToggleDownload = useCallback(async (track: Track) => {
     if (track.offlineAvailable === false || track.sourceProvider === 'Jamendo') {
-      showToast('This provider supports online listening only in Musick.');
+      showToast('This provider supports online listening only in MusicKK.');
       return;
     }
     if (downloadingIds.has(track.id)) return;
@@ -371,7 +373,7 @@ export default function App() {
       (track) => track.offlineAvailable !== false && track.sourceProvider !== 'Jamendo'
     );
     if (!downloadableTracks.length) {
-      showToast('These tracks support online listening only in Musick.');
+      showToast('These tracks support online listening only in MusicKK.');
       return;
     }
 
@@ -1624,6 +1626,82 @@ export default function App() {
     }
   }, [isPlaying, currentTime, duration]);
 
+  // Native Android media session: Android WebView does not implement Media Session.
+  // This plugin provides the notification, lock-screen and Bluetooth headset media-key bridge.
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+    const register = (action: 'play' | 'pause' | 'stop' | 'previoustrack' | 'nexttrack' | 'seekbackward' | 'seekforward' | 'seekto', handler: ((details: { seekTime?: number | null }) => void) | null) => {
+      void MediaSession.setActionHandler({ action }, handler).catch(() => {
+        // Keep in-app playback available if Android declines a media action.
+      });
+    };
+    register('play', () => handleTogglePlay());
+    register('pause', () => { if (isPlayingRef.current) handleTogglePlay(); });
+    register('stop', () => { if (isPlayingRef.current) handleTogglePlay(); });
+    register('previoustrack', () => advanceTrack(-1, false));
+    register('nexttrack', () => advanceTrack(1, false));
+    register('seekbackward', () => handleSeek(Math.max(0, currentTimeRef.current - 10)));
+    register('seekforward', () => handleSeek(Math.min(durationRef.current || 200, currentTimeRef.current + 10)));
+    register('seekto', (details) => {
+      if (typeof details.seekTime === 'number') handleSeek(details.seekTime);
+    });
+    return () => {
+      register('play', null);
+      register('pause', null);
+      register('stop', null);
+      register('previoustrack', null);
+      register('nexttrack', null);
+      register('seekbackward', null);
+      register('seekforward', null);
+      register('seekto', null);
+      void MediaSession.setPlaybackState({ playbackState: 'none' }).catch(() => {});
+    };
+  }, [handleTogglePlay, advanceTrack, handleSeek]);
+
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+    const updateNativeMetadata = async () => {
+      try {
+        if (!currentTrack) {
+          await MediaSession.setMetadata({ title: '', artist: '', album: '', artwork: [] });
+          return;
+        }
+        const artwork = currentTrack.image
+          ? [{ src: new URL(currentTrack.image, window.location.href).href }]
+          : [];
+        await MediaSession.setMetadata({
+          title: currentTrack.name,
+          artist: currentTrack.artist,
+          album: currentTrack.albumName || '',
+          artwork,
+        });
+      } catch {
+        // Metadata failures must never interrupt playback.
+      }
+    };
+    void updateNativeMetadata();
+  }, [currentTrack?.id, currentTrack?.name, currentTrack?.artist, currentTrack?.albumName, currentTrack?.image]);
+
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+    void MediaSession.setPlaybackState({
+      playbackState: currentTrack ? (isPlaying ? 'playing' : 'paused') : 'none',
+    }).catch(() => {
+      // Native media UI is optional; in-app playback remains available.
+    });
+  }, [currentTrack?.id, isPlaying]);
+
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform() || !currentTrack || duration <= 0 || !Number.isFinite(duration)) return;
+    void MediaSession.setPositionState({
+      duration,
+      playbackRate: 1,
+      position: Math.max(0, Math.min(duration, currentTime)),
+    }).catch(() => {
+      // Position reporting is optional on older Android versions.
+    });
+  }, [currentTrack?.id, currentTime, duration]);
+
   // Keyboard shortcuts
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -1694,7 +1772,7 @@ export default function App() {
       const newPl: CuratedPlaylist = {
         id: `user-pl-${Date.now()}`,
         name,
-        description: 'Created by you on Musick',
+        description: 'Created by you on MusicKK',
         image: tracks[0]?.image || ARTWORK.englishVinyl,
         language: 'Mixed',
         tracks,
@@ -2271,7 +2349,7 @@ export default function App() {
         onToggleLike={() => currentTrack && handleToggleLike(currentTrack)}
         onShare={() => {
           if (!currentTrack) return;
-          const text = `${currentTrack.name} — ${currentTrack.artist} on Musick`;
+          const text = `${currentTrack.name} — ${currentTrack.artist} on MusicKK`;
           navigator.clipboard?.writeText(text).catch(() => {});
           showToast('Track info copied to clipboard');
         }}

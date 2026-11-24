@@ -116,17 +116,16 @@ export function Header({
         <button
           type="button"
           onClick={onGoHome}
-          aria-label="Musick Home"
+          aria-label="MusicKK Home"
           className="flex items-center gap-2 rounded-full pr-1 focus:outline-none"
         >
-          <span className="grid h-8 w-8 place-items-center rounded-xl border border-[#62F58A]/25 bg-[#07120B] text-[#62F58A] shadow-[0_0_18px_rgba(98,245,138,0.12)]">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <path d="M4 18V6h3.1l4.9 6.1L16.9 6H20v12h-3V10.7l-5 6.1-5-6.1V18H4Z" fill="currentColor" />
+          <span className="grid h-8 w-8 place-items-center rounded-xl border border-[#62F58A]/25 bg-[#07120B] text-[#62F58A] shadow-[0_0_18px_rgba(98,245,138,0.12)]" aria-hidden="true">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+              <path d="M4 16V8M9 19V5M14 15V9M19 18V6" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/>
+              <path d="M3 20h18" stroke="currentColor" strokeOpacity=".35" strokeWidth="1.5" strokeLinecap="round"/>
             </svg>
           </span>
-          <span className="text-base font-extrabold tracking-tight text-white">
-            Musick
-          </span>
+          <span className="text-base font-extrabold tracking-tight text-white">MusicKK</span>
         </button>
 
         <div className="hidden items-center gap-1 pl-2 sm:flex">
