@@ -38,7 +38,7 @@
   </g>
   <g transform="translate(118 130)">
     <rect width="128" height="128" rx="30" fill="#050706" stroke="#62f58a" stroke-opacity=".4" stroke-width="2"/>
-    <path d="M25 91V37h16l23 28 23-28h16v54H87V59L64 87 41 59v32H25Z" fill="url(#mint)"/>
+    <path d="M90 250V190h34v60h-34Z M145 290V150h34v140h-34Z M200 220V180h34v40h-34Z M255 270V170h34v100h-34Z" fill="url(#mint)"/>
   </g>
   <g font-family="Inter,Arial,Helvetica,sans-serif" fill="#f3fff6">
     <text x="118" y="355" font-size="112" font-weight="750" letter-spacing="-5">MUSICKK</text>
