@@ -701,14 +701,14 @@ export default function App() {
       ...recommendedTracks,
       ...personalizedFeedTracks,
       ...regionalTracks,
-      ...Object.values(likedMap),
+      ...Object.values(recommendationLikedMap),
       ...SEED_TRACKS,
     ]) {
       if (!candidate?.id || !candidate.name || !candidate.artist) continue;
       if (!unique.has(candidate.id)) unique.set(candidate.id, candidate);
     }
     return [...unique.values()];
-  }, [recommendedTracks, personalizedFeedTracks, regionalTracks, likedMap]);
+  }, [recommendedTracks, personalizedFeedTracks, regionalTracks, recommendationLikedMap]);
 
 // Keep Discover's input identity stable across unrelated player/time updates.
   const discoverTracks = useMemo(
