@@ -5,6 +5,7 @@ import { isCollectionFullyDownloaded } from '../utils/offlineStore';
 import { formatTime, sortTracks } from '../utils/playerEngine';
 import { CoverImage } from './CoverImage';
 import { DownloadButton } from './DownloadButton';
+import { SuggestedMusic } from './SuggestedMusic';
 
 interface CollectionViewProps {
   collection: CollectionTarget;
@@ -20,6 +21,7 @@ interface CollectionViewProps {
   onEnqueue: (track: Track) => void;
   onAddToPlaylist: (track: Track) => void;
   onOpenVideo: (track: Track) => void;
+  suggestionCandidates: Track[];
 }
 
 export function CollectionView({
@@ -36,6 +38,7 @@ export function CollectionView({
   onEnqueue,
   onAddToPlaylist,
   onOpenVideo,
+  suggestionCandidates,
 }: CollectionViewProps) {
   const [filterText, setFilterText] = useState('');
   const [sortBy, setSortBy] = useState<'default' | 'title' | 'artist' | 'duration'>('default');
@@ -341,6 +344,20 @@ export function CollectionView({
               );
             })}
           </div>
+        </div>
+      )}
+
+      {!collection.spotifyEmbedUrl && sorted.length > 0 && (
+        <div className="mt-8 border-t border-white/10 pt-6">
+          <SuggestedMusic
+            title="Fits this playlist"
+            description="Recommendations shaped by the shared sound across this collection."
+            sourceTracks={sorted}
+            candidates={suggestionCandidates}
+            onPlay={(track) => onPlayList([track], 0)}
+            onEnqueue={onEnqueue}
+            onAddToPlaylist={onAddToPlaylist}
+          />
         </div>
       )}
     </section>
