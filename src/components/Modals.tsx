@@ -290,7 +290,7 @@ export function SpotifyImportModal({
         </div>
 
         <p className="mt-2 text-xs leading-relaxed text-zinc-400">
-          Paste a public Spotify track, album, or playlist link to import its metadata into Harmonia.
+          Paste a public Spotify track, album, or playlist link to import its metadata into MusicKK.
           Playback, when available, comes from separate providers; this does not unlock Spotify audio
           or guarantee a full-length track. You can also browse public playlist information below.
         </p>
@@ -421,7 +421,7 @@ export function VideoModal({
       <div className="flex max-h-[96dvh] w-full max-w-5xl flex-col overflow-hidden rounded-xl border border-white/10 bg-[#18181b] shadow-2xl">
         <div className="flex items-center justify-between gap-3 border-b border-white/[0.08] px-4 py-3">
           <h2 className="truncate text-sm font-extrabold text-white sm:text-base">
-            {activeVideo?.title || 'Harmonia Video Search'}
+            {activeVideo?.title || 'MusicKK Video Search'}
           </h2>
           <button
             type="button"
@@ -945,7 +945,7 @@ export function ProfileModal({
   if (!open) return null;
   const initial = displayName.trim().charAt(0).toUpperCase() || 'H';
   return (
-    <div role="dialog" aria-modal="true" aria-label="Your Harmonia profile" className="fixed inset-0 z-50 grid place-items-center bg-black/80 p-4 backdrop-blur-sm">
+    <div role="dialog" aria-modal="true" aria-label="Your MusicKK profile" className="fixed inset-0 z-50 grid place-items-center bg-black/80 p-4 backdrop-blur-sm">
       <div className="max-h-[90dvh] w-full max-w-lg overflow-y-auto rounded-2xl border border-white/10 bg-[#18181b] shadow-2xl">
         <div className="relative bg-gradient-to-br from-[#183b2a] via-[#20252a] to-[#18181b] px-5 pb-5 pt-4">
           <div className="flex justify-end">
@@ -956,7 +956,7 @@ export function ProfileModal({
             <div className="min-w-0 pb-1">
               <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#9ce8b7]">Your listener profile</p>
               <h2 className="truncate text-2xl font-extrabold text-white">{displayName.trim() || 'Listener'}</h2>
-              <p className="text-xs text-zinc-300">Harmonia · {region}</p>
+              <p className="text-xs text-zinc-300">MusicKK · {region}</p>
             </div>
           </div>
         </div>
