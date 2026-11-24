@@ -1,4 +1,4 @@
-import { Clock3, Heart, ListMusic, Music2, Play, Plus, Search, Sparkles, Trash2 } from 'lucide-react';
+import { Clock3, Heart, ListMusic, Play, Plus, Search, Sparkles, Trash2, Video } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { CuratedPlaylist, Track } from '../types/music';
 import { CoverImage } from './CoverImage';
@@ -113,7 +113,7 @@ export function LibraryView({
             <div className="mt-1.5 text-xl font-black tabular-nums text-white">{likedTracks.length}</div>
           </div>
           <div className="rounded-xl border border-white/[0.07] bg-black/20 px-3 py-3 sm:px-4">
-            <div className="flex items-center gap-2 text-zinc-400"><Music2 className="h-4 w-4" /><span className="text-[11px] font-semibold sm:text-xs">Tracks saved</span></div>
+            <div className="flex items-center gap-2 text-zinc-400"><Video className="h-4 w-4" /><span className="text-[11px] font-semibold sm:text-xs">Tracks in history</span></div>
             <div className="mt-1.5 text-xl font-black tabular-nums text-white">{totalTracks}</div>
           </div>
         </div>
