@@ -339,8 +339,7 @@ export async function fetchPlayableDiscoveries(region: MusicRegion, refresh = fa
       if (result.status !== 'fulfilled') continue;
       for (const track of result.value.tracks) {
         if (!isQualityDiscoverTrack(track)) continue;
-        const normalize = (value: string) => value.toLocaleLowerCase()
-          .normalize('NFKD').replace(/[\\u0300-\\u036f]/g, '').replace(/[^\\p{L}\\p{N}]+/gu, ' ').trim();
+        const normalize = (value: string) => value.toLocaleLowerCase().normalize('NFKC').trim().replace(/\\s+/g, ' ');
         const key = `${normalize(track.name)}::${normalize(track.artist.split(',')[0] || track.artist)}`;
         const existing = byRecording.get(key);
         if (!existing || (track.playCount || 0) > (existing.playCount || 0)) {
