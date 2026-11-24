@@ -8,6 +8,7 @@ import { DownloadButton } from './DownloadButton';
 interface DiscoverViewProps {
   tracks: Track[];
   globalTracks: Track[];
+  globalTracksLoading: boolean;
   regionalTracks: Track[];
   recentlyPlayed: Track[];
   downloadedIds: Set<string>;
@@ -33,6 +34,7 @@ const MOODS: Array<DiscoverMood | 'All'> = ['All', 'Bollywood Romantic', 'Anime 
 export function DiscoverView({
   tracks,
   globalTracks,
+  globalTracksLoading,
   regionalTracks,
   recentlyPlayed,
   downloadedIds,
@@ -58,7 +60,7 @@ export function DiscoverView({
     [tracks, recentlyPlayed, rotation, likedTracks, playCounts, artistAffinity, genreAffinity, preferredLanguages, favoriteArtists, preferredMoods]
   );
   const modePool = useMemo(() => {
-    if (mode === 'Global Charts') return [...(globalTracks.length ? globalTracks : tracks)].sort((a, b) => (b.playCount || 0) - (a.playCount || 0));
+    if (mode === 'Global Charts') return [...globalTracks].sort((a, b) => (b.playCount || 0) - (a.playCount || 0));
     if (mode === 'Regional Discover') return regionalTracks;
     if (mode === 'Global Discover') return [...globalTracks, ...varied];
     return tracks;
@@ -86,6 +88,9 @@ export function DiscoverView({
         </button>
       </div>
 
+      {mode === 'Global Charts' && globalTracksLoading && (
+        <p role="status" className="text-xs text-zinc-400">Loading worldwide chart data…</p>
+      )}
       <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {DISCOVER_MODES.map((item) => (
           <button key={item} type="button" onClick={() => setMode(item)} aria-pressed={mode === item} className={`shrink-0 rounded-full border px-3 py-2 text-xs font-semibold ${mode === item ? 'border-[#7ee2a8] bg-[#7ee2a8] text-black' : 'border-white/10 bg-[#242428] text-zinc-300'}`}>{item}</button>
