@@ -44,7 +44,7 @@ export function WelcomeExperience({
             <span className="welcome-ring absolute -inset-3 rounded-[2.7rem] border border-[#7ee2a8]/20" />
           </div>
           <p className="mb-3 text-xs font-bold uppercase tracking-[0.38em] text-[#83e9a7]">Your sound. Your space.</p>
-          <h1 className="text-5xl font-black tracking-[-0.07em] sm:text-6xl">Musick<span className="text-[#75e99b]">.</span></h1>
+          <h1 className="text-5xl font-black tracking-[-0.07em] sm:text-6xl">MusicKK<span className="text-[#75e99b]">.</span></h1>
           <p className="mt-4 max-w-xs text-sm leading-6 text-zinc-400">
             One place for the music you love, wherever you find it.
           </p>
