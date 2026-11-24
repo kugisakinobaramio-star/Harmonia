@@ -184,7 +184,7 @@ export async function downloadTrackForOffline(
   quality: AudioQuality = '320kbps'
 ): Promise<OfflineTrackRecord> {
   if (track.offlineAvailable === false || track.sourceProvider === 'Jamendo') {
-    throw new Error('This provider supports online listening only in Harmonia.');
+    throw new Error('This provider supports online listening only in MusicKK.');
   }
   let workingTrack: Track & { alternates?: string[] } = track;
   let candidates = collectDownloadCandidateUrls(workingTrack, quality).filter((url) => !isShortPreviewUrl(url));
@@ -193,7 +193,7 @@ export async function downloadTrackForOffline(
     const resolved = await resolveTrackStreams(track, { forceRefresh: candidates.length === 0 });
     workingTrack = { ...track, ...resolved, alternates: resolved.alternates };
     if (workingTrack.offlineAvailable === false || workingTrack.sourceProvider === 'Jamendo') {
-      throw new Error('This provider supports online listening only in Harmonia.');
+      throw new Error('This provider supports online listening only in MusicKK.');
     }
     candidates = collectDownloadCandidateUrls(workingTrack, quality).filter((url) => !isShortPreviewUrl(url));
   }
@@ -229,7 +229,7 @@ export async function downloadTrackForOffline(
     language: track.language,
     size: downloadedBlob.size,
     blob: downloadedBlob,
-    provider: 'Harmonia Offline',
+    provider: 'MusicKK Offline',
     sourceUrl: usedUrl,
     downloadedAt: Date.now(),
   };
