@@ -17,6 +17,7 @@ import type { AudioQuality, LyricLine, RepeatMode, Track } from '../types/music'
 import { formatTime, QUALITY_LABELS, resolveActiveLyricPair } from '../utils/playerEngine';
 import { CoverImage } from './CoverImage';
 import { DownloadButton } from './DownloadButton';
+import { SuggestedMusic } from './SuggestedMusic';
 
 interface ExpandedPlayerProps {
   open: boolean;
@@ -45,6 +46,10 @@ interface ExpandedPlayerProps {
   onOpenVideo: () => void;
   onShare: () => void;
   onCycleQuality: () => void;
+  suggestionCandidates: Track[];
+  onPlaySuggested: (track: Track) => void;
+  onEnqueueSuggested: (track: Track) => void;
+  onAddSuggestedToPlaylist: (track: Track) => void;
 }
 
 export function ExpandedPlayer({
@@ -74,6 +79,10 @@ export function ExpandedPlayer({
   onOpenVideo,
   onShare,
   onCycleQuality,
+  suggestionCandidates,
+  onPlaySuggested,
+  onEnqueueSuggested,
+  onAddSuggestedToPlaylist,
 }: ExpandedPlayerProps) {
   if (!open || !track) return null;
 
@@ -320,6 +329,17 @@ export function ExpandedPlayer({
               })}
             </div>
           )}
+          <div className="mt-5 border-t border-white/10 pt-4">
+            <SuggestedMusic
+              title="Made for this sound"
+              description="Picked from the mood, language and sound of this track."
+              sourceTracks={[track]}
+              candidates={suggestionCandidates}
+              onPlay={onPlaySuggested}
+              onEnqueue={onEnqueueSuggested}
+              onAddToPlaylist={onAddSuggestedToPlaylist}
+            />
+          </div>
         </div>
       </div>
     </div>
