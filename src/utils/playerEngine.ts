@@ -1125,7 +1125,7 @@ export function isQualityDiscoverTrack(track: Track): boolean {
     !track.metadataOnly &&
     track.sourceAvailability !== 'metadata' &&
     track.sourceAvailability !== 'preview' &&
-    hasFullAudioStream(track) &&
+    (hasFullAudioStream(track) || track.sourceAvailability === 'full' || track.sourceAvailability === 'lookup') &&
     isPlausibleSongDuration(track.duration) &&
     !isInstrumentalOrLowValueTrack(track)
   );
