@@ -181,6 +181,28 @@ export function selectStreamUrl(
   return track.previewUrl || '';
 }
 
+export function createShuffleBag(
+  tracks: Track[],
+  currentTrackId?: string,
+  randomFn: () => number = Math.random
+): string[] {
+  const seen = new Set<string>();
+  const bag = tracks
+    .map((track) => track.id)
+    .filter((id) => {
+      if (!id || id === currentTrackId || seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    });
+
+  for (let i = bag.length - 1; i > 0; i--) {
+    const random = Math.max(0, Math.min(0.999999999, randomFn()));
+    const j = Math.floor(random * (i + 1));
+    [bag[i], bag[j]] = [bag[j], bag[i]];
+  }
+  return bag;
+}
+
 export function resolveNextTrackIndex(params: {
   queueLength: number;
   currentIndex: number;
@@ -743,15 +765,17 @@ export function filterAndRankTracks(
     }
 
     if (score > 0) {
+      // Prefer complete, playable recordings over previews and metadata-only entries.
+      if (hasFullAudioStream(track)) score += 34;
+      else if (track.previewUrl || (track.streamUrls && Object.values(track.streamUrls).some(Boolean))) score -= 24;
+      else if (track.metadataOnly) score -= 12;
+      if (isPlausibleSongDuration(track.duration)) score += 5;
       if (prioritizeLyrics) {
-        if (track.hasLyrics || (track.lyrics && track.lyrics.length > 0)) {
-          score += 20;
-        }
-        if (isUnnecessaryNoLyricsTrack(track)) {
-          score -= 80;
-        }
+        if (track.hasLyrics || (track.lyrics && track.lyrics.length > 0)) score += 12;
+        if (isUnnecessaryNoLyricsTrack(track)) score -= 80;
       }
-      const popBoost = track.playCount ? Math.min(10, Math.log10(track.playCount)) : 0;
+      // Popularity is a tie-breaker, not a substitute for title/artist relevance.
+      const popBoost = track.playCount ? Math.min(4, Math.log10(track.playCount) * 0.8) : 0;
       scored.push({ track, score: score + popBoost });
     }
   }
@@ -1047,7 +1071,7 @@ export function trackMatchesDiscoverMood(track: Track, mood: DiscoverMood): bool
     case 'Bollywood Romantic':
       return /bollywood|romantic|love song|ballad/.test(genre);
     case 'Anime & J-Pop':
-      return language === 'Japanese' || language === 'J-Pop' || /j-pop|anime/.test(genre) || synthMood === 'jpop';
+      return /j-pop|anime/.test(genre) || synthMood === 'jpop';
     case 'Late Night Dark':
       return /ambient|dark|downtempo|lo-fi|lofi|chill|trip-hop/.test(genre) || synthMood === 'ambient' || synthMood === 'lofi';
     case 'Acoustic Unplugged':

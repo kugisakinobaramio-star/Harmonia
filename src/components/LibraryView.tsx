@@ -4,7 +4,7 @@ import type { CuratedPlaylist, Track } from '../types/music';
 import { CoverImage } from './CoverImage';
 import { DownloadButton } from './DownloadButton';
 
-type LibraryFilter = 'all' | 'playlists' | 'liked' | 'recent';
+type LibraryFilter = 'all' | 'playlists' | 'imported' | 'liked' | 'recent';
 
 interface LibraryViewProps {
   likedMap: Record<string, Track>;
@@ -28,6 +28,7 @@ interface LibraryViewProps {
 const filters: { id: LibraryFilter; label: string }[] = [
   { id: 'all', label: 'Everything' },
   { id: 'playlists', label: 'Playlists' },
+  { id: 'imported', label: 'Imported' },
   { id: 'liked', label: 'Liked songs' },
   { id: 'recent', label: 'Recently played' },
 ];
@@ -61,10 +62,11 @@ export function LibraryView({
 
   const visiblePlaylists = useMemo(
     () => playlists.filter((playlist) =>
-      !normalizedQuery || matchesQuery(`${playlist.name} ${playlist.description}`, normalizedQuery) ||
-      playlist.tracks.some((track) => matchesQuery(`${track.name} ${track.artist}`, normalizedQuery))
+      (filter !== 'imported' || Boolean(playlist.sourcePageUrl)) &&
+      (!normalizedQuery || matchesQuery(`${playlist.name} ${playlist.description}`, normalizedQuery) ||
+      playlist.tracks.some((track) => matchesQuery(`${track.name} ${track.artist}`, normalizedQuery)))
     ),
-    [playlists, normalizedQuery]
+    [playlists, normalizedQuery, filter]
   );
   const visibleLiked = useMemo(
     () => likedTracks.filter((track) => !normalizedQuery || matchesQuery(`${track.name} ${track.artist} ${track.albumName}`, normalizedQuery)),
@@ -75,7 +77,7 @@ export function LibraryView({
     [recentlyPlayed, normalizedQuery]
   );
 
-  const showPlaylists = filter === 'all' || filter === 'playlists';
+  const showPlaylists = filter === 'all' || filter === 'playlists' || filter === 'imported';
   const showLiked = filter === 'all' || filter === 'liked';
   const showRecent = filter === 'all' || filter === 'recent';
   const totalTracks = new Set([...likedTracks, ...recentlyPlayed].map((track) => track.id)).size;

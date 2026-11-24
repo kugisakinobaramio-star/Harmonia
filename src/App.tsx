@@ -24,6 +24,7 @@ import { RightPanel } from './components/RightPanel';
 import { SearchView } from './components/SearchView';
 import { WelcomeExperience } from './components/WelcomeExperience';
 import { Sidebar } from './components/Sidebar';
+import { StartupScreen } from './components/StartupScreen';
 import { ARTWORK, SEED_ARTISTS, SEED_PLAYLISTS, SEED_TRACKS } from './data/catalog';
 import type {
   ArtistProfile,
@@ -46,7 +47,6 @@ import {
   buildTasteProfile,
   fetchBackendUserState,
   fetchRegionalDiscovery,
-  fetchSpotifyPlaylists,
   fetchTrackLyrics,
   resolveSpotifyUrl,
   resolveTrackStreams,
@@ -59,6 +59,7 @@ import {
 import {
   addTrackToPlaylist,
   cycleQuality,
+  createShuffleBag,
   deriveDynamicTasteHighlights,
   hasFullAudioStream,
   hasFullPlaybackSource,
@@ -70,6 +71,7 @@ import {
   removeQueueItem,
   resolveNextTrackIndex,
   scoreTrackForUser,
+  scoreAuthenticTrackCandidate,
   toggleTrackInLiked,
 } from './utils/playerEngine';
 import { partitionStreamCandidates } from './utils/streamCandidates';
@@ -139,10 +141,16 @@ function loadLocalSnapshot(): {
 
 export default function App() {
   const initialSnap = useMemo(() => loadLocalSnapshot(), []);
-  const [welcomeVisible, setWelcomeVisible] = useState(true);
   const [welcomeSetupComplete] = useState(
     () => typeof window !== 'undefined' && localStorage.getItem('musick_mood_setup_complete_v1') === 'true'
   );
+  const [welcomeVisible, setWelcomeVisible] = useState(() => !welcomeSetupComplete);
+  const [startupVisible, setStartupVisible] = useState(true);
+
+  useEffect(() => {
+    const startupTimer = window.setTimeout(() => setStartupVisible(false), 850);
+    return () => window.clearTimeout(startupTimer);
+  }, []);
 
   // Navigation & history stack
   const [navHistory, setNavHistory] = useState<NavEntry[]>([{ view: 'home', collection: null }]);
@@ -218,11 +226,11 @@ export default function App() {
   );
 
   // Audio playback state
-  const [queue, setQueue] = useState<Track[]>(SEED_PLAYLISTS[0].tracks);
+  const [queue, setQueue] = useState<Track[]>([]);
   const [currentIndex, setCurrentIndex] = useState<number>(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(SEED_PLAYLISTS[0].tracks[0]?.duration || 268);
+  const [duration, setDuration] = useState(0);
   const [shuffle, setShuffle] = useState(false);
   const [repeatMode, setRepeatMode] = useState<RepeatMode>(0);
   const [volume, setVolume] = useState<number>(
@@ -233,11 +241,10 @@ export default function App() {
   const [sleepMinutesLeft, setSleepMinutesLeft] = useState<number | null>(null);
 
   // Synced Lyrics state
-  const [lyrics, setLyrics] = useState<LyricLine[]>(SEED_PLAYLISTS[0].tracks[0]?.lyrics || []);
+  const [lyrics, setLyrics] = useState<LyricLine[]>([]);
   const [lyricsSynced, setLyricsSynced] = useState(true);
 
-  // Spotify Free curated playlists + user modals & toast
-  const [spotifyPlaylists, setSpotifyPlaylists] = useState<CuratedPlaylist[]>([]);
+  // User modals & toast
   const [expandedPlayerOpen, setExpandedPlayerOpen] = useState(false);
   const [createPlaylistOpen, setCreatePlaylistOpen] = useState(false);
   const [addToPlaylistTrack, setAddToPlaylistTrack] = useState<Track | null>(null);
@@ -277,6 +284,10 @@ export default function App() {
   const isYtReadyRef = useRef<boolean>(false);
   const pendingYtVideoIdRef = useRef<string | null>(null);
   const advanceTrackRef = useRef<(direction: 1 | -1, autoAdvance: boolean) => void>(() => {});
+  // Track IDs, rather than queue positions, keep shuffle history stable when
+  // users reorder or remove queue entries.
+  const shuffleHistoryRef = useRef<string[]>([]);
+  const shuffleFutureRef = useRef<string[]>([]);
 
   useEffect(() => {
     isPlayingRef.current = isPlaying;
@@ -307,9 +318,9 @@ export default function App() {
       } catch {
         // Non-fatal
       }
-    }, 1000);
+    }, expandedPlayerOpen || activeView === 'lyrics' ? 250 : 1000);
     return () => window.clearInterval(interval);
-  }, [isPlaying]);
+  }, [isPlaying, expandedPlayerOpen, activeView]);
 
   const showToast = useCallback((msg: string) => {
     setToastMsg(msg);
@@ -529,16 +540,23 @@ export default function App() {
     eqPreset,
   ]);
 
-  // Fetch live Spotify Free editorial playlists on mount (zero API keys, zero ads)
+  // Load worldwide discovery only when the listener opens Discover, keeping startup lighter.
+  const [globalTracks, setGlobalTracks] = useState<Track[]>([]);
+  const [globalTracksLoaded, setGlobalTracksLoaded] = useState(false);
+  const [globalTracksLoading, setGlobalTracksLoading] = useState(false);
   useEffect(() => {
-    let active = true;
-    fetchSpotifyPlaylists().then((pls) => {
-      if (active && pls.length) setSpotifyPlaylists(pls);
+    if (activeView !== 'discover' || globalTracksLoaded) return;
+    let cancelled = false;
+    setGlobalTracksLoading(true);
+    fetchRegionalDiscovery('GLOBAL').then((tracks) => {
+      if (cancelled) return;
+      setGlobalTracks(tracks);
+      setGlobalTracksLoaded(true);
+    }).finally(() => {
+      if (!cancelled) setGlobalTracksLoading(false);
     });
-    return () => {
-      active = false;
-    };
-  }, []);
+    return () => { cancelled = true; };
+  }, [activeView, globalTracksLoaded]);
 
   // Fetch location-based tracks whenever region updates
   useEffect(() => {
@@ -1380,25 +1398,90 @@ export default function App() {
     (tracks: Track[], startIndex: number, useShuffle = false) => {
       if (!tracks.length) return;
       const safeIndex = Math.max(0, Math.min(tracks.length - 1, startIndex));
-      if (useShuffle) setShuffle(true);
+      const shouldShuffle = useShuffle || shuffle;
+      shuffleHistoryRef.current = [];
+      shuffleFutureRef.current = shouldShuffle
+        ? createShuffleBag(tracks, tracks[safeIndex]?.id)
+        : [];
+      setShuffle(shouldShuffle);
       setQueue(tracks);
       setCurrentIndex(safeIndex);
       startTrackPlayback(tracks[safeIndex]);
     },
-    [startTrackPlayback]
+    [startTrackPlayback, shuffle]
   );
+
+  const handleToggleShuffle = useCallback(() => {
+    if (shuffle) {
+      shuffleHistoryRef.current = [];
+      shuffleFutureRef.current = [];
+      setShuffle(false);
+      showToast('Shuffle off');
+      return;
+    }
+    shuffleHistoryRef.current = [];
+    shuffleFutureRef.current = createShuffleBag(queue, currentTrack?.id);
+    setShuffle(true);
+    showToast('Shuffle on — no repeats until the queue cycles');
+  }, [shuffle, queue, currentTrack?.id, showToast]);
 
   const advanceTrack = useCallback(
     (direction: 1 | -1, autoAdvance: boolean) => {
-      const nextIdx = resolveNextTrackIndex({
-        queueLength: queue.length,
-        currentIndex,
-        direction,
-        shuffle,
-        repeatMode,
-        autoAdvance,
-      });
-      if (nextIdx === null) {
+      let nextIdx: number | null;
+      const currentId = queue[currentIndex]?.id;
+
+      if (shuffle && queue.length > 1) {
+        if (autoAdvance && direction === 1 && repeatMode === 2) {
+          nextIdx = currentIndex;
+        } else if (direction === -1) {
+          let previousId: string | undefined;
+          while (shuffleHistoryRef.current.length && !previousId) {
+            const candidate = shuffleHistoryRef.current.pop()!;
+            if (queue.some((item) => item.id === candidate)) previousId = candidate;
+          }
+          if (previousId) {
+            if (currentId) shuffleFutureRef.current.unshift(currentId);
+            nextIdx = queue.findIndex((item) => item.id === previousId);
+          } else {
+            nextIdx = resolveNextTrackIndex({
+              queueLength: queue.length, currentIndex, direction,
+              shuffle: false, repeatMode, autoAdvance: false,
+            });
+            // If shuffle was enabled mid-queue, make the manually selected
+            // previous track part of history so Next returns to this track.
+            if (nextIdx !== null && currentId) shuffleFutureRef.current.unshift(currentId);
+          }
+        } else {
+          let nextId: string | undefined;
+          while (shuffleFutureRef.current.length && !nextId) {
+            const candidate = shuffleFutureRef.current.shift()!;
+            if (candidate !== currentId && queue.some((item) => item.id === candidate)) {
+              nextId = candidate;
+            }
+          }
+          if (!nextId && (repeatMode === 1 || !autoAdvance)) {
+            shuffleFutureRef.current = createShuffleBag(queue, currentId);
+            nextId = shuffleFutureRef.current.shift();
+          }
+          if (nextId) {
+            if (currentId) shuffleHistoryRef.current.push(currentId);
+            nextIdx = queue.findIndex((item) => item.id === nextId);
+          } else {
+            nextIdx = null;
+          }
+        }
+      } else {
+        nextIdx = resolveNextTrackIndex({
+          queueLength: queue.length,
+          currentIndex,
+          direction,
+          shuffle: false,
+          repeatMode,
+          autoAdvance,
+        });
+      }
+
+      if (nextIdx === null || nextIdx < 0) {
         setIsPlaying(false);
         audioRef.current?.pause();
         audioRef2.current?.pause();
@@ -1440,7 +1523,7 @@ export default function App() {
           // re-rendering the entire app for every native timeupdate event.
           currentTimeRef.current = audio.currentTime;
           const now = Date.now();
-          if (now - lastProgressUiUpdateRef.current >= 1000) {
+          if (now - lastProgressUiUpdateRef.current >= (expandedPlayerOpen || activeView === 'lyrics' ? 250 : 1000)) {
             lastProgressUiUpdateRef.current = now;
             setCurrentTime(audio.currentTime);
           }
@@ -1462,7 +1545,7 @@ export default function App() {
       };
     });
     return () => cleanups.forEach((cleanup) => cleanup());
-  }, [advanceTrack, loadAndPlayCandidate, showToast]);
+  }, [advanceTrack, loadAndPlayCandidate, showToast, expandedPlayerOpen, activeView]);
 
   const handleTogglePlay = useCallback(() => {
     if (!currentTrack) return;
@@ -1757,9 +1840,12 @@ export default function App() {
   const handleEnqueue = useCallback(
     (track: Track) => {
       setQueue((prev) => [...prev, track]);
+      if (shuffle && !shuffleFutureRef.current.includes(track.id) && !shuffleHistoryRef.current.includes(track.id)) {
+        shuffleFutureRef.current.push(track.id);
+      }
       showToast(`Added "${track.name}" to Queue`);
     },
-    [showToast]
+    [showToast, shuffle]
   );
 
   const handleCreatePlaylist = useCallback(
@@ -1912,6 +1998,7 @@ export default function App() {
         subtitle: pl.description,
         image: pl.tracks[0]?.image || pl.image || ARTWORK.englishVinyl,
         tracks: pl.tracks,
+        sourcePageUrl: pl.sourcePageUrl,
         spotifyEmbedUrl: pl.id.startsWith('spotify-pl-')
           ? `https://open.spotify.com/embed/playlist/${pl.id.slice('spotify-pl-'.length)}`
           : undefined,
@@ -1964,24 +2051,73 @@ export default function App() {
   const handleImportSpotifyUrl = useCallback(
     async (rawUrl: string): Promise<{ ok: boolean; error?: string }> => {
       const res = await resolveSpotifyUrl(rawUrl);
-      if (res.ok && res.tracks?.length) {
-        navigateTo('collection', {
-          kind: 'playlist',
-          id: `sp-import-${res.id || Date.now()}`,
-          title: res.title || 'Spotify Stream',
-          subtitle: res.subtitle || 'Ad-Free Spotify Streaming',
-          image: res.image || res.tracks[0].image || ARTWORK.englishVinyl,
-          tracks: res.tracks,
-          spotifyEmbedUrl: res.kind && res.id
-            ? `https://open.spotify.com/embed/${res.kind}/${res.id}`
-            : undefined,
-        });
-        showToast('Spotify player loaded. Use its Play button below to start playback.');
-        return { ok: true };
+      if (!res.ok || res.kind !== 'playlist' || !res.tracks?.length) {
+        return { ok: false, error: res.error || 'This link did not return an importable Spotify playlist.' };
       }
-      return { ok: false, error: res.error || 'Could not resolve Spotify link' };
+      const importedTracks: Track[] = [];
+      for (let offset = 0; offset < res.tracks.length; offset += 4) {
+        const batch = res.tracks.slice(offset, offset + 4);
+        const matchedBatch = await Promise.all(batch.map(async (spotifyTrack, batchIndex) => {
+          try {
+            const found = await searchSongs(`${spotifyTrack.name} ${spotifyTrack.artist}`, { region, prioritizeLyrics: false });
+            const candidates = found.tracks
+              .map((candidate) => ({
+                track: candidate,
+                score: scoreAuthenticTrackCandidate({
+                  itemTitle: candidate.name,
+                  itemArtist: candidate.artist,
+                  requestedTitle: spotifyTrack.name,
+                  requestedArtist: spotifyTrack.artist,
+                  itemDurationSec: candidate.duration,
+                  targetDurationSec: spotifyTrack.duration,
+                }),
+              }))
+              .filter((item): item is { track: Track; score: number } => item.score !== null)
+              .sort((a, b) =>
+                (b.score + (hasFullAudioStream(b.track) ? 40 : 0)) -
+                (a.score + (hasFullAudioStream(a.track) ? 40 : 0))
+              );
+            if (candidates[0]) return candidates[0].track;
+          } catch {
+            // Preserve the Spotify metadata if a provider search fails.
+          }
+          return {
+            ...spotifyTrack,
+            id: `spotify-meta-${res.id || 'playlist'}-${offset + batchIndex}-${spotifyTrack.id}`,
+            metadataOnly: true,
+            sourceProvider: 'Spotify',
+            sourceAvailability: 'metadata' as const,
+            streamUrls: undefined,
+            previewUrl: undefined,
+          };
+        }));
+        importedTracks.push(...matchedBatch);
+      }
+      const playlistId = `spotify-import-${res.id || Date.now()}`;
+      const importedPlaylist: CuratedPlaylist = {
+        id: playlistId,
+        name: res.title || 'Imported Spotify Playlist',
+        description: `Imported from Spotify · ${importedTracks.length} tracks · unmatched tracks retained`,
+        image: res.image || res.tracks[0]?.image || ARTWORK.englishVinyl,
+        language: 'Mixed',
+        tracks: importedTracks,
+        isUserCreated: true,
+        sourcePageUrl: res.id ? `https://open.spotify.com/playlist/${res.id}` : undefined,
+      };
+      setUserPlaylists((previous) => {
+        if (previous.some((playlist) => playlist.id === playlistId)) {
+          showToast('This Spotify playlist is already in your Library.');
+          return previous;
+        }
+        const next = [importedPlaylist, ...previous];
+        syncBackendPlaylists(next);
+        return next;
+      });
+      const matchedCount = importedTracks.filter((track) => !track.metadataOnly).length;
+      showToast(`Imported “${importedPlaylist.name}” · ${matchedCount}/${importedTracks.length} matched`);
+      return { ok: true };
     },
-    [navigateTo, showToast]
+    [region, showToast]
   );
 
   // Video search uses request sequencing so slower older searches cannot overwrite newer results.
@@ -2126,7 +2262,6 @@ export default function App() {
                 recommendedTracks={recommendedTracks}
                 recommendationReason={recommendationReason}
                 regionalTracks={regionalTracks}
-                spotifyPlaylists={spotifyPlaylists}
                 recentlyPlayed={recentlyPlayed}
                 likedCount={likedTracks.length}
                 likedTracks={likedTracks}
@@ -2136,7 +2271,6 @@ export default function App() {
                 downloadingIds={downloadingIds}
                 onPlayTrackList={playTrackList}
                 onToggleDownload={handleToggleDownload}
-                onOpenPlaylist={openPlaylistCollection}
                 onOpenLiked={openLikedCollection}
                 onOpenRecent={openRecentCollection}
                 onOpenPersonalise={openPersonalise}
@@ -2146,6 +2280,9 @@ export default function App() {
             {activeView === 'discover' && (
               <DiscoverView
                 tracks={discoverTracks}
+                globalTracks={globalTracks}
+                globalTracksLoading={globalTracksLoading}
+                regionalTracks={regionalTracks}
                 recentlyPlayed={recentlyPlayed}
                 downloadedIds={downloadedIds}
                 downloadingIds={downloadingIds}
@@ -2344,7 +2481,7 @@ export default function App() {
         onTogglePlay={handleTogglePlay}
         onPrev={() => advanceTrack(-1, false)}
         onNext={() => advanceTrack(1, false)}
-        onToggleShuffle={() => setShuffle((s) => !s)}
+        onToggleShuffle={handleToggleShuffle}
         onCycleRepeat={() => setRepeatMode((r) => ((r + 1) % 3) as RepeatMode)}
         onToggleLike={() => currentTrack && handleToggleLike(currentTrack)}
         onShare={() => {
@@ -2485,12 +2622,6 @@ export default function App() {
       <SpotifyImportModal
         open={spotifyImportOpen}
         onClose={() => setSpotifyImportOpen(false)}
-        onSearchQuery={(q) => {
-          setSearchQuery(q);
-          setSearchTab('songs');
-          navigateTo('search', null);
-        }}
-        onSwitchToVideos={(q) => openVideosForQuery(q)}
         onImportSpotifyUrl={handleImportSpotifyUrl}
       />
 
@@ -2548,6 +2679,8 @@ export default function App() {
           }}
         />
       )}
+
+      {startupVisible && <StartupScreen />}
 
       {/* Subtle Toast */}
       {toastMsg && (

@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import {
   Check,
   ChevronDown,
@@ -84,11 +85,18 @@ export function ExpandedPlayer({
   onEnqueueSuggested,
   onAddSuggestedToPlaylist,
 }: ExpandedPlayerProps) {
-  if (!open || !track) return null;
-
-  const safeDuration = duration > 0 ? duration : track.duration || 200;
+  const lyricListRef = useRef<HTMLDivElement | null>(null);
+  const activeLyricRef = useRef<HTMLButtonElement | null>(null);
+  const safeDuration = duration > 0 ? duration : track?.duration || 200;
   const progressPct = Math.min(100, Math.max(0, (currentTime / safeDuration) * 100));
   const { activeIndex } = resolveActiveLyricPair(lyrics, currentTime, safeDuration);
+
+  useEffect(() => {
+    if (!open || activeIndex < 0 || !activeLyricRef.current || !lyricListRef.current) return;
+    activeLyricRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [open, activeIndex, track?.id]);
+
+  if (!open || !track) return null;
 
   return (
     <div
@@ -311,12 +319,13 @@ export function ExpandedPlayer({
               Lyrics unavailable for this recording.
             </div>
           ) : (
-            <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-2">
+            <div ref={lyricListRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-2">
               {lyrics.map((line, idx) => {
                 const isActive = idx === activeIndex;
                 return (
                   <button
                     key={`${idx}-${line.time}`}
+                    ref={isActive ? activeLyricRef : null}
                     type="button"
                     onClick={() => onSeek(line.time)}
                     className={`block w-full rounded-md px-2 py-1 text-left text-lg font-bold leading-snug transition-colors hover:bg-white/[0.05] sm:text-xl ${

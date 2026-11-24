@@ -2,7 +2,6 @@ import { Play, Sparkles } from 'lucide-react';
 import { memo, useMemo } from 'react';
 import { SEED_PLAYLISTS } from '../data/catalog';
 import type {
-  CuratedPlaylist,
   MusicLanguage,
   MusicRegion,
   Track,
@@ -20,7 +19,6 @@ interface HomeViewProps {
   recommendedTracks: Track[];
   recommendationReason: string;
   regionalTracks: Track[];
-  spotifyPlaylists: CuratedPlaylist[];
   recentlyPlayed: Track[];
   likedCount: number;
   likedTracks: Track[];
@@ -30,7 +28,6 @@ interface HomeViewProps {
   downloadingIds: Set<string>;
   onPlayTrackList: (tracks: Track[], startIndex: number) => void;
   onToggleDownload: (track: Track) => void;
-  onOpenPlaylist: (pl: CuratedPlaylist) => void;
   onOpenLiked: () => void;
   onOpenRecent: () => void;
   onOpenPersonalise: () => void;
@@ -45,7 +42,6 @@ export const HomeView = memo(function HomeView({
   recommendedTracks,
   recommendationReason,
   regionalTracks,
-  spotifyPlaylists,
   recentlyPlayed,
   likedCount,
   likedTracks,
@@ -55,7 +51,6 @@ export const HomeView = memo(function HomeView({
   downloadingIds,
   onPlayTrackList,
   onToggleDownload,
-  onOpenPlaylist,
   onOpenLiked,
   onOpenRecent,
   onOpenPersonalise,
@@ -152,13 +147,6 @@ export const HomeView = memo(function HomeView({
           onPlay: () => onPlayTrackList(regionalTracks, 0),
         }]
       : []),
-    ...spotifyPlaylists.slice(0, 3).map((playlist) => ({
-      id: playlist.id,
-      title: playlist.name,
-      image: playlist.image,
-      onOpen: () => onOpenPlaylist(playlist),
-      onPlay: () => onPlayTrackList(playlist.tracks, 0),
-    })),
   ].slice(0, 6);
 
   const renderTrackShelf = (title: string, subtitle: string, tracks: Track[]) => {
@@ -325,63 +313,6 @@ export const HomeView = memo(function HomeView({
 
       {randomDiscoverTracks.length > 0 &&
         renderTrackShelf('A Little Outside Your Usual', 'A rotating mix to help you discover something different', randomDiscoverTracks)}
-
-      {/* Spotify Playlist Discovery */}
-      {spotifyPlaylists.length > 0 && (
-        <section className="space-y-3">
-          <div className="flex items-baseline justify-between gap-2">
-            <div>
-              <h2 className="text-xl font-bold tracking-tight text-white">
-                Spotify Free Mixes
-              </h2>
-              <p className="text-xs text-zinc-400">
-                Public Spotify playlist discovery · Playback uses available licensed audio sources
-              </p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3.5 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5">
-            {spotifyPlaylists
-              .filter(
-                (pl) =>
-                  languageFilter === 'All' ||
-                  pl.language === languageFilter ||
-                  pl.language === 'Mixed'
-              )
-              .slice(0, 5)
-              .map((pl) => (
-                <div
-                  key={pl.id}
-                  className="harmonia-music-card group relative rounded-xl p-3"
-                >
-                  <button
-                    type="button"
-                    onClick={() => onOpenPlaylist(pl)}
-                    className="w-full text-left focus:outline-none"
-                  >
-                    <div className="relative aspect-square w-full overflow-hidden rounded-md bg-black shadow-lg">
-                      <CoverImage
-                        src={pl.image}
-                        alt={pl.name}
-                        className="h-full w-full object-cover"
-                      />
-                    </div>
-                    <div className="mt-3 truncate text-sm font-bold text-white">{pl.name}</div>
-                    <div className="mt-0.5 truncate text-xs text-zinc-400">{pl.description}</div>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => onPlayTrackList(pl.tracks, 0)}
-                    aria-label={`Play ${pl.name}`}
-                    className="absolute bottom-[74px] right-5 grid h-10 w-10 translate-y-2 place-items-center rounded-full bg-[#1DB954] text-black opacity-0 shadow-xl transition-all duration-150 hover:scale-105 group-hover:translate-y-0 group-hover:opacity-100 focus:opacity-100"
-                  >
-                    <Play className="h-4 w-4 fill-current pl-0.5" />
-                  </button>
-                </div>
-              ))}
-          </div>
-        </section>
-      )}
 
       {/* Location-Based Regional Charts */}
       {renderTrackShelf(
