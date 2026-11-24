@@ -2533,12 +2533,6 @@ export default function App() {
       <SpotifyImportModal
         open={spotifyImportOpen}
         onClose={() => setSpotifyImportOpen(false)}
-        onSearchQuery={(q) => {
-          setSearchQuery(q);
-          setSearchTab('songs');
-          navigateTo('search', null);
-        }}
-        onSwitchToVideos={(q) => openVideosForQuery(q)}
         onImportSpotifyUrl={handleImportSpotifyUrl}
       />
 
