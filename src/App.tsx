@@ -2309,8 +2309,13 @@ export default function App() {
                 onPlayTrackList={playTrackList}
                 onToggleDownload={handleToggleDownload}
                 onRefresh={async () => {
-                  const freshTracks = await fetchRegionalDiscovery(region, true);
-                  setRegionalTracks(freshTracks);
+                  const [freshGlobal, freshRegional] = await Promise.all([
+                    fetchRegionalDiscovery('GLOBAL', true),
+                    fetchRegionalDiscovery(region, true),
+                  ]);
+                  setGlobalTracks(freshGlobal);
+                  setGlobalTracksLoaded(true);
+                  setRegionalTracks(freshRegional);
                 }}
                 likedTracks={Object.values(recommendationLikedMap)}
                 playCounts={playCounts}
