@@ -24,6 +24,7 @@ import { RightPanel } from './components/RightPanel';
 import { SearchView } from './components/SearchView';
 import { WelcomeExperience } from './components/WelcomeExperience';
 import { Sidebar } from './components/Sidebar';
+import { StartupScreen } from './components/StartupScreen';
 import { ARTWORK, SEED_ARTISTS, SEED_PLAYLISTS, SEED_TRACKS } from './data/catalog';
 import type {
   ArtistProfile,
@@ -144,6 +145,12 @@ export default function App() {
     () => typeof window !== 'undefined' && localStorage.getItem('musick_mood_setup_complete_v1') === 'true'
   );
   const [welcomeVisible, setWelcomeVisible] = useState(() => !welcomeSetupComplete);
+  const [startupVisible, setStartupVisible] = useState(true);
+
+  useEffect(() => {
+    const startupTimer = window.setTimeout(() => setStartupVisible(false), 850);
+    return () => window.clearTimeout(startupTimer);
+  }, []);
 
   // Navigation & history stack
   const [navHistory, setNavHistory] = useState<NavEntry[]>([{ view: 'home', collection: null }]);
@@ -2672,6 +2679,8 @@ export default function App() {
           }}
         />
       )}
+
+      {startupVisible && <StartupScreen />}
 
       {/* Subtle Toast */}
       {toastMsg && (
