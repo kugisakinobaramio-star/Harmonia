@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify the generated Android project contains valid Musick launch branding."""
+"""Verify the generated Android project contains valid MusicKK launch branding."""
 from pathlib import Path
 import sys
 import xml.etree.ElementTree as ET
@@ -13,7 +13,7 @@ required = [
 ]
 missing = [str(path) for path in required if not path.is_file()]
 if missing:
-    sys.exit("Missing Musick splash resources: " + ", ".join(missing))
+    sys.exit("Missing MusicKK splash resources: " + ", ".join(missing))
 
 for path in required:
     ET.parse(path)
@@ -21,14 +21,14 @@ for path in required:
 colors = ET.parse(res / "values" / "colors.xml").getroot()
 color = colors.find("./color[@name='musick_splash_background']")
 if color is None or (color.text or "").strip().lower() != "#050706":
-    sys.exit("Musick splash background color is missing or incorrect")
+    sys.exit("MusicKK splash background color is missing or incorrect")
 
 styles = ET.parse(res / "values" / "styles.xml").getroot()
 theme = styles.find("./style[@name='AppTheme.NoActionBarLaunch']")
 if theme is None:
-    sys.exit("Musick launch theme is missing")
+    sys.exit("MusicKK launch theme is missing")
 if theme.get("parent") != "Theme.SplashScreen":
-    sys.exit("Musick launch theme must use the generated AndroidX splash theme")
+    sys.exit("MusicKK launch theme must use the generated AndroidX splash theme")
 expected = {
     "android:background": "@drawable/musick_launch_background",
     "android:windowBackground": "@drawable/musick_launch_background",
@@ -41,4 +41,9 @@ for name, value in expected.items():
     if item is None or (item.text or "").strip() != value:
         sys.exit(f"Incorrect launch theme item: {name}")
 
-print("Musick Android splash resources and theme verified.")
+strings = ET.parse(res / "values" / "strings.xml").getroot()
+label = strings.find("./string[@name='app_name']")
+if label is None or (label.text or "").strip() != "MusicKK":
+    sys.exit("Android launcher label must be MusicKK")
+
+print("MusicKK Android splash resources and theme verified.")
