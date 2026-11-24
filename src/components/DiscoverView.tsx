@@ -60,10 +60,22 @@ export function DiscoverView({
     [tracks, recentlyPlayed, rotation, likedTracks, playCounts, artistAffinity, genreAffinity, preferredLanguages, favoriteArtists, preferredMoods]
   );
   const modePool = useMemo(() => {
-    if (mode === 'Global Charts') return [...globalTracks].sort((a, b) => (b.playCount || 0) - (a.playCount || 0));
-    if (mode === 'Regional Discover') return regionalTracks;
-    if (mode === 'Global Discover') return [...globalTracks, ...varied];
-    return tracks;
+    let pool: Track[];
+    if (mode === 'Global Charts') {
+      pool = [...globalTracks].sort((a, b) => (b.playCount || 0) - (a.playCount || 0));
+    } else if (mode === 'Regional Discover') {
+      pool = regionalTracks;
+    } else if (mode === 'Global Discover' || mode === 'Language Mix' || mode === 'Mood Mix') {
+      pool = [...globalTracks, ...varied];
+    } else {
+      pool = tracks;
+    }
+    const seen = new Set<string>();
+    return pool.filter((track) => {
+      if (seen.has(track.id)) return false;
+      seen.add(track.id);
+      return true;
+    });
   }, [mode, globalTracks, regionalTracks, tracks, varied]);
   const visible = modePool.filter((track) =>
     (mode !== 'Language Mix' || language === 'All' || track.language === language) &&
