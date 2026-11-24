@@ -2410,7 +2410,7 @@ export default function App() {
         }
         onShare={() => {
           if (!currentTrack) return;
-          const text = `${currentTrack.name} — ${currentTrack.artist} on Harmonia`;
+          const text = `${currentTrack.name} — ${currentTrack.artist} on MusicKK`;
           navigator.clipboard?.writeText(text).catch(() => {});
           showToast('Track info copied to clipboard');
         }}
