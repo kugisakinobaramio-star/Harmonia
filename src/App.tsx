@@ -666,7 +666,22 @@ export default function App() {
     personalizedFeedTracks,
   ]);
 
-  // Keep Discover's input identity stable across unrelated player/time updates.
+    const suggestionCandidates = useMemo(() => {
+    const unique = new Map<string, Track>();
+    for (const candidate of [
+      ...recommendedTracks,
+      ...personalizedFeedTracks,
+      ...regionalTracks,
+      ...Object.values(likedMap),
+      ...SEED_TRACKS,
+    ]) {
+      if (!candidate?.id || !candidate.name || !candidate.artist) continue;
+      if (!unique.has(candidate.id)) unique.set(candidate.id, candidate);
+    }
+    return [...unique.values()];
+  }, [recommendedTracks, personalizedFeedTracks, regionalTracks, likedMap]);
+
+// Keep Discover's input identity stable across unrelated player/time updates.
   const discoverTracks = useMemo(
     () => [...regionalTracks, ...personalizedFeedTracks, ...recommendedTracks],
     [regionalTracks, personalizedFeedTracks, recommendedTracks]
@@ -2143,6 +2158,7 @@ export default function App() {
                 onEnqueue={handleEnqueue}
                 onAddToPlaylist={(t) => setAddToPlaylistTrack(t)}
                 onOpenVideo={(t) => openVideosForQuery(`${t.name} ${t.artist} official video`)}
+                suggestionCandidates={suggestionCandidates}
               />
             )}
 
@@ -2325,6 +2341,10 @@ export default function App() {
           setQuality(nextQ);
           showToast(`Audio quality: ${nextQ}`);
         }}
+        suggestionCandidates={suggestionCandidates}
+        onPlaySuggested={(track) => playTrackList([track], 0)}
+        onEnqueueSuggested={handleEnqueue}
+        onAddSuggestedToPlaylist={(track) => setAddToPlaylistTrack(track)}
       />
 
       {/* Mobile Bottom Navigation Bar */}
