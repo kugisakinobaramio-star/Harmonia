@@ -1,0 +1,36 @@
+name: Cloudflare Discover Preview
+
+on:
+  push:
+    branches:
+      - fix/v1.1.2-playable-discovery-pools
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-preview:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Verify Cloudflare deployment credentials
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          test -n "$CLOUDFLARE_API_TOKEN" || (echo "::error::Missing CLOUDFLARE_API_TOKEN repository secret" && exit 1)
+          test -n "$CLOUDFLARE_ACCOUNT_ID" || (echo "::error::Missing CLOUDFLARE_ACCOUNT_ID repository secret" && exit 1)
+      - name: Install dependencies
+        run: npm install
+      - name: Build preview frontend
+        run: npm run build
+        env:
+          VITE_API_BASE_URL: https://harmonia.kugisakinobaramio.workers.dev
+      - name: Deploy isolated Cloudflare preview Worker
+        run: npx wrangler deploy --name harmonia-discovery-pr83
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
