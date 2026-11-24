@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1600" height="560" viewBox="0 0 1600 560" role="img" aria-labelledby="title desc">
   <title id="title">MusicKK — find your sound</title>
-  <desc id="desc">A dark music player inspired banner with a mint green M mark, luminous audio waveform and subtle equalizer bars.</desc>
+  <desc id="desc">A dark music player inspired banner with a mint green audio-waveform mark, luminous audio waveform and subtle equalizer bars.</desc>
   <defs>
     <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#080d0a"/>
@@ -38,7 +38,7 @@
   </g>
   <g transform="translate(118 130)">
     <rect width="128" height="128" rx="30" fill="#050706" stroke="#62f58a" stroke-opacity=".4" stroke-width="2"/>
-    <path d="M90 250V190h34v60h-34Z M145 290V150h34v140h-34Z M200 220V180h34v40h-34Z M255 270V170h34v100h-34Z" fill="url(#mint)"/>
+    <path d="M20 70V58h12v12H20Z M43 88V40h12v48H43Z M66 60V48h12v12H66Z M89 80V34h12v46H89Z" fill="url(#mint)"/>
   </g>
   <g font-family="Inter,Arial,Helvetica,sans-serif" fill="#f3fff6">
     <text x="118" y="355" font-size="112" font-weight="750" letter-spacing="-5">MUSICKK</text>
