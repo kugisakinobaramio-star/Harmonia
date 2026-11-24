@@ -1,4 +1,4 @@
-import { Clock3, Heart, ListMusic, Play, Plus, Search, Sparkles, Trash2, Video } from 'lucide-react';
+import { Clock3, Heart, ListMusic, Music2, Play, Plus, Search, Sparkles, Trash2, Video } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { CuratedPlaylist, Track } from '../types/music';
 import { CoverImage } from './CoverImage';
@@ -280,7 +280,7 @@ function LibraryTrackRow({ track, index, currentTrackId, isPlaying, isLiked, dow
         <button type="button" onClick={onToggleLike} aria-label={isLiked ? `Unlike ${track.name}` : `Like ${track.name}`} title={isLiked ? 'Remove from liked songs' : 'Like'} className={`grid h-8 w-8 place-items-center rounded-full transition hover:bg-white/[0.08] ${isLiked ? 'text-[#62f58a]' : 'text-zinc-500 hover:text-white'}`}><Heart className={`h-4 w-4 ${isLiked ? 'fill-current' : ''}`} /></button>
         <button type="button" onClick={onEnqueue} aria-label={`Add ${track.name} to queue`} title="Add to queue" className="grid h-8 w-8 place-items-center rounded-full text-zinc-500 transition hover:bg-white/[0.08] hover:text-white"><Plus className="h-4 w-4" /></button>
         <button type="button" onClick={onAddToPlaylist} aria-label={`Add ${track.name} to a playlist`} title="Add to playlist" className="grid h-8 w-8 place-items-center rounded-full text-zinc-500 transition hover:bg-white/[0.08] hover:text-white"><ListMusic className="h-4 w-4" /></button>
-        <button type="button" onClick={onOpenVideo} aria-label={`Find video for ${track.name}`} title="Find video" className="grid h-8 w-8 place-items-center rounded-full text-zinc-500 transition hover:bg-white/[0.08] hover:text-white"><Music2 className="h-4 w-4" /></button>
+        <button type="button" onClick={onOpenVideo} aria-label={`Find video for ${track.name}`} title="Find video" className="grid h-8 w-8 place-items-center rounded-full text-zinc-500 transition hover:bg-white/[0.08] hover:text-white"><Video className="h-4 w-4" /></button>
       </div>
     </article>
   );
