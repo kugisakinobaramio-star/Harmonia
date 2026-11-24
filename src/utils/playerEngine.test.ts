@@ -31,6 +31,8 @@ import {
   removeQueueItem,
   rankDiscoverTracks,
   trackMatchesDiscoverMood,
+  normalizeDiscoverLanguage,
+  isQualityDiscoverTrack,
   resolveActiveLyricPair,
   resolveNextTrackIndex,
   scoreAuthenticTrackCandidate,
@@ -642,10 +644,35 @@ test('Discover mood matching uses genre and tempo metadata, never title words', 
     duration: 180, image: '/cover.jpg', language: 'English' as const,
   };
   assert.equal(trackMatchesDiscoverMood(titleOnly, 'Workout Energy'), false);
-  assert.equal(trackMatchesDiscoverMood({ ...titleOnly, bpm: 128 }, 'Workout Energy'), true);
+  assert.equal(trackMatchesDiscoverMood({ ...titleOnly, bpm: 128 }, 'Workout Energy'), false);
+  assert.equal(trackMatchesDiscoverMood({ ...titleOnly, bpm: 128, energy: 0.85 }, 'Workout Energy'), true);
+  assert.equal(trackMatchesDiscoverMood({ ...titleOnly, moods: ['high energy'] }, 'Workout Energy'), true);
   assert.equal(trackMatchesDiscoverMood({ ...titleOnly, genre: 'Acoustic Folk' }, 'Acoustic Unplugged'), true);
   assert.equal(trackMatchesDiscoverMood({ ...titleOnly, genre: 'Bollywood Romantic' }, 'Bollywood Romantic'), true);
   assert.equal(trackMatchesDiscoverMood({ ...titleOnly, language: 'Japanese', genre: 'J-Pop' }, 'Anime & J-Pop'), true);
+});
+
+test('Discover language normalization uses metadata aliases, not title text', () => {
+  assert.equal(normalizeDiscoverLanguage('Japanese'), 'Japanese');
+  assert.equal(normalizeDiscoverLanguage('ja'), 'Japanese');
+  assert.equal(normalizeDiscoverLanguage('ja-JP'), 'Japanese');
+  assert.equal(normalizeDiscoverLanguage('J-Pop'), 'Japanese');
+  assert.equal(normalizeDiscoverLanguage('en'), 'English');
+  assert.equal(normalizeDiscoverLanguage('unknown'), null);
+});
+
+test('Discover eligibility rejects previews, metadata-only entries and instrumental tracks', () => {
+  const full = {
+    ...sampleTracks[0],
+    sourceAvailability: 'full' as const,
+    streamUrls: { '320kbps': 'https://audio.example.com/full.mp3' },
+  };
+  assert.equal(isQualityDiscoverTrack(full), true);
+  assert.equal(isQualityDiscoverTrack({ ...full, sourceAvailability: 'preview', streamUrls: {}, previewUrl: 'https://example.com/preview.mp3' }), false);
+  assert.equal(isQualityDiscoverTrack({ ...full, metadataOnly: true }), false);
+  assert.equal(isQualityDiscoverTrack({ ...full, duration: 0 }), false);
+  assert.equal(isQualityDiscoverTrack({ ...full, name: 'Ambient instrumental', genre: 'instrumental' }), false);
+  assert.equal(isQualityDiscoverTrack({ ...full, sourceAvailability: 'lookup', streamUrls: {} }), true);
 });
 
 test('Discover mood matching does not infer language from a title', () => {

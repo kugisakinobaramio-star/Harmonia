@@ -1056,33 +1056,79 @@ export type DiscoverMood =
   | 'Workout Energy'
   | 'Indie & R&B';
 
+/** Normalize language labels and ISO-style codes from catalogue metadata only. */
+export function normalizeDiscoverLanguage(value?: string): MusicLanguage | null {
+  const key = (value || '').toLocaleLowerCase().trim().replace(/_/g, '-');
+  const aliases: Record<string, MusicLanguage> = {
+    hi: 'Hindi', hin: 'Hindi', hindi: 'Hindi',
+    pa: 'Punjabi', pan: 'Punjabi', punjabi: 'Punjabi',
+    en: 'English', eng: 'English', english: 'English',
+    ja: 'Japanese', jpn: 'Japanese', 'ja-jp': 'Japanese', japanese: 'Japanese', 'j-pop': 'Japanese', jpop: 'Japanese',
+    ko: 'Korean', kor: 'Korean', korean: 'Korean',
+    fr: 'French', french: 'French', es: 'Spanish', spanish: 'Spanish',
+    bn: 'Bengali', bengali: 'Bengali', bangla: 'Bengali',
+    ta: 'Tamil', tamil: 'Tamil', te: 'Telugu', telugu: 'Telugu',
+    mr: 'Marathi', marathi: 'Marathi', ur: 'Urdu', urdu: 'Urdu',
+    gu: 'Gujarati', gujarati: 'Gujarati', ml: 'Malayalam', malayalam: 'Malayalam',
+    kn: 'Kannada', kannada: 'Kannada', zh: 'Chinese', chinese: 'Chinese', mandarin: 'Chinese',
+    ar: 'Arabic', arabic: 'Arabic', pt: 'Portuguese', portuguese: 'Portuguese',
+    de: 'German', german: 'German', it: 'Italian', italian: 'Italian',
+    tr: 'Turkish', turkish: 'Turkish', th: 'Thai', thai: 'Thai',
+    id: 'Indonesian', indonesian: 'Indonesian', bhojpuri: 'Bhojpuri', haryanvi: 'Haryanvi',
+  };
+  return aliases[key] || null;
+}
+
 /**
- * Match moods from explicit language/genre/tempo metadata only.
- * Track titles and album names are deliberately excluded: their wording
- * is not evidence of the sound or language of a recording.
+ * Match moods from explicit mood tags and sound metadata only.
+ * Track titles and album names are deliberately excluded.
  */
 export function trackMatchesDiscoverMood(track: Track, mood: DiscoverMood): boolean {
   const genre = (track.genre || '').toLocaleLowerCase();
+  const tags = (track.moods || []).map((tag) => tag.toLocaleLowerCase().trim());
+  const hasTag = (pattern: RegExp) => tags.some((tag) => pattern.test(tag));
   const bpm = typeof track.bpm === 'number' ? track.bpm : null;
-  const language = track.language;
+  const energy = typeof track.energy === 'number' ? track.energy : null;
   const synthMood = track.synthMood;
 
   switch (mood) {
     case 'Bollywood Romantic':
-      return /bollywood|romantic|love song|ballad/.test(genre);
+      return hasTag(/bollywood|romantic|love|ballad/) ||
+        /bollywood.*(romance|romantic|love|ballad)|(romance|romantic|love|ballad).*bollywood/.test(genre) ||
+        (normalizeDiscoverLanguage(track.language) === 'Hindi' && /romance|romantic|ballad/.test(genre));
     case 'Anime & J-Pop':
-      return /j-pop|anime/.test(genre) || synthMood === 'jpop';
+      return hasTag(/anime|j-?pop/) || /j-?pop|anime/.test(genre) || synthMood === 'jpop';
     case 'Late Night Dark':
-      return /ambient|dark|downtempo|lo-fi|lofi|chill|trip-hop/.test(genre) || synthMood === 'ambient' || synthMood === 'lofi';
+      return hasTag(/late.?night|dark|ambient|downtempo|chill|lo.?fi/) ||
+        /ambient|dark|downtempo|lo-fi|lofi|chill|trip-hop/.test(genre) ||
+        synthMood === 'ambient' || synthMood === 'lofi';
     case 'Acoustic Unplugged':
-      return /acoustic|unplugged|singer.?songwriter|folk/.test(genre);
+      return hasTag(/acoustic|unplugged|folk/) || /acoustic|unplugged|singer.?songwriter|folk/.test(genre);
     case 'Workout Energy':
-      return /dance|edm|electronic|workout|hard rock|hip.?hop/.test(genre) || (bpm !== null && bpm >= 118) || synthMood === 'energetic';
+      return hasTag(/workout|energetic|high.?energy/) ||
+        /dance|edm|electronic|workout|hard rock|hip.?hop/.test(genre) ||
+        (bpm !== null && bpm >= 125 && energy !== null && energy >= 0.72) ||
+        synthMood === 'energetic';
     case 'Indie & R&B':
-      return /indie|r.?&.?b|soul|alternative/.test(genre);
+      return hasTag(/indie|r.?&.?b|soul/) || /indie|r.?&.?b|soul|alternative/.test(genre);
     default:
       return false;
   }
+}
+
+/** Strict Discover eligibility: complete playable songs with credible metadata. */
+export function isQualityDiscoverTrack(track: Track): boolean {
+  return Boolean(
+    track?.id &&
+    track.name &&
+    track.artist &&
+    !track.metadataOnly &&
+    track.sourceAvailability !== 'metadata' &&
+    track.sourceAvailability !== 'preview' &&
+    (hasFullAudioStream(track) || track.sourceAvailability === 'full' || track.sourceAvailability === 'lookup') &&
+    isPlausibleSongDuration(track.duration) &&
+    !isInstrumentalOrLowValueTrack(track)
+  );
 }
 
 export interface DiscoverTasteSignals {

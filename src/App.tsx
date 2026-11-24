@@ -24,7 +24,6 @@ import { RightPanel } from './components/RightPanel';
 import { SearchView } from './components/SearchView';
 import { WelcomeExperience } from './components/WelcomeExperience';
 import { Sidebar } from './components/Sidebar';
-import { StartupScreen } from './components/StartupScreen';
 import { ARTWORK, SEED_ARTISTS, SEED_PLAYLISTS, SEED_TRACKS } from './data/catalog';
 import type {
   ArtistProfile,
@@ -52,7 +51,6 @@ import {
   resolveTrackStreams,
   searchSongs,
   searchVideos,
-  sendPersonalisation,
   sendUserEvent,
   syncBackendPlaylists,
 } from './utils/musicApi';
@@ -127,6 +125,9 @@ function loadLocalSnapshot(): {
   genreAffinity?: Record<string, number>;
   playCounts?: Record<string, number>;
   playedTracks?: Record<string, Track>;
+  tasteResetActive?: boolean;
+  tasteLikedMap?: Record<string, Track>;
+  tasteRecentTracks?: Track[];
   volume?: number;
   quality?: AudioQuality;
   eqPreset?: EqPreset;
@@ -145,13 +146,6 @@ export default function App() {
     () => typeof window !== 'undefined' && localStorage.getItem('musick_mood_setup_complete_v1') === 'true'
   );
   const [welcomeVisible, setWelcomeVisible] = useState(() => !welcomeSetupComplete);
-  const [startupVisible, setStartupVisible] = useState(true);
-
-  useEffect(() => {
-    const startupTimer = window.setTimeout(() => setStartupVisible(false), 850);
-    return () => window.clearTimeout(startupTimer);
-  }, []);
-
   // Navigation & history stack
   const [navHistory, setNavHistory] = useState<NavEntry[]>([{ view: 'home', collection: null }]);
   const [navIndex, setNavIndex] = useState(0);
@@ -224,6 +218,13 @@ export default function App() {
   const [playedTracks, setPlayedTracks] = useState<Record<string, Track>>(
     initialSnap.playedTracks || {}
   );
+  // Keep post-reset signals separate so old Library history cannot silently
+  // repopulate a taste profile that the listener deliberately cleared.
+  const [tasteResetActive, setTasteResetActive] = useState(Boolean(initialSnap.tasteResetActive));
+  const [tasteLikedMap, setTasteLikedMap] = useState<Record<string, Track>>(initialSnap.tasteLikedMap || {});
+  const [tasteRecentTracks, setTasteRecentTracks] = useState<Track[]>(initialSnap.tasteRecentTracks || []);
+  const recommendationLikedMap = tasteResetActive ? tasteLikedMap : likedMap;
+  const recommendationRecentTracks = tasteResetActive ? tasteRecentTracks : recentlyPlayed;
 
   // Audio playback state
   const [queue, setQueue] = useState<Track[]>([]);
@@ -512,6 +513,11 @@ export default function App() {
           playedTracks: Object.fromEntries(
             Object.entries(playedTracks).map(([id, track]) => [id, withoutPersistedProviderAudio(track)])
           ),
+          tasteResetActive,
+          tasteLikedMap: Object.fromEntries(
+            Object.entries(tasteLikedMap).map(([id, track]) => [id, withoutPersistedProviderAudio(track)])
+          ),
+          tasteRecentTracks: tasteRecentTracks.map(withoutPersistedProviderAudio),
           volume,
           quality,
           eqPreset,
@@ -535,17 +541,20 @@ export default function App() {
     genreAffinity,
     playCounts,
     playedTracks,
+    tasteResetActive,
+    tasteLikedMap,
+    tasteRecentTracks,
     volume,
     quality,
     eqPreset,
   ]);
 
-  // Load worldwide discovery only when the listener opens Discover, keeping startup lighter.
+  // Warm worldwide discovery in the background so the first Discover visit is not a cold fetch.
   const [globalTracks, setGlobalTracks] = useState<Track[]>([]);
   const [globalTracksLoaded, setGlobalTracksLoaded] = useState(false);
   const [globalTracksLoading, setGlobalTracksLoading] = useState(false);
   useEffect(() => {
-    if (activeView !== 'discover' || globalTracksLoaded) return;
+    if (globalTracksLoaded) return;
     let cancelled = false;
     setGlobalTracksLoading(true);
     fetchRegionalDiscovery('GLOBAL').then((tracks) => {
@@ -556,7 +565,7 @@ export default function App() {
       if (!cancelled) setGlobalTracksLoading(false);
     });
     return () => { cancelled = true; };
-  }, [activeView, globalTracksLoaded]);
+  }, [globalTracksLoaded]);
 
   // Fetch location-based tracks whenever region updates
   useEffect(() => {
@@ -569,12 +578,12 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [region, prioritizeLyrics]);
+  }, [region]);
 
   // Build discovery queries only from explicit picks and the listener's own activity.
   useEffect(() => {
     let cancelled = false;
-    const historyTracks = [...Object.values(likedMap), ...recentlyPlayed];
+    const historyTracks = [...Object.values(recommendationLikedMap), ...recommendationRecentTracks];
     const artistSeeds = [
       ...favoriteArtists,
       ...Object.entries(artistAffinity)
@@ -625,7 +634,7 @@ export default function App() {
     });
 
     return () => { cancelled = true; };
-  }, [favoriteArtists, artistAffinity, genreAffinity, likedMap, recentlyPlayed, region, prioritizeLyrics]);
+  }, [favoriteArtists, artistAffinity, genreAffinity, recommendationLikedMap, recommendationRecentTracks, region, prioritizeLyrics]);
 
   // Dynamic User-Based Recommendation Ranking
   const { recommendedTracks, recommendationReason } = useMemo(() => {
@@ -639,16 +648,16 @@ export default function App() {
       languageAffinity,
       genreAffinity,
       playCounts,
-      likedMap,
-      recentlyPlayed,
+      likedMap: recommendationLikedMap,
+      recentlyPlayed: recommendationRecentTracks,
     });
 
     const combined: Track[] = [];
     const seenKeys = new Set<string>();
     for (const track of [
       ...personalizedFeedTracks,
-      ...Object.values(likedMap),
-      ...recentlyPlayed,
+      ...Object.values(recommendationLikedMap),
+      ...recommendationRecentTracks,
       ...regionalTracks,
     ]) {
       if (isInstrumentalOrLowValueTrack(track)) continue;
@@ -680,8 +689,8 @@ export default function App() {
     languageAffinity,
     genreAffinity,
     playCounts,
-    likedMap,
-    recentlyPlayed,
+    recommendationLikedMap,
+    recommendationRecentTracks,
     regionalTracks,
     personalizedFeedTracks,
   ]);
@@ -692,14 +701,14 @@ export default function App() {
       ...recommendedTracks,
       ...personalizedFeedTracks,
       ...regionalTracks,
-      ...Object.values(likedMap),
+      ...Object.values(recommendationLikedMap),
       ...SEED_TRACKS,
     ]) {
       if (!candidate?.id || !candidate.name || !candidate.artist) continue;
       if (!unique.has(candidate.id)) unique.set(candidate.id, candidate);
     }
     return [...unique.values()];
-  }, [recommendedTracks, personalizedFeedTracks, regionalTracks, likedMap]);
+  }, [recommendedTracks, personalizedFeedTracks, regionalTracks, recommendationLikedMap]);
 
 // Keep Discover's input identity stable across unrelated player/time updates.
   const discoverTracks = useMemo(
@@ -1175,6 +1184,9 @@ export default function App() {
 
       // Update local affinity + recently played + backend event
       setRecentlyPlayed((prev) => [track, ...prev.filter((t) => t.id !== track.id)].slice(0, 20));
+      if (tasteResetActive) {
+        setTasteRecentTracks((prev) => [track, ...prev.filter((item) => item.id !== track.id)].slice(0, 20));
+      }
       setPlayCounts((prev) => ({ ...prev, [track.id]: (prev[track.id] || 0) + 1 }));
       setPlayedTracks((prev) => ({ ...prev, [track.id]: track }));
       const primaryArtist = track.artist.split(',')[0]?.trim();
@@ -1391,7 +1403,7 @@ export default function App() {
 
       startOnlinePlayback();
     },
-    [downloadedIds, quality, showToast, loadAndPlayCandidate, volume]
+    [downloadedIds, quality, showToast, loadAndPlayCandidate, volume, tasteResetActive]
   );
 
   const playTrackList = useCallback(
@@ -1709,24 +1721,37 @@ export default function App() {
     }
   }, [isPlaying, currentTime, duration]);
 
-  // Native Android media session: Android WebView does not implement Media Session.
-  // This plugin provides the notification, lock-screen and Bluetooth headset media-key bridge.
+  // Keep native notification handlers registered for the app lifetime.
+  // Their ref is refreshed with current React callbacks without unregistering
+  // the Android media session on every queue/progress update.
+  const nativeMediaActionsRef = useRef({ handleTogglePlay, advanceTrack, handleSeek });
+  useEffect(() => {
+    nativeMediaActionsRef.current = { handleTogglePlay, advanceTrack, handleSeek };
+  }, [handleTogglePlay, advanceTrack, handleSeek]);
+
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
-    const register = (action: 'play' | 'pause' | 'stop' | 'previoustrack' | 'nexttrack' | 'seekbackward' | 'seekforward' | 'seekto', handler: ((details: { seekTime?: number | null }) => void) | null) => {
+    const register = (
+      action: 'play' | 'pause' | 'stop' | 'previoustrack' | 'nexttrack' | 'seekbackward' | 'seekforward' | 'seekto',
+      handler: ((details: { seekTime?: number | null }) => void) | null
+    ) => {
       void MediaSession.setActionHandler({ action }, handler).catch(() => {
         // Keep in-app playback available if Android declines a media action.
       });
     };
-    register('play', () => handleTogglePlay());
-    register('pause', () => { if (isPlayingRef.current) handleTogglePlay(); });
-    register('stop', () => { if (isPlayingRef.current) handleTogglePlay(); });
-    register('previoustrack', () => advanceTrack(-1, false));
-    register('nexttrack', () => advanceTrack(1, false));
-    register('seekbackward', () => handleSeek(Math.max(0, currentTimeRef.current - 10)));
-    register('seekforward', () => handleSeek(Math.min(durationRef.current || 200, currentTimeRef.current + 10)));
+    register('play', () => nativeMediaActionsRef.current.handleTogglePlay());
+    register('pause', () => {
+      if (isPlayingRef.current) nativeMediaActionsRef.current.handleTogglePlay();
+    });
+    register('stop', () => {
+      if (isPlayingRef.current) nativeMediaActionsRef.current.handleTogglePlay();
+    });
+    register('previoustrack', () => nativeMediaActionsRef.current.advanceTrack(-1, false));
+    register('nexttrack', () => nativeMediaActionsRef.current.advanceTrack(1, false));
+    register('seekbackward', () => nativeMediaActionsRef.current.handleSeek(Math.max(0, currentTimeRef.current - 10)));
+    register('seekforward', () => nativeMediaActionsRef.current.handleSeek(Math.min(durationRef.current || 200, currentTimeRef.current + 10)));
     register('seekto', (details) => {
-      if (typeof details.seekTime === 'number') handleSeek(details.seekTime);
+      if (typeof details.seekTime === 'number') nativeMediaActionsRef.current.handleSeek(details.seekTime);
     });
     return () => {
       register('play', null);
@@ -1739,7 +1764,7 @@ export default function App() {
       register('seekto', null);
       void MediaSession.setPlaybackState({ playbackState: 'none' }).catch(() => {});
     };
-  }, [handleTogglePlay, advanceTrack, handleSeek]);
+  }, []);
 
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
@@ -1826,6 +1851,14 @@ export default function App() {
     (track: Track) => {
       const { nextMap, added } = toggleTrackInLiked(likedMap, track);
       setLikedMap(nextMap);
+      if (tasteResetActive) {
+        setTasteLikedMap((previous) => {
+          const next = { ...previous };
+          if (added) next[track.id] = track;
+          else delete next[track.id];
+          return next;
+        });
+      }
       sendUserEvent({ type: added ? 'like' : 'unlike', track }).then((st) => {
         if (st) {
           setArtistAffinity(st.artistAffinity);
@@ -1834,7 +1867,7 @@ export default function App() {
       });
       showToast(added ? `Saved "${track.name}" to Liked Songs` : `Removed from Liked Songs`);
     },
-    [likedMap, showToast]
+    [likedMap, showToast, tasteResetActive]
   );
 
   const handleEnqueue = useCallback(
@@ -1953,13 +1986,6 @@ export default function App() {
       setPreferredMoods(settings.preferredMoods);
       setPrioritizeLyrics(settings.prioritizeLyrics);
 
-      sendPersonalisation(settings).then((state) => {
-        if (state) {
-          if (state.artistAffinity) setArtistAffinity(state.artistAffinity);
-          if (state.languageAffinity) setLanguageAffinity(state.languageAffinity);
-          if (state.genreAffinity) setGenreAffinity(state.genreAffinity);
-        }
-      });
       showToast(`Personalised feed updated for ${settings.displayName}`);
     },
     [showToast]
@@ -1976,16 +2002,10 @@ export default function App() {
     setGenreAffinity({});
     setPlayCounts({});
     setPrioritizeLyrics(true);
-
-    sendPersonalisation({ resetTaste: true }).then((state) => {
-      if (state) {
-        setArtistAffinity(state.artistAffinity);
-        setLanguageAffinity(state.languageAffinity);
-        setGenreAffinity(state.genreAffinity);
-        setPlayCounts(state.playCounts);
-      }
-    });
-    showToast('Your taste profile has been reset');
+    setTasteResetActive(true);
+    setTasteLikedMap({});
+    setTasteRecentTracks([]);
+    showToast('Local taste profile reset. Your Library was kept intact.');
   }, [showToast]);
 
   // Collection openers
@@ -2283,16 +2303,21 @@ export default function App() {
                 globalTracks={globalTracks}
                 globalTracksLoading={globalTracksLoading}
                 regionalTracks={regionalTracks}
-                recentlyPlayed={recentlyPlayed}
+                recentlyPlayed={recommendationRecentTracks}
                 downloadedIds={downloadedIds}
                 downloadingIds={downloadingIds}
                 onPlayTrackList={playTrackList}
                 onToggleDownload={handleToggleDownload}
                 onRefresh={async () => {
-                  const freshTracks = await fetchRegionalDiscovery(region, true);
-                  setRegionalTracks(freshTracks);
+                  const [freshGlobal, freshRegional] = await Promise.all([
+                    fetchRegionalDiscovery('GLOBAL', true),
+                    fetchRegionalDiscovery(region, true),
+                  ]);
+                  setGlobalTracks(freshGlobal);
+                  setGlobalTracksLoaded(true);
+                  setRegionalTracks(freshRegional);
                 }}
-                likedTracks={likedTracks}
+                likedTracks={Object.values(recommendationLikedMap)}
                 playCounts={playCounts}
                 artistAffinity={artistAffinity}
                 genreAffinity={genreAffinity}
@@ -2557,7 +2582,10 @@ export default function App() {
           showToast(`Audio quality: ${nextQ}`);
         }}
         suggestionCandidates={suggestionCandidates}
-        onPlaySuggested={(track) => playTrackList([track], 0)}
+        onPlaySuggested={(track) => {
+          playTrackList([track], 0);
+          setExpandedPlayerOpen(true);
+        }}
         onEnqueueSuggested={handleEnqueue}
         onAddSuggestedToPlaylist={(track) => setAddToPlaylistTrack(track)}
       />
@@ -2679,8 +2707,6 @@ export default function App() {
           }}
         />
       )}
-
-      {startupVisible && <StartupScreen />}
 
       {/* Subtle Toast */}
       {toastMsg && (
