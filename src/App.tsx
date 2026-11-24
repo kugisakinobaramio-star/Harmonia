@@ -556,6 +556,7 @@ export default function App() {
     let cancelled = false;
     const historyTracks = [...Object.values(likedMap), ...recentlyPlayed];
     const artistSeeds = [
+      ...favoriteArtists,
       ...Object.entries(artistAffinity)
         .filter(([, weight]) => weight > 0)
         .sort((a, b) => b[1] - a[1])
