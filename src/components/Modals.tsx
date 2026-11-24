@@ -640,7 +640,7 @@ export function PersonaliseModal({
     <div
       role="dialog"
       aria-modal="true"
-      aria-label="Personalise your Musick feed"
+      aria-label="Personalise your MusicKK feed"
       className="fixed inset-0 z-50 grid place-items-center bg-black/80 p-4 backdrop-blur-xs"
     >
       <div className="flex max-h-[min(92dvh,900px)] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#141715] shadow-2xl">
