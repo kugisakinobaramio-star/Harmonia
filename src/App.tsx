@@ -1403,7 +1403,7 @@ export default function App() {
 
       startOnlinePlayback();
     },
-    [downloadedIds, quality, showToast, loadAndPlayCandidate, volume]
+    [downloadedIds, quality, showToast, loadAndPlayCandidate, volume, tasteResetActive]
   );
 
   const playTrackList = useCallback(
@@ -1721,24 +1721,37 @@ export default function App() {
     }
   }, [isPlaying, currentTime, duration]);
 
-  // Native Android media session: Android WebView does not implement Media Session.
-  // This plugin provides the notification, lock-screen and Bluetooth headset media-key bridge.
+  // Keep native notification handlers registered for the app lifetime.
+  // Their ref is refreshed with current React callbacks without unregistering
+  // the Android media session on every queue/progress update.
+  const nativeMediaActionsRef = useRef({ handleTogglePlay, advanceTrack, handleSeek });
+  useEffect(() => {
+    nativeMediaActionsRef.current = { handleTogglePlay, advanceTrack, handleSeek };
+  }, [handleTogglePlay, advanceTrack, handleSeek]);
+
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
-    const register = (action: 'play' | 'pause' | 'stop' | 'previoustrack' | 'nexttrack' | 'seekbackward' | 'seekforward' | 'seekto', handler: ((details: { seekTime?: number | null }) => void) | null) => {
+    const register = (
+      action: 'play' | 'pause' | 'stop' | 'previoustrack' | 'nexttrack' | 'seekbackward' | 'seekforward' | 'seekto',
+      handler: ((details: { seekTime?: number | null }) => void) | null
+    ) => {
       void MediaSession.setActionHandler({ action }, handler).catch(() => {
         // Keep in-app playback available if Android declines a media action.
       });
     };
-    register('play', () => handleTogglePlay());
-    register('pause', () => { if (isPlayingRef.current) handleTogglePlay(); });
-    register('stop', () => { if (isPlayingRef.current) handleTogglePlay(); });
-    register('previoustrack', () => advanceTrack(-1, false));
-    register('nexttrack', () => advanceTrack(1, false));
-    register('seekbackward', () => handleSeek(Math.max(0, currentTimeRef.current - 10)));
-    register('seekforward', () => handleSeek(Math.min(durationRef.current || 200, currentTimeRef.current + 10)));
+    register('play', () => nativeMediaActionsRef.current.handleTogglePlay());
+    register('pause', () => {
+      if (isPlayingRef.current) nativeMediaActionsRef.current.handleTogglePlay();
+    });
+    register('stop', () => {
+      if (isPlayingRef.current) nativeMediaActionsRef.current.handleTogglePlay();
+    });
+    register('previoustrack', () => nativeMediaActionsRef.current.advanceTrack(-1, false));
+    register('nexttrack', () => nativeMediaActionsRef.current.advanceTrack(1, false));
+    register('seekbackward', () => nativeMediaActionsRef.current.handleSeek(Math.max(0, currentTimeRef.current - 10)));
+    register('seekforward', () => nativeMediaActionsRef.current.handleSeek(Math.min(durationRef.current || 200, currentTimeRef.current + 10)));
     register('seekto', (details) => {
-      if (typeof details.seekTime === 'number') handleSeek(details.seekTime);
+      if (typeof details.seekTime === 'number') nativeMediaActionsRef.current.handleSeek(details.seekTime);
     });
     return () => {
       register('play', null);
@@ -1751,7 +1764,7 @@ export default function App() {
       register('seekto', null);
       void MediaSession.setPlaybackState({ playbackState: 'none' }).catch(() => {});
     };
-  }, [handleTogglePlay, advanceTrack, handleSeek]);
+  }, []);
 
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
@@ -2290,7 +2303,7 @@ export default function App() {
                 globalTracks={globalTracks}
                 globalTracksLoading={globalTracksLoading}
                 regionalTracks={regionalTracks}
-                recentlyPlayed={recentlyPlayed}
+                recentlyPlayed={recommendationRecentTracks}
                 downloadedIds={downloadedIds}
                 downloadingIds={downloadingIds}
                 onPlayTrackList={playTrackList}
@@ -2299,7 +2312,7 @@ export default function App() {
                   const freshTracks = await fetchRegionalDiscovery(region, true);
                   setRegionalTracks(freshTracks);
                 }}
-                likedTracks={likedTracks}
+                likedTracks={Object.values(recommendationLikedMap)}
                 playCounts={playCounts}
                 artistAffinity={artistAffinity}
                 genreAffinity={genreAffinity}
