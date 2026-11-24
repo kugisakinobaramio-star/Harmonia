@@ -46,7 +46,6 @@ import {
   buildTasteProfile,
   fetchBackendUserState,
   fetchRegionalDiscovery,
-  fetchSpotifyPlaylists,
   fetchTrackLyrics,
   resolveSpotifyUrl,
   resolveTrackStreams,
@@ -70,6 +69,7 @@ import {
   removeQueueItem,
   resolveNextTrackIndex,
   scoreTrackForUser,
+  scoreAuthenticTrackCandidate,
   toggleTrackInLiked,
 } from './utils/playerEngine';
 import { partitionStreamCandidates } from './utils/streamCandidates';
@@ -218,11 +218,11 @@ export default function App() {
   );
 
   // Audio playback state
-  const [queue, setQueue] = useState<Track[]>(SEED_PLAYLISTS[0].tracks);
+  const [queue, setQueue] = useState<Track[]>([]);
   const [currentIndex, setCurrentIndex] = useState<number>(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(SEED_PLAYLISTS[0].tracks[0]?.duration || 268);
+  const [duration, setDuration] = useState(0);
   const [shuffle, setShuffle] = useState(false);
   const [repeatMode, setRepeatMode] = useState<RepeatMode>(0);
   const [volume, setVolume] = useState<number>(
@@ -233,11 +233,10 @@ export default function App() {
   const [sleepMinutesLeft, setSleepMinutesLeft] = useState<number | null>(null);
 
   // Synced Lyrics state
-  const [lyrics, setLyrics] = useState<LyricLine[]>(SEED_PLAYLISTS[0].tracks[0]?.lyrics || []);
+  const [lyrics, setLyrics] = useState<LyricLine[]>([]);
   const [lyricsSynced, setLyricsSynced] = useState(true);
 
   // Spotify Free curated playlists + user modals & toast
-  const [spotifyPlaylists, setSpotifyPlaylists] = useState<CuratedPlaylist[]>([]);
   const [expandedPlayerOpen, setExpandedPlayerOpen] = useState(false);
   const [createPlaylistOpen, setCreatePlaylistOpen] = useState(false);
   const [addToPlaylistTrack, setAddToPlaylistTrack] = useState<Track | null>(null);
@@ -529,15 +528,14 @@ export default function App() {
     eqPreset,
   ]);
 
-  // Fetch live Spotify Free editorial playlists on mount (zero API keys, zero ads)
+  // Load a separate worldwide pool for Global Mix.
+  const [globalTracks, setGlobalTracks] = useState<Track[]>([]);
   useEffect(() => {
-    let active = true;
-    fetchSpotifyPlaylists().then((pls) => {
-      if (active && pls.length) setSpotifyPlaylists(pls);
+    let cancelled = false;
+    fetchRegionalDiscovery('GLOBAL').then((tracks) => {
+      if (!cancelled) setGlobalTracks(tracks);
     });
-    return () => {
-      active = false;
-    };
+    return () => { cancelled = true; };
   }, []);
 
   // Fetch location-based tracks whenever region updates
@@ -558,7 +556,6 @@ export default function App() {
     let cancelled = false;
     const historyTracks = [...Object.values(likedMap), ...recentlyPlayed];
     const artistSeeds = [
-      ...favoriteArtists,
       ...Object.entries(artistAffinity)
         .filter(([, weight]) => weight > 0)
         .sort((a, b) => b[1] - a[1])
@@ -1967,14 +1964,53 @@ export default function App() {
       if (!res.ok || res.kind !== 'playlist' || !res.tracks?.length) {
         return { ok: false, error: res.error || 'This link did not return an importable Spotify playlist.' };
       }
+      const importedTracks: Track[] = [];
+      for (let offset = 0; offset < res.tracks.length; offset += 4) {
+        const batch = res.tracks.slice(offset, offset + 4);
+        const matchedBatch = await Promise.all(batch.map(async (spotifyTrack, batchIndex) => {
+          try {
+            const found = await searchSongs(`${spotifyTrack.name} ${spotifyTrack.artist}`, { region, prioritizeLyrics: false });
+            const candidates = found.tracks
+              .map((candidate) => ({
+                track: candidate,
+                score: scoreAuthenticTrackCandidate({
+                  itemTitle: candidate.name,
+                  itemArtist: candidate.artist,
+                  requestedTitle: spotifyTrack.name,
+                  requestedArtist: spotifyTrack.artist,
+                  itemDurationSec: candidate.duration,
+                  targetDurationSec: spotifyTrack.duration,
+                }),
+              }))
+              .filter((item): item is { track: Track; score: number } => item.score !== null)
+              .sort((a, b) =>
+                (b.score + (hasFullAudioStream(b.track) ? 40 : 0)) -
+                (a.score + (hasFullAudioStream(a.track) ? 40 : 0))
+              );
+            if (candidates[0]) return candidates[0].track;
+          } catch {
+            // Preserve the Spotify metadata if a provider search fails.
+          }
+          return {
+            ...spotifyTrack,
+            id: `spotify-meta-${res.id || 'playlist'}-${offset + batchIndex}-${spotifyTrack.id}`,
+            metadataOnly: true,
+            sourceProvider: 'Spotify',
+            sourceAvailability: 'metadata' as const,
+            streamUrls: undefined,
+            previewUrl: undefined,
+          };
+        }));
+        importedTracks.push(...matchedBatch);
+      }
       const playlistId = `spotify-import-${res.id || Date.now()}`;
       const importedPlaylist: CuratedPlaylist = {
         id: playlistId,
         name: res.title || 'Imported Spotify Playlist',
-        description: `Imported from Spotify · ${res.tracks.length} tracks`,
+        description: `Imported from Spotify · ${importedTracks.length} tracks · unmatched tracks retained`,
         image: res.image || res.tracks[0]?.image || ARTWORK.englishVinyl,
         language: 'Mixed',
-        tracks: res.tracks,
+        tracks: importedTracks,
         isUserCreated: true,
       };
       setUserPlaylists((previous) => {
@@ -1986,10 +2022,11 @@ export default function App() {
         syncBackendPlaylists(next);
         return next;
       });
-      showToast(`Imported “${importedPlaylist.name}” into your Library.`);
+      const matchedCount = importedTracks.filter((track) => !track.metadataOnly).length;
+      showToast(`Imported “${importedPlaylist.name}” · ${matchedCount}/${importedTracks.length} matched`);
       return { ok: true };
     },
-    [showToast]
+    [region, showToast]
   );
 
   // Video search uses request sequencing so slower older searches cannot overwrite newer results.
@@ -2134,7 +2171,6 @@ export default function App() {
                 recommendedTracks={recommendedTracks}
                 recommendationReason={recommendationReason}
                 regionalTracks={regionalTracks}
-                spotifyPlaylists={spotifyPlaylists}
                 recentlyPlayed={recentlyPlayed}
                 likedCount={likedTracks.length}
                 likedTracks={likedTracks}
@@ -2144,7 +2180,6 @@ export default function App() {
                 downloadingIds={downloadingIds}
                 onPlayTrackList={playTrackList}
                 onToggleDownload={handleToggleDownload}
-                onOpenPlaylist={openPlaylistCollection}
                 onOpenLiked={openLikedCollection}
                 onOpenRecent={openRecentCollection}
                 onOpenPersonalise={openPersonalise}
@@ -2154,6 +2189,8 @@ export default function App() {
             {activeView === 'discover' && (
               <DiscoverView
                 tracks={discoverTracks}
+                globalTracks={globalTracks}
+                regionalTracks={regionalTracks}
                 recentlyPlayed={recentlyPlayed}
                 downloadedIds={downloadedIds}
                 downloadingIds={downloadingIds}
@@ -2493,6 +2530,12 @@ export default function App() {
       <SpotifyImportModal
         open={spotifyImportOpen}
         onClose={() => setSpotifyImportOpen(false)}
+        onSearchQuery={(q) => {
+          setSearchQuery(q);
+          setSearchTab('songs');
+          navigateTo('search', null);
+        }}
+        onSwitchToVideos={(q) => openVideosForQuery(q)}
         onImportSpotifyUrl={handleImportSpotifyUrl}
       />
 

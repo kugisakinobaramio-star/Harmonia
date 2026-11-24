@@ -7,6 +7,8 @@ import { DownloadButton } from './DownloadButton';
 
 interface DiscoverViewProps {
   tracks: Track[];
+  globalTracks: Track[];
+  regionalTracks: Track[];
   recentlyPlayed: Track[];
   downloadedIds: Set<string>;
   downloadingIds: Set<string>;
@@ -23,11 +25,15 @@ interface DiscoverViewProps {
 }
 
 const LANGUAGES: Array<MusicLanguage | 'All'> = ['All', 'Hindi', 'Punjabi', 'Haryanvi', 'Marathi', 'Bengali', 'Tamil', 'Telugu', 'Kannada', 'Malayalam', 'Gujarati', 'Bhojpuri', 'Urdu', 'English', 'Japanese', 'Korean', 'French', 'Spanish', 'Chinese', 'Arabic'];
+const DISCOVER_MODES = ['Global Charts', 'Global Discover', 'Language Mix', 'Mood Mix', 'Regional Discover'] as const;
+type DiscoverMode = typeof DISCOVER_MODES[number];
 const MOODS: Array<DiscoverMood | 'All'> = ['All', 'Bollywood Romantic', 'Anime & J-Pop', 'Late Night Dark', 'Acoustic Unplugged', 'Workout Energy', 'Indie & R&B'];
 
 
 export function DiscoverView({
   tracks,
+  globalTracks,
+  regionalTracks,
   recentlyPlayed,
   downloadedIds,
   downloadingIds,
@@ -42,6 +48,7 @@ export function DiscoverView({
   favoriteArtists,
   preferredMoods,
 }: DiscoverViewProps) {
+  const [mode, setMode] = useState<DiscoverMode>('Global Charts');
   const [language, setLanguage] = useState<MusicLanguage | 'All'>('All');
   const [mood, setMood] = useState<DiscoverMood | 'All'>('All');
   const [rotation, setRotation] = useState(0);
@@ -50,9 +57,15 @@ export function DiscoverView({
     () => rankDiscoverTracks(tracks, recentlyPlayed, { likedTracks, playCounts, artistAffinity, genreAffinity, preferredLanguages, favoriteArtists, preferredMoods }, rotation),
     [tracks, recentlyPlayed, rotation, likedTracks, playCounts, artistAffinity, genreAffinity, preferredLanguages, favoriteArtists, preferredMoods]
   );
-  const visible = varied.filter((track) =>
-    (language === 'All' || track.language === language) &&
-    (mood === 'All' || trackMatchesDiscoverMood(track, mood))
+  const modePool = useMemo(() => {
+    if (mode === 'Global Charts') return [...(globalTracks.length ? globalTracks : tracks)].sort((a, b) => (b.playCount || 0) - (a.playCount || 0));
+    if (mode === 'Regional Discover') return regionalTracks;
+    if (mode === 'Global Discover') return [...globalTracks, ...tracks];
+    return tracks;
+  }, [mode, globalTracks, regionalTracks, tracks]);
+  const visible = modePool.filter((track) =>
+    (mode !== 'Language Mix' || language === 'All' || track.language === language) &&
+    (mode !== 'Mood Mix' || mood === 'All' || trackMatchesDiscoverMood(track, mood))
   );
 
   return (
@@ -62,8 +75,8 @@ export function DiscoverView({
           <Compass className="h-5 w-5" />
           <span className="text-xs font-bold uppercase tracking-[0.18em]">MusicKK Discover</span>
         </div>
-        <h1 className="mt-3 text-2xl font-extrabold text-white sm:text-3xl">Find your next favourite.</h1>
-        <p className="mt-2 max-w-2xl text-sm text-zinc-300">Explore by a song's catalogued language and sound profile. Unknown-language tracks won't be placed into a language category.</p>
+        <h1 className="mt-3 text-2xl font-extrabold text-white sm:text-3xl">Global Mix</h1>
+        <p className="mt-2 max-w-2xl text-sm text-zinc-300">Explore worldwide charts, new discoveries, language mixes, sound-based moods and regional music.</p>
         <button type="button" disabled={refreshing} onClick={async () => {
           setRefreshing(true);
           try { await onRefresh(); setRotation((value) => value + 7); }
@@ -73,30 +86,33 @@ export function DiscoverView({
         </button>
       </div>
 
-      <div className="space-y-2">
-        <div className="text-[11px] font-bold uppercase tracking-wider text-zinc-500">Language</div>
-        <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          {LANGUAGES.map((item) => (
-            <button key={item} type="button" onClick={() => setLanguage(item)} aria-pressed={language === item} className={`shrink-0 rounded-full border px-3 py-2 text-xs font-semibold ${language === item ? 'border-[#7ee2a8] bg-[#7ee2a8] text-black' : 'border-white/10 bg-[#242428] text-zinc-300'}`}>
-              {item}
-            </button>
-          ))}
-        </div>
-        <div className="text-[11px] font-bold uppercase tracking-wider text-zinc-500">Sound & mood</div>
-        <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          {MOODS.map((item) => (
-            <button key={item} type="button" onClick={() => setMood(item)} aria-pressed={mood === item} className={`shrink-0 rounded-full border px-3 py-2 text-xs font-semibold ${mood === item ? 'border-[#7ee2a8] bg-[#7ee2a8] text-black' : 'border-white/10 bg-[#242428] text-zinc-300'}`}>
-              {item}
-            </button>
-          ))}
-        </div>
-        <p className="text-[11px] text-zinc-500">Filters combine: choose a language and a mood to narrow the same results. Mood matches use genre and tempo metadata, not title keywords.</p>
+      <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        {DISCOVER_MODES.map((item) => (
+          <button key={item} type="button" onClick={() => setMode(item)} aria-pressed={mode === item} className={`shrink-0 rounded-full border px-3 py-2 text-xs font-semibold ${mode === item ? 'border-[#7ee2a8] bg-[#7ee2a8] text-black' : 'border-white/10 bg-[#242428] text-zinc-300'}`}>{item}</button>
+        ))}
       </div>
+      {mode === 'Language Mix' && (
+        <div className="space-y-2">
+          <div className="text-[11px] font-bold uppercase tracking-wider text-zinc-500">Choose a language</div>
+          <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {LANGUAGES.map((item) => <button key={item} type="button" onClick={() => setLanguage(item)} aria-pressed={language === item} className={`shrink-0 rounded-full border px-3 py-2 text-xs font-semibold ${language === item ? 'border-[#7ee2a8] bg-[#7ee2a8] text-black' : 'border-white/10 bg-[#242428] text-zinc-300'}`}>{item}</button>)}
+          </div>
+        </div>
+      )}
+      {mode === 'Mood Mix' && (
+        <div className="space-y-2">
+          <div className="text-[11px] font-bold uppercase tracking-wider text-zinc-500">Choose a sound or mood</div>
+          <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {MOODS.map((item) => <button key={item} type="button" onClick={() => setMood(item)} aria-pressed={mood === item} className={`shrink-0 rounded-full border px-3 py-2 text-xs font-semibold ${mood === item ? 'border-[#7ee2a8] bg-[#7ee2a8] text-black' : 'border-white/10 bg-[#242428] text-zinc-300'}`}>{item}</button>)}
+          </div>
+        </div>
+      )}
+      <p className="text-[11px] text-zinc-500">Language and mood are separate classifications. Japanese-language music is not automatically anime or J-Pop.</p>
 
       <div className="flex items-baseline justify-between gap-2">
         <div>
-          <h2 className="text-xl font-bold text-white">Fresh discoveries</h2>
-          <p className="text-xs text-zinc-400">Recent plays are held back and artists are diversified.</p>
+          <h2 className="text-xl font-bold text-white">{mode}</h2>
+          <p className="text-xs text-zinc-400">Chart data ranks popular tracks; discovery pools diversify repeated artists.</p>
         </div>
         {visible.length > 0 && <button type="button" onClick={() => onPlayTrackList(visible, 0)} className="text-xs font-bold text-zinc-300 hover:text-white"><Play className="mr-1 inline h-3.5 w-3.5 fill-current" /> Play all</button>}
       </div>
