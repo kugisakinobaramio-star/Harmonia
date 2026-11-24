@@ -229,7 +229,7 @@ export async function downloadTrackForOffline(
     language: track.language,
     size: downloadedBlob.size,
     blob: downloadedBlob,
-    provider: 'MusicKK Offline',
+    provider: 'Harmonia Offline',
     sourceUrl: usedUrl,
     downloadedAt: Date.now(),
   };
