@@ -108,18 +108,18 @@ test('unauthenticated access to user data is denied', async () => {
 });
 
 test('playlist parents and ordered duplicate track entries can be written by their owner', async () => {
-  const alice = env.authenticatedContext('alice').firestore();
-  await assertSucceeds(setDoc(doc(alice, 'users/alice'), profile('alice')));
-  await assertSucceeds(setDoc(doc(alice, 'users/alice/playlists/playlist_1'), playlist('alice')));
+  const alice = env.authenticatedContext('alice_playlist').firestore();
+  await assertSucceeds(setDoc(doc(alice, 'users/alice_playlist'), profile('alice_playlist')));
+  await assertSucceeds(setDoc(doc(alice, 'users/alice_playlist/playlists/playlist_1'), playlist('alice_playlist')));
 
   // Same track ID is allowed at distinct entry IDs/positions; order and duplicates are preserved.
-  await assertSucceeds(setDoc(doc(alice, 'users/alice/playlists/playlist_1/entries/e_0_track_1'), entry('alice', 'e_0_track_1', 0)));
-  await assertSucceeds(setDoc(doc(alice, 'users/alice/playlists/playlist_1/entries/e_1_track_1'), entry('alice', 'e_1_track_1', 1)));
+  await assertSucceeds(setDoc(doc(alice, 'users/alice_playlist/playlists/playlist_1/entries/e_0_track_1'), entry('alice', 'e_0_track_1', 0)));
+  await assertSucceeds(setDoc(doc(alice, 'users/alice_playlist/playlists/playlist_1/entries/e_1_track_1'), entry('alice', 'e_1_track_1', 1)));
 
   const entries = await assertSucceeds(
     getDocs(query(
-      collection(alice, 'users/alice/playlists/playlist_1/entries'),
-      where('uid', '==', 'alice')
+      collection(alice, 'users/alice_playlist/playlists/playlist_1/entries'),
+      where('uid', '==', 'alice_playlist')
     ))
   );
   assert.equal(entries.size, 2);
@@ -127,20 +127,20 @@ test('playlist parents and ordered duplicate track entries can be written by the
 });
 
 test('another account cannot read or write a listener playlist or its entries', async () => {
-  const alice = env.authenticatedContext('alice').firestore();
-  await assertSucceeds(setDoc(doc(alice, 'users/alice'), profile('alice')));
-  await assertSucceeds(setDoc(doc(alice, 'users/alice/playlists/playlist_1'), playlist('alice')));
+  const alice = env.authenticatedContext('alice_owner').firestore();
+  await assertSucceeds(setDoc(doc(alice, 'users/alice_owner'), profile('alice_owner')));
+  await assertSucceeds(setDoc(doc(alice, 'users/alice_owner/playlists/playlist_1'), playlist('alice_owner')));
 
-  const bob = env.authenticatedContext('bob').firestore();
-  await assertFails(getDoc(doc(bob, 'users/alice/playlists/playlist_1')));
-  await assertFails(setDoc(doc(bob, 'users/alice/playlists/playlist_1/entries/e_0_track_1'), entry('bob', 'e_0_track_1', 0)));
+  const bob = env.authenticatedContext('bob_owner').firestore();
+  await assertFails(getDoc(doc(bob, 'users/alice_owner/playlists/playlist_1')));
+  await assertFails(setDoc(doc(bob, 'users/alice_owner/playlists/playlist_1/entries/e_0_track_1'), entry('bob_owner', 'e_0_track_1', 0)));
 });
 
 test('track documents containing transient stream URLs are rejected', async () => {
-  const alice = env.authenticatedContext('alice').firestore();
-  await assertSucceeds(setDoc(doc(alice, 'users/alice'), profile('alice')));
+  const alice = env.authenticatedContext('alice_sanitized').firestore();
+  await assertSucceeds(setDoc(doc(alice, 'users/alice_sanitized'), profile('alice_sanitized')));
   const invalidTrack = { ...track, previewUrl: 'https://example.com/temporary.mp3' };
-  await assertFails(setDoc(doc(alice, 'users/alice/likedSongs/track_1'), {
+  await assertFails(setDoc(doc(alice, 'users/alice_sanitized/likedSongs/track_1'), {
     uid: 'alice',
     id: 'track_1',
     schemaVersion: 2,
@@ -152,12 +152,12 @@ test('track documents containing transient stream URLs are rejected', async () =
 });
 
 test('playlist collection queries must constrain results to the signed-in owner', async () => {
-  const alice = env.authenticatedContext('alice').firestore();
-  await assertSucceeds(setDoc(doc(alice, 'users/alice'), profile('alice')));
-  await assertSucceeds(setDoc(doc(alice, 'users/alice/playlists/playlist_1'), playlist('alice')));
+  const alice = env.authenticatedContext('alice_query').firestore();
+  await assertSucceeds(setDoc(doc(alice, 'users/alice_query'), profile('alice_query')));
+  await assertSucceeds(setDoc(doc(alice, 'users/alice_query/playlists/playlist_1'), playlist('alice_query')));
 
   await assertSucceeds(
-    getDocs(query(collection(alice, 'users/alice/playlists'), where('uid', '==', 'alice')))
+    getDocs(query(collection(alice, 'users/alice_query/playlists'), where('uid', '==', 'alice_query')))
   );
-  await assertFails(getDocs(collection(alice, 'users/alice/playlists')));
+  await assertFails(getDocs(collection(alice, 'users/alice_query/playlists')));
 });
