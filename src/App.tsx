@@ -1453,7 +1453,14 @@ export default function App() {
   const advanceTrack = useCallback(
     (direction: 1 | -1, autoAdvance: boolean) => {
       let nextIdx: number | null;
-      const currentId = queue[currentIndex]?.id;
+      const currentTrackForFeedback = queue[currentIndex];
+      const currentId = currentTrackForFeedback?.id;
+      if (direction === 1 && !autoAdvance && currentTrackForFeedback) {
+        const totalDuration = duration || currentTrackForFeedback.duration || 0;
+        if (totalDuration > 0 && currentTimeRef.current / totalDuration < 0.65) {
+          recordListeningFeedback(currentTrackForFeedback.id, 'skip');
+        }
+      }
 
       if (shuffle && queue.length > 1) {
         if (autoAdvance && direction === 1 && repeatMode === 2) {
