@@ -47,3 +47,18 @@ test('explicit preferences guide taste without making language a similarity feat
   assert.ok(taste.artists.arijit > 0);
   assert.equal(taste.languageCounts.Hindi, 0.25);
 });
+
+test('contextual mood mix promotes matching musical tags without language filtering', () => {
+  const liked = [track({ id: 'liked', genre: 'pop', moods: ['romantic'] })];
+  const romantic = track({ id: 'romantic', genre: 'pop', moods: ['romantic'], language: 'Japanese' });
+  const energetic = track({ id: 'energetic', genre: 'pop', moods: ['energetic'], language: 'Hindi' });
+  const result = curateAIRecommendations([energetic, romantic], liked, [], 10, { targetMood: 'romantic' });
+  assert.equal(result[0].track.id, 'romantic');
+});
+
+test('repeat listening gradually reduces repeated-track recommendations', () => {
+  const liked = [track({ id: 'liked', genre: 'pop', moods: ['romantic'] })];
+  const candidates = [track({ id: 'often', genre: 'pop', moods: ['romantic'] }), track({ id: 'fresh', genre: 'pop', moods: ['romantic'] })];
+  const result = curateAIRecommendations(candidates, liked, [], 10, { playCounts: { often: 100 } });
+  assert.equal(result[0].track.id, 'fresh');
+});
