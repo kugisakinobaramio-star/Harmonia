@@ -2045,6 +2045,9 @@ export default function App() {
         image: pl.image || pl.tracks[0]?.image || ARTWORK.englishVinyl,
         tracks: pl.tracks,
         sourcePageUrl: pl.sourcePageUrl,
+        sourceEntriesReceived: pl.sourceEntriesReceived,
+        matchedTrackCount: pl.matchedTrackCount,
+        unmatchedTrackCount: pl.unmatchedTrackCount,
         spotifyEmbedUrl: pl.id.startsWith('spotify-pl-')
           ? `https://open.spotify.com/embed/playlist/${pl.id.slice('spotify-pl-'.length)}`
           : undefined,
