@@ -5,7 +5,13 @@ const config: CapacitorConfig = {
   appName: 'MusicKK',
   webDir: 'dist',
   server: { androidScheme: 'https' },
-  plugins: { CapacitorHttp: { enabled: true } },
+  plugins: {
+    CapacitorHttp: { enabled: true },
+    FirebaseAuthentication: {
+      skipNativeAuth: true,
+      providers: ['google.com'],
+    },
+  },
 };
 
 export default config;
