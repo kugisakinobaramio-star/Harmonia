@@ -74,8 +74,15 @@ export interface CuratedPlaylist {
   region?: MusicRegion;
   tracks: Track[];
   isUserCreated?: boolean;
-  /** Original Spotify playlist page for attribution when imported. */
+  /** Original playlist page for attribution when imported. */
   sourcePageUrl?: string;
+  /** Number of entries exposed by the source resolver during import (not necessarily the source's full total). */
+  sourceEntriesReceived?: number;
+  /** Entries successfully matched to a MusicKK catalogue/playback candidate. */
+  matchedTrackCount?: number;
+  /** Entries retained as metadata because no confident MusicKK match was found. */
+  unmatchedTrackCount?: number;
+  importedAt?: string;
 }
 
 export interface ArtistProfile {
