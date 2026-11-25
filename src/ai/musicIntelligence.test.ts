@@ -62,3 +62,15 @@ test('repeat listening gradually reduces repeated-track recommendations', () => 
   const result = curateAIRecommendations(candidates, liked, [], 10, { playCounts: { often: 100 } });
   assert.equal(result[0].track.id, 'fresh');
 });
+
+
+test('listening feedback learns from skips and completed listens', () => {
+  const liked = [track({ id: 'seed', genre: 'indie pop', moods: ['dreamy'] })];
+  const candidates = [track({ id: 'skipped', genre: 'indie pop', moods: ['dreamy'] }), track({ id: 'completed', genre: 'indie pop', moods: ['dreamy'] })];
+  const neutral = curateAIRecommendations(candidates, liked, [], 10);
+  const learned = curateAIRecommendations(candidates, liked, [], 10, {
+    listeningFeedback: { skipped: { skips: 12, completions: 0 }, completed: { skips: 0, completions: 8 } },
+  });
+  assert.equal(neutral[0].track.id, 'skipped');
+  assert.equal(learned[0].track.id, 'completed');
+});
