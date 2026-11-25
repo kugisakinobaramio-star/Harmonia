@@ -838,7 +838,6 @@ export function scoreTrackForUser(track: Track, profile: UserTasteProfile): numb
   // Match musical descriptors, never language labels or album names, as mood signals.
   const normalizeTokens = (value: string) => value.toLowerCase()
     .normalize('NFKD')
-    .replace(/[\\u0300-\\u036f]/g, '')
     .split(/[^a-z0-9]+/)
     .filter((token) => token.length >= 3);
   const genreTokens = new Set(normalizeTokens(track.genre || ''));
