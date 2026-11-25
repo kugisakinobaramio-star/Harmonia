@@ -1,7 +1,7 @@
 import { Compass, Play, Shuffle } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { MusicLanguage, Track } from '../types/music';
-import { isQualityDiscoverTrack, normalizeDiscoverLanguage, trackMatchesDiscoverMood, type DiscoverMood } from '../utils/playerEngine';
+import { isQualityDiscoverTrack, normalizeDiscoverLanguage, type DiscoverMood } from '../utils/playerEngine';
 import { curateAIRecommendations } from '../ai';
 import { CoverImage } from './CoverImage';
 import { DownloadButton } from './DownloadButton';
@@ -68,9 +68,9 @@ export function DiscoverView({
       likedTracks,
       recentlyPlayed,
       80,
-      { preferredMoods, favoriteArtists, preferredLanguages },
+      { preferredMoods, favoriteArtists, preferredLanguages, genreAffinity, artistAffinity, playCounts, targetMood: mode === 'Mood Mix' && mood !== 'All' ? mood : undefined },
     ).map((recommendation) => recommendation.track),
-    [candidatePool, likedTracks, recentlyPlayed, preferredMoods, favoriteArtists, preferredLanguages, rotation]
+    [candidatePool, likedTracks, recentlyPlayed, preferredMoods, favoriteArtists, preferredLanguages, genreAffinity, artistAffinity, playCounts, mode, mood, rotation]
   );
 
   const modePool = useMemo(() => {
@@ -84,7 +84,7 @@ export function DiscoverView({
 
   const visible = modePool.filter((track) =>
     (mode !== 'Language Mix' || language === 'All' || normalizeDiscoverLanguage(track.language) === language) &&
-    (mode !== 'Mood Mix' || mood === 'All' || trackMatchesDiscoverMood(track, mood))
+    true
   );
 
   return (
