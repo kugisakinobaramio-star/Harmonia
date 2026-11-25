@@ -59,7 +59,6 @@ import {
   addTrackToPlaylist,
   cycleQuality,
   createShuffleBag,
-  deriveDynamicTasteHighlights,
   hasFullAudioStream,
   hasFullPlaybackSource,
   isSpotifyLinkOrUri,
@@ -518,6 +517,7 @@ export default function App() {
           languageAffinity,
           genreAffinity,
           playCounts,
+          listeningFeedback: Object.fromEntries(Object.entries(listeningFeedback).slice(-1000)),
           playedTracks: Object.fromEntries(
             Object.entries(playedTracks).map(([id, track]) => [id, withoutPersistedProviderAudio(track)])
           ),
@@ -548,6 +548,7 @@ export default function App() {
     languageAffinity,
     genreAffinity,
     playCounts,
+    listeningFeedback,
     playedTracks,
     tasteResetActive,
     tasteLikedMap,
@@ -702,6 +703,7 @@ export default function App() {
     languageAffinity,
     genreAffinity,
     playCounts,
+    listeningFeedback,
     recommendationLikedMap,
     recommendationRecentTracks,
     regionalTracks,
@@ -935,6 +937,8 @@ export default function App() {
               // Its ENDED event must never advance a track playing on the native audio engine.
               if (activeEngineRef.current !== 'yt') return;
               if (state === 0) {
+                const endedTrack = currentTrackRef.current;
+                if (endedTrack?.id) recordListeningFeedback(endedTrack.id, 'completion');
                 advanceTrackRef.current(1, true);
               } else if (state === 1) {
                 setIsPlaying(true);
@@ -1565,6 +1569,8 @@ export default function App() {
       const onEnded = () => {
         if (activeEngineRef.current !== 'audio' || !isActiveAudio(audio)) return;
         if (audio.src === SILENT_WAV_DATA_URI) return;
+        const endedTrack = currentTrackRef.current;
+        if (endedTrack?.id) recordListeningFeedback(endedTrack.id, 'completion');
         advanceTrack(1, true);
       };
       audio.addEventListener('timeupdate', onTime);
@@ -2036,9 +2042,12 @@ export default function App() {
         id: pl.id,
         title: pl.name,
         subtitle: pl.description,
-        image: pl.tracks[0]?.image || pl.image || ARTWORK.englishVinyl,
+        image: pl.image || pl.tracks[0]?.image || ARTWORK.englishVinyl,
         tracks: pl.tracks,
         sourcePageUrl: pl.sourcePageUrl,
+        sourceEntriesReceived: pl.sourceEntriesReceived,
+        matchedTrackCount: pl.matchedTrackCount,
+        unmatchedTrackCount: pl.unmatchedTrackCount,
         spotifyEmbedUrl: pl.id.startsWith('spotify-pl-')
           ? `https://open.spotify.com/embed/playlist/${pl.id.slice('spotify-pl-'.length)}`
           : undefined,
@@ -2137,24 +2146,31 @@ export default function App() {
       const importedPlaylist: CuratedPlaylist = {
         id: playlistId,
         name: res.title || 'Imported Spotify Playlist',
-        description: `Imported from Spotify · ${importedTracks.length} tracks · unmatched tracks retained`,
+        description: `Imported from Spotify · ${importedTracks.length} entries received · ${importedTracks.filter((track) => !track.metadataOnly).length} matched · ${importedTracks.filter((track) => track.metadataOnly).length} unmatched`,
         image: res.image || res.tracks[0]?.image || ARTWORK.englishVinyl,
         language: 'Mixed',
         tracks: importedTracks,
         isUserCreated: true,
+        sourceEntriesReceived: res.tracks.length,
+        matchedTrackCount: importedTracks.filter((track) => !track.metadataOnly).length,
+        unmatchedTrackCount: importedTracks.filter((track) => track.metadataOnly).length,
+        importedAt: new Date().toISOString(),
         sourcePageUrl: res.id ? `https://open.spotify.com/playlist/${res.id}` : undefined,
       };
       setUserPlaylists((previous) => {
-        if (previous.some((playlist) => playlist.id === playlistId)) {
-          showToast('This Spotify playlist is already in your Library.');
-          return previous;
-        }
-        const next = [importedPlaylist, ...previous];
+        const alreadyImported = previous.some((playlist) => playlist.id === playlistId);
+        const next = alreadyImported
+          ? previous.map((playlist) => playlist.id === playlistId ? importedPlaylist : playlist)
+          : [importedPlaylist, ...previous];
         syncBackendPlaylists(next);
+        showToast(alreadyImported
+          ? `Updated “${importedPlaylist.name}” · ${importedTracks.length} source entries`
+          : `Added “${importedPlaylist.name}” to your Library`);
         return next;
       });
       const matchedCount = importedTracks.filter((track) => !track.metadataOnly).length;
-      showToast(`Imported “${importedPlaylist.name}” · ${matchedCount}/${importedTracks.length} matched`);
+      const unmatchedCount = importedTracks.length - matchedCount;
+      showToast(`Imported “${importedPlaylist.name}” · ${matchedCount} matched · ${unmatchedCount} kept as metadata`);
       return { ok: true };
     },
     [region, showToast]
