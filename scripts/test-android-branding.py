@@ -46,20 +46,21 @@ label = strings.find("./string[@name='app_name']")
 if label is None or (label.text or "").strip() != "MusicKK":
     sys.exit("Android launcher label must be MusicKK")
 
-manifest = Path("android/app/src/main/AndroidManifest.xml")
-if manifest.is_file():
-    ANDROID_NS = "http://schemas.android.com/apk/res/android"
-    m_root = ET.parse(manifest).getroot()
-    found_oauth = False
-    for data_node in m_root.findall(".//intent-filter/data"):
-        if (
-            data_node.get(f"{{{ANDROID_NS}}}scheme") == "com.harmonia.music"
-            and data_node.get(f"{{{ANDROID_NS}}}host") == "auth"
-        ):
-            found_oauth = True
-            break
-    if not found_oauth:
-        sys.exit("AndroidManifest.xml is missing com.harmonia.music://auth deep-link intent-filter")
+variables = Path("android/variables.gradle")
+if not variables.is_file():
+    sys.exit("Android variables.gradle is missing")
+gradle_vars = variables.read_text(encoding="utf-8")
+for key in ["rgcfaIncludeGoogle", "androidxCredentialsVersion", "androidxCredentialsPlayServicesAuthVersion"]:
+    if key not in gradle_vars:
+        sys.exit(f"Native Google authentication Gradle setting is missing: {key}")
 
-print("MusicKK Android splash resources, theme, and OAuth manifest verified.")
+google_services = Path("android/app/google-services.json")
+app_gradle = Path("android/app/build.gradle")
+if google_services.is_file():
+    root_gradle = Path("android/build.gradle")
+    if not root_gradle.is_file() or "com.google.gms:google-services" not in root_gradle.read_text(encoding="utf-8"):
+        sys.exit("google-services.json exists but the Google Services Gradle classpath is missing")
+    if not app_gradle.is_file() or "com.google.gms.google-services" not in app_gradle.read_text(encoding="utf-8"):
+        sys.exit("google-services.json exists but the Google Services Gradle plugin is not applied")
 
+print("MusicKK Android splash resources and native Firebase authentication build settings verified.")
