@@ -20,7 +20,9 @@ function normalizeWeights(source: Record<string, number>): Record<string, number
   return Object.fromEntries(Object.entries(source).map(([key, value]) => [key, value / max]));
 }
 
-export interface TasteGuidance { preferredMoods?: string[]; favoriteArtists?: string[]; preferredLanguages?: string[]; }\n\nexport function buildMusicTasteVector(liked: Track[], recent: Track[], guidance: TasteGuidance = {}): MusicTasteVector {
+export interface TasteGuidance { preferredMoods?: string[]; favoriteArtists?: string[]; preferredLanguages?: string[]; }
+
+export function buildMusicTasteVector(liked: Track[], recent: Track[], guidance: TasteGuidance = {}): MusicTasteVector {
   const genres: Record<string, number> = {};
   const moods: Record<string, number> = {};
   const artists: Record<string, number> = {};
@@ -41,6 +43,9 @@ export interface TasteGuidance { preferredMoods?: string[]; favoriteArtists?: st
   };
   liked.forEach((track) => addTrack(track, 3));
   recent.forEach((track, index) => addTrack(track, Math.max(0.35, 1.4 - index * 0.07)));
+  addWeights(moods, tokens(guidance.preferredMoods || []), 0.65);
+  addWeights(artists, tokens(guidance.favoriteArtists || []), 0.65);
+  for (const language of guidance.preferredLanguages || []) languageCounts[language] = (languageCounts[language] || 0) + 0.25;
   return {
     genres: normalizeWeights(genres),
     moods: normalizeWeights(moods),
