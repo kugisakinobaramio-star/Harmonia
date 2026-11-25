@@ -62,6 +62,7 @@ export function DiscoverView({
       likedTracks,
       recentlyPlayed,
       80,
+      { preferredMoods, favoriteArtists, preferredLanguages },
     ).map((recommendation) => recommendation.track),
     [globalTracks, regionalTracks, tracks, likedTracks, recentlyPlayed, rotation]
   );
