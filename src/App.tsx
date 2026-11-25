@@ -2,6 +2,7 @@ import { Compass, Home, Library, Search } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 import { MediaSession } from '@capgo/capacitor-media-session';
 import { apiUrl } from './utils/apiUrl';
+import { curateAIRecommendations } from './ai';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CollectionView } from './components/CollectionView';
 import { DiscoverView } from './components/DiscoverView';
@@ -68,7 +69,6 @@ import {
   reorderQueueItem,
   removeQueueItem,
   resolveNextTrackIndex,
-  scoreTrackForUser,
   scoreAuthenticTrackCandidate,
   toggleTrackInLiked,
 } from './utils/playerEngine';
@@ -124,6 +124,7 @@ function loadLocalSnapshot(): {
   languageAffinity?: Record<string, number>;
   genreAffinity?: Record<string, number>;
   playCounts?: Record<string, number>;
+  listeningFeedback?: Record<string, { skips: number; completions: number }>;
   playedTracks?: Record<string, Track>;
   tasteResetActive?: boolean;
   tasteLikedMap?: Record<string, Track>;
@@ -215,6 +216,13 @@ export default function App() {
   const [playCounts, setPlayCounts] = useState<Record<string, number>>(
     initialSnap.playCounts || {}
   );
+  const [listeningFeedback, setListeningFeedback] = useState<Record<string, { skips: number; completions: number }>>(initialSnap.listeningFeedback || {});
+  const recordListeningFeedback = useCallback((trackId: string, signal: 'skip' | 'completion') => {
+    setListeningFeedback((previous) => {
+      const current = previous[trackId] || { skips: 0, completions: 0 };
+      return { ...previous, [trackId]: { ...current, [signal === 'skip' ? 'skips' : 'completions']: current[signal === 'skip' ? 'skips' : 'completions'] + 1 } };
+    });
+  }, []);
   const [playedTracks, setPlayedTracks] = useState<Record<string, Track>>(
     initialSnap.playedTracks || {}
   );
@@ -668,16 +676,21 @@ export default function App() {
       }
     }
 
-    const ranked = combined
-      .map((track) => ({ track, score: scoreTrackForUser(track, tasteProfile) }))
-      .sort((a, b) => b.score - a.score)
-      .map((item) => item.track);
-
-    const highlights = deriveDynamicTasteHighlights(tasteProfile);
+    const curated = curateAIRecommendations(
+      [...combined, ...SEED_TRACKS],
+      Object.values(recommendationLikedMap),
+      recommendationRecentTracks,
+      80,
+      { preferredMoods, favoriteArtists, preferredLanguages, genreAffinity, artistAffinity, playCounts, listeningFeedback },
+    );
+    const ranked = curated.map((item) => item.track);
+    const strongestReason = curated.find((item) => item.confidence >= 0.25 && item.signals.length > 0)?.reason;
+    const recommendationReason = strongestReason
+      || 'MusicKK is exploring new sounds while learning from your listening.';
 
     return {
       recommendedTracks: ranked,
-      recommendationReason: highlights.reason,
+      recommendationReason,
     };
   }, [
     region,
@@ -1440,7 +1453,14 @@ export default function App() {
   const advanceTrack = useCallback(
     (direction: 1 | -1, autoAdvance: boolean) => {
       let nextIdx: number | null;
-      const currentId = queue[currentIndex]?.id;
+      const currentTrackForFeedback = queue[currentIndex];
+      const currentId = currentTrackForFeedback?.id;
+      if (direction === 1 && !autoAdvance && currentTrackForFeedback) {
+        const totalDuration = duration || currentTrackForFeedback.duration || 0;
+        if (totalDuration > 0 && currentTimeRef.current / totalDuration < 0.65) {
+          recordListeningFeedback(currentTrackForFeedback.id, 'skip');
+        }
+      }
 
       if (shuffle && queue.length > 1) {
         if (autoAdvance && direction === 1 && repeatMode === 2) {
@@ -1507,7 +1527,7 @@ export default function App() {
       const nextTrack = queue[nextIdx];
       if (nextTrack) startTrackPlayback(nextTrack);
     },
-    [queue, currentIndex, shuffle, repeatMode, startTrackPlayback]
+    [queue, currentIndex, shuffle, repeatMode, startTrackPlayback, duration, recordListeningFeedback]
   );
   advanceTrackRef.current = advanceTrack;
 
@@ -1557,7 +1577,7 @@ export default function App() {
       };
     });
     return () => cleanups.forEach((cleanup) => cleanup());
-  }, [advanceTrack, loadAndPlayCandidate, showToast, expandedPlayerOpen, activeView]);
+  }, [advanceTrack, loadAndPlayCandidate, showToast, expandedPlayerOpen, activeView, recordListeningFeedback]);
 
   const handleTogglePlay = useCallback(() => {
     if (!currentTrack) return;
@@ -2319,6 +2339,7 @@ export default function App() {
                 }}
                 likedTracks={Object.values(recommendationLikedMap)}
                 playCounts={playCounts}
+                listeningFeedback={listeningFeedback}
                 artistAffinity={artistAffinity}
                 genreAffinity={genreAffinity}
                 preferredLanguages={preferredLanguages}

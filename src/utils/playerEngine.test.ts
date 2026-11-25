@@ -202,6 +202,23 @@ test('scoreTrackForUser ranks tracks by user affinity, region, and lyrics priori
   assert.ok(sNoLyrics < 0);
 });
 
+test('recommendations treat language as a tie-breaker rather than musical similarity', () => {
+  const hindiOnly = { ...sampleTracks[0], id: 'hindi-only', genre: 'Pop', language: 'Hindi' as const, region: 'GLOBAL' as const, playCount: 0 };
+  const englishMatch = { ...sampleTracks[1], id: 'english-match', genre: 'Pop', language: 'English' as const, region: 'GLOBAL' as const, playCount: 0 };
+  const profile: UserTasteProfile = {
+    region: 'GLOBAL',
+    preferredLanguages: ['Hindi'],
+    artistAffinity: {},
+    languageAffinity: { Hindi: 1000 },
+    genreAffinity: { Pop: 8 },
+    playCounts: {},
+    likedIds: [],
+    recentIds: [],
+    preferredMoods: ['Romantic'],
+  };
+  assert.ok(scoreTrackForUser(hindiOnly, profile) - scoreTrackForUser(englishMatch, profile) < 7);
+  assert.equal(trackMatchesDiscoverMood({ ...englishMatch, language: 'Hindi', genre: 'Pop', moods: [] }, 'Bollywood Romantic'), false);
+});
 test('player controls, lyrics sync, quality selection, and sorting behave cleanly', () => {
   assert.equal(decodeHtmlEntities('Arijit &amp; Pritam'), 'Arijit & Pritam');
   assert.equal(cycleQuality('320kbps'), '160kbps');
@@ -483,6 +500,21 @@ test('rankDiscoverTracks uses local taste signals and suppresses recently played
   assert.deepEqual(new Set(ranked.map((track) => track.id)).size, ranked.length);
 });
 
+test('Discover ranks cross-language tracks with closer sound metadata above language-only matches', () => {
+  const liked = { ...sampleTracks[0], id: 'liked-reference', genre: 'Pop', bpm: 100, energy: 0.5, moods: ['romantic'] };
+  const languageOnly = { ...sampleTracks[0], id: 'language-only', name: 'Different Hindi Song', artist: 'New Hindi Artist', genre: 'Pop', bpm: 180, energy: 0.95, moods: ['energetic'] };
+  const soundMatch = { ...sampleTracks[1], id: 'sound-match', name: 'Related Sound', artist: 'Different English Artist', genre: 'Pop', bpm: 102, energy: 0.52, moods: ['romantic'] };
+  const ranked = rankDiscoverTracks([languageOnly, soundMatch], [], {
+    likedTracks: [liked],
+    playCounts: {},
+    artistAffinity: {},
+    genreAffinity: { Pop: 4 },
+    preferredLanguages: ['Hindi'],
+    favoriteArtists: [],
+    preferredMoods: [],
+  });
+  assert.equal(ranked[0].id, 'sound-match');
+});
 test('rankDiscoverTracks diversifies artists, preserves a fallback when everything is recent, and does not mutate inputs', () => {
   const pool: Track[] = [
     { ...sampleTracks[0], id: 'artist-a1', name: 'A1', artist: 'Same Artist', genre: 'Pop' },

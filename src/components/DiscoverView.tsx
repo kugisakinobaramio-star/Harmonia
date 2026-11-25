@@ -1,7 +1,8 @@
 import { Compass, Play, Shuffle } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { MusicLanguage, Track } from '../types/music';
-import { isQualityDiscoverTrack, normalizeDiscoverLanguage, rankDiscoverTracks, trackMatchesDiscoverMood, type DiscoverMood } from '../utils/playerEngine';
+import { isQualityDiscoverTrack, normalizeDiscoverLanguage, type DiscoverMood } from '../utils/playerEngine';
+import { curateAIRecommendations } from '../ai';
 import { CoverImage } from './CoverImage';
 import { DownloadButton } from './DownloadButton';
 
@@ -18,6 +19,7 @@ interface DiscoverViewProps {
   onRefresh: () => Promise<void>;
   likedTracks: Track[];
   playCounts: Record<string, number>;
+  listeningFeedback: Record<string, { skips: number; completions: number }>;
   artistAffinity: Record<string, number>;
   genreAffinity: Record<string, number>;
   preferredLanguages: MusicLanguage[];
@@ -44,6 +46,7 @@ export function DiscoverView({
   onRefresh,
   likedTracks,
   playCounts,
+  listeningFeedback,
   artistAffinity,
   genreAffinity,
   preferredLanguages,
@@ -55,31 +58,35 @@ export function DiscoverView({
   const [mood, setMood] = useState<DiscoverMood | 'All'>('All');
   const [rotation, setRotation] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
+  const candidatePool = useMemo(() => {
+    if (mode === 'Global Charts') return globalTracks;
+    if (mode === 'Regional Discover') return regionalTracks;
+    return [...globalTracks, ...regionalTracks, ...tracks];
+  }, [mode, globalTracks, regionalTracks, tracks]);
+
   const varied = useMemo(
-    () => rankDiscoverTracks(tracks, recentlyPlayed, { likedTracks, playCounts, artistAffinity, genreAffinity, preferredLanguages, favoriteArtists, preferredMoods }, rotation),
-    [tracks, recentlyPlayed, rotation, likedTracks, playCounts, artistAffinity, genreAffinity, preferredLanguages, favoriteArtists, preferredMoods]
+    () => curateAIRecommendations(
+      candidatePool,
+      likedTracks,
+      recentlyPlayed,
+      80,
+      { preferredMoods, favoriteArtists, preferredLanguages, genreAffinity, artistAffinity, playCounts, listeningFeedback, targetMood: mode === 'Mood Mix' && mood !== 'All' ? mood : undefined },
+    ).map((recommendation) => recommendation.track),
+    [candidatePool, likedTracks, recentlyPlayed, preferredMoods, favoriteArtists, preferredLanguages, genreAffinity, artistAffinity, playCounts, listeningFeedback, mode, mood, rotation]
   );
+
   const modePool = useMemo(() => {
-    let pool: Track[];
-    if (mode === 'Global Charts') {
-      pool = [...globalTracks].sort((a, b) => (b.playCount || 0) - (a.playCount || 0));
-    } else if (mode === 'Regional Discover') {
-      pool = regionalTracks;
-    } else if (mode === 'Global Discover' || mode === 'Language Mix' || mode === 'Mood Mix') {
-      pool = [...globalTracks, ...varied];
-    } else {
-      pool = tracks;
-    }
     const seen = new Set<string>();
-    return pool.filter((track) => {
+    return varied.filter((track) => {
       if (seen.has(track.id) || !isQualityDiscoverTrack(track)) return false;
       seen.add(track.id);
       return true;
     });
-  }, [mode, globalTracks, regionalTracks, tracks, varied]);
+  }, [varied]);
+
   const visible = modePool.filter((track) =>
     (mode !== 'Language Mix' || language === 'All' || normalizeDiscoverLanguage(track.language) === language) &&
-    (mode !== 'Mood Mix' || mood === 'All' || trackMatchesDiscoverMood(track, mood))
+    true
   );
 
   return (
