@@ -69,7 +69,6 @@ import {
   reorderQueueItem,
   removeQueueItem,
   resolveNextTrackIndex,
-  scoreTrackForUser,
   scoreAuthenticTrackCandidate,
   toggleTrackInLiked,
 } from './utils/playerEngine';
@@ -674,6 +673,7 @@ export default function App() {
       Object.values(recommendationLikedMap),
       recommendationRecentTracks,
       80,
+      { preferredMoods, favoriteArtists, preferredLanguages },
     ).map((item) => item.track);
 
     const highlights = deriveDynamicTasteHighlights(tasteProfile);
