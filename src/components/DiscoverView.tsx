@@ -1,7 +1,8 @@
 import { Compass, Play, Shuffle } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { MusicLanguage, Track } from '../types/music';
-import { isQualityDiscoverTrack, normalizeDiscoverLanguage, rankDiscoverTracks, trackMatchesDiscoverMood, type DiscoverMood } from '../utils/playerEngine';
+import { isQualityDiscoverTrack, normalizeDiscoverLanguage, trackMatchesDiscoverMood, type DiscoverMood } from '../utils/playerEngine';
+import { curateAIRecommendations } from '../ai';
 import { CoverImage } from './CoverImage';
 import { DownloadButton } from './DownloadButton';
 
@@ -56,8 +57,13 @@ export function DiscoverView({
   const [rotation, setRotation] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const varied = useMemo(
-    () => rankDiscoverTracks(tracks, recentlyPlayed, { likedTracks, playCounts, artistAffinity, genreAffinity, preferredLanguages, favoriteArtists, preferredMoods }, rotation),
-    [tracks, recentlyPlayed, rotation, likedTracks, playCounts, artistAffinity, genreAffinity, preferredLanguages, favoriteArtists, preferredMoods]
+    () => curateAIRecommendations(
+      [...globalTracks, ...regionalTracks, ...tracks],
+      likedTracks,
+      recentlyPlayed,
+      80,
+    ).map((recommendation) => recommendation.track),
+    [globalTracks, regionalTracks, tracks, likedTracks, recentlyPlayed, rotation]
   );
   const modePool = useMemo(() => {
     let pool: Track[];
