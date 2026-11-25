@@ -46,3 +46,10 @@ test('recommendations limit repeated artists', () => {
   assert.ok(ranked.length <= 3);
   assert.equal(ranked.filter((item) => item.artist === 'Same Artist').length, 2);
 });
+
+test('suggestions deduplicate repeated track IDs and recordings', () => {
+  const source = track('source');
+  const match = track('match', { language: 'Hindi', genre: 'indie pop' });
+  const ranked = rankSuggestedMusic([source], [match, { ...match }, { ...match, id: 'match-duplicate' }]);
+  assert.deepEqual(ranked.map((item) => item.id), ['match']);
+});

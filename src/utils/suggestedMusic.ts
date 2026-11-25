@@ -40,9 +40,18 @@ export function rankSuggestedMusic(sourceTracks: Track[], candidates: Track[]): 
   if (!sources.length) return [];
   const excludedIds = new Set(sources.map((track) => track.id));
   const excludedNames = new Set(sources.map((track) => `${normalize(track.name)}::${primaryArtist(track)}`));
+  const seenIds = new Set<string>();
+  const seenRecordings = new Set<string>();
   const ranked = candidates
-    .filter((track) => track && track.id && track.name && track.artist && !excludedIds.has(track.id))
-    .filter((track) => !excludedNames.has(`${normalize(track.name)}::${primaryArtist(track)}`))
+    .filter((track) => {
+      if (!track || !track.id || !track.name || !track.artist) return false;
+      if (excludedIds.has(track.id) || seenIds.has(track.id)) return false;
+      const recordingKey = `${normalize(track.name)}::${primaryArtist(track)}`;
+      if (excludedNames.has(recordingKey) || seenRecordings.has(recordingKey)) return false;
+      seenIds.add(track.id);
+      seenRecordings.add(recordingKey);
+      return true;
+    })
     .map((track) => ({ track, score: similarityScore(track, sources) }))
     .filter((item) => item.score >= 1.15)
     .sort((a, b) => b.score - a.score);

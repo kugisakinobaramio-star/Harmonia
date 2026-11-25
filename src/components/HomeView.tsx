@@ -150,7 +150,13 @@ export const HomeView = memo(function HomeView({
   ].slice(0, 6);
 
   const renderTrackShelf = (title: string, subtitle: string, tracks: Track[]) => {
-    if (!tracks.length) return null;
+    const seenShelfIds = new Set<string>();
+    const uniqueTracks = tracks.filter((track) => {
+      if (!track?.id || seenShelfIds.has(track.id)) return false;
+      seenShelfIds.add(track.id);
+      return true;
+    });
+    if (!uniqueTracks.length) return null;
     return (
       <section className="space-y-3">
         <div className="flex items-baseline justify-between gap-2">
@@ -160,7 +166,7 @@ export const HomeView = memo(function HomeView({
           </div>
           <button
             type="button"
-            onClick={() => onPlayTrackList(tracks, 0)}
+            onClick={() => onPlayTrackList(uniqueTracks, 0)}
             className="text-xs font-bold text-zinc-400 hover:text-white"
           >
             Play all
@@ -168,7 +174,7 @@ export const HomeView = memo(function HomeView({
         </div>
 
         <div className="grid grid-cols-2 gap-3.5 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5">
-          {tracks.slice(0, 5).map((track, idx) => {
+          {uniqueTracks.slice(0, 5).map((track, idx) => {
             const isDownloaded = downloadedIds.has(track.id);
             const isDownloading = downloadingIds.has(track.id);
             const isOnlineOnly = track.offlineAvailable === false || track.sourceProvider === 'Jamendo';
@@ -179,7 +185,7 @@ export const HomeView = memo(function HomeView({
               >
                 <button
                   type="button"
-                  onClick={() => onPlayTrackList(tracks, idx)}
+                  onClick={() => onPlayTrackList(uniqueTracks, idx)}
                   className="w-full text-left focus:outline-none"
                 >
                   <div className="relative aspect-square w-full overflow-hidden rounded-md bg-black shadow-lg">

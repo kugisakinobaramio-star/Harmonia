@@ -2,6 +2,8 @@ import { Check, Crosshair, Loader2, Play, Plus, RotateCcw, Search, Sparkles, Use
 import { useEffect, useState } from 'react';
 import { SEED_ARTISTS } from '../data/catalog';
 import { apiUrl } from '../utils/apiUrl';
+import { auth, signInWithGoogle, logOut } from '../lib/firebase';
+import { onAuthStateChanged, type User } from 'firebase/auth';
 import type {
   CuratedPlaylist,
   MusicLanguage,
@@ -871,8 +873,18 @@ export function ProfileModal({
   onClose,
   onEditPreferences,
 }: ProfileModalProps) {
+  const [user, setUser] = useState<User | null>(auth.currentUser);
+  const [authLoading, setAuthLoading] = useState(false);
+  const [authError, setAuthError] = useState('');
+
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (u) => setUser(u));
+    return () => unsub();
+  }, []);
+
   if (!open) return null;
-  const initial = displayName.trim().charAt(0).toUpperCase() || 'H';
+  const currentName = user?.displayName || displayName.trim() || 'Listener';
+  const initial = currentName.charAt(0).toUpperCase() || 'H';
   return (
     <div role="dialog" aria-modal="true" aria-label="Your MusicKK profile" className="fixed inset-0 z-50 grid place-items-center bg-black/80 p-4 backdrop-blur-sm">
       <div className="max-h-[90dvh] w-full max-w-lg overflow-y-auto rounded-2xl border border-white/10 bg-[#18181b] shadow-2xl">
@@ -881,11 +893,15 @@ export function ProfileModal({
             <button type="button" onClick={onClose} aria-label="Close profile" className="rounded-full bg-black/30 p-2 text-zinc-200 hover:bg-black/50"><X className="h-4 w-4" /></button>
           </div>
           <div className="flex items-end gap-4">
-            <div className="grid h-20 w-20 shrink-0 place-items-center rounded-full border-4 border-white/10 bg-[#1DB954] text-3xl font-black text-black shadow-xl">{initial}</div>
+            {user?.photoURL ? (
+              <img src={user.photoURL} alt={currentName} className="h-20 w-20 shrink-0 rounded-full border-4 border-white/10 object-cover shadow-xl" />
+            ) : (
+              <div className="grid h-20 w-20 shrink-0 place-items-center rounded-full border-4 border-white/10 bg-[#1DB954] text-3xl font-black text-black shadow-xl">{initial}</div>
+            )}
             <div className="min-w-0 pb-1">
               <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#9ce8b7]">Your listener profile</p>
-              <h2 className="truncate text-2xl font-extrabold text-white">{displayName.trim() || 'Listener'}</h2>
-              <p className="text-xs text-zinc-300">MusicKK · {region}</p>
+              <h2 className="truncate text-2xl font-extrabold text-white">{currentName}</h2>
+              <p className="text-xs text-zinc-300">Harmonia · {region}</p>
             </div>
           </div>
         </div>
@@ -895,13 +911,65 @@ export function ProfileModal({
             <div className="rounded-xl bg-[#242429] p-3"><div className="text-xl font-extrabold text-white">{uniqueTracks}</div><div className="text-[11px] text-zinc-400">Tracks played</div></div>
             <div className="rounded-xl bg-[#242429] p-3"><div className="text-xl font-extrabold text-white">{likedCount}</div><div className="text-[11px] text-zinc-400">Liked songs</div></div>
           </div>
+
+          <section className="rounded-xl border border-white/10 bg-[#202024] p-4">
+            <h3 className="mb-1 text-sm font-bold text-white">Cloud Account (Firebase Auth)</h3>
+            <p className="mb-3 text-xs text-zinc-400">Sign in with Google to sync your profile across devices.</p>
+            {user ? (
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="truncate text-xs font-bold text-white">{user.displayName || user.email}</p>
+                  <p className="truncate text-[11px] text-zinc-400">{user.email}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      setAuthLoading(true);
+                      await logOut();
+                    } catch (e: unknown) {
+                      setAuthError(e instanceof Error ? e.message : 'Failed to sign out');
+                    } finally {
+                      setAuthLoading(false);
+                    }
+                  }}
+                  disabled={authLoading}
+                  className="rounded-full bg-white/10 px-3.5 py-1.5 text-xs font-bold text-white hover:bg-white/20 disabled:opacity-50"
+                >
+                  Sign Out
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    setAuthLoading(true);
+                    setAuthError('');
+                    await signInWithGoogle();
+                  } catch (e: unknown) {
+                    setAuthError(e instanceof Error ? e.message : 'Failed to sign in with Google');
+                  } finally {
+                    setAuthLoading(false);
+                  }
+                }}
+                disabled={authLoading}
+                className="inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-xs font-extrabold text-black hover:bg-zinc-200 disabled:opacity-50"
+              >
+                {authLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                Sign in with Google
+              </button>
+            )}
+            {authError && <p className="mt-2 text-xs text-amber-300" role="status">{authError}</p>}
+          </section>
+
           <section>
             <h3 className="mb-2 text-sm font-bold text-white">Your music taste</h3>
             <p className="mb-2 text-xs text-zinc-400">Your mixes adapt as you listen, replay and save tracks.</p>
             <div className="flex flex-wrap gap-2">
-              {preferredLanguages.slice(0, 8).map((item) => <span key={item} className="rounded-full bg-[#26382d] px-3 py-1 text-xs text-[#b7f4ca]">{item}</span>)}
-              {favoriteArtists.slice(0, 8).map((item) => <span key={item} className="rounded-full bg-[#29292f] px-3 py-1 text-xs text-zinc-200">{item}</span>)}
-              {preferredMoods.slice(0, 5).map((item) => <span key={item} className="rounded-full bg-[#29292f] px-3 py-1 text-xs text-zinc-300">{item}</span>)}
+              {preferredLanguages.slice(0, 8).map((item, idx) => <span key={`lang-${item}-${idx}`} className="rounded-full bg-[#26382d] px-3 py-1 text-xs text-[#b7f4ca]">{item}</span>)}
+              {favoriteArtists.slice(0, 8).map((item, idx) => <span key={`artist-${item}-${idx}`} className="rounded-full bg-[#29292f] px-3 py-1 text-xs text-zinc-200">{item}</span>)}
+              {preferredMoods.slice(0, 5).map((item, idx) => <span key={`mood-${item}-${idx}`} className="rounded-full bg-[#29292f] px-3 py-1 text-xs text-zinc-300">{item}</span>)}
               {!preferredLanguages.length && !favoriteArtists.length && !preferredMoods.length && <span className="text-xs text-zinc-500">Your taste profile is still learning. Play and like a few songs to shape it.</span>}
             </div>
           </section>
@@ -909,7 +977,7 @@ export function ProfileModal({
             <button type="button" onClick={onEditPreferences} className="inline-flex flex-1 items-center justify-center gap-2 rounded-full bg-[#1DB954] px-4 py-2.5 text-xs font-extrabold text-black hover:bg-[#1ed760]"><UserRound className="h-4 w-4" /> Edit profile & taste</button>
             <button type="button" onClick={onClose} className="rounded-full bg-[#2a2a30] px-4 py-2.5 text-xs font-bold text-zinc-200 hover:bg-[#35353c]">Done</button>
           </div>
-          <p className="text-[10px] leading-relaxed text-zinc-500">Your profile and listening stats are stored on this device. They are not synced to an account or shared server.</p>
+          <p className="text-[10px] leading-relaxed text-zinc-500">Your profile and listening stats are secured with Firebase Cloud Authentication.</p>
         </div>
       </div>
     </div>

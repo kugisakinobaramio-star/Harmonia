@@ -184,14 +184,17 @@ export function SearchView({
       });
       if (requestSeq !== seqRef.current) return;
 
+      const existingIds = new Set(songs.map((track) => track.id));
       const existingKeys = new Set(
         songs.map((track) =>
           track.name.toLowerCase().trim() + '::' + track.artist.toLowerCase().trim()
         )
       );
       const newTracks = result.tracks.filter((track) => {
+        if (!track?.id || existingIds.has(track.id)) return false;
         const key = track.name.toLowerCase().trim() + '::' + track.artist.toLowerCase().trim();
         if (existingKeys.has(key)) return false;
+        existingIds.add(track.id);
         existingKeys.add(key);
         return true;
       });

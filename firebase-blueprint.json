@@ -1,0 +1,58 @@
+{
+  "entities": {
+    "user": {
+      "title": "User Profile",
+      "description": "User profile document stored in Firestore",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "maxLength": 128 },
+        "displayName": { "type": "string", "maxLength": 100 },
+        "email": { "type": "string", "maxLength": 200 },
+        "photoURL": { "type": "string", "maxLength": 500 },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["uid", "email"]
+    },
+    "playlist": {
+      "title": "Playlist",
+      "description": "User custom playlist",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 100 },
+        "name": { "type": "string", "maxLength": 100 },
+        "description": { "type": "string", "maxLength": 300 },
+        "image": { "type": "string", "maxLength": 500 },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "name"]
+    },
+    "likedSong": {
+      "title": "Liked Song",
+      "description": "Liked track entry",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 100 },
+        "name": { "type": "string", "maxLength": 200 },
+        "artist": { "type": "string", "maxLength": 200 },
+        "albumName": { "type": "string", "maxLength": 200 },
+        "duration": { "type": "number" },
+        "image": { "type": "string", "maxLength": 500 }
+      },
+      "required": ["id", "name"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/user" },
+      "description": "User profile document"
+    },
+    "/users/{userId}/playlists/{playlistId}": {
+      "schema": { "$ref": "#/entities/playlist" },
+      "description": "User playlists collection"
+    },
+    "/users/{userId}/likedSongs/{trackId}": {
+      "schema": { "$ref": "#/entities/likedSong" },
+      "description": "User liked songs collection"
+    }
+  }
+}

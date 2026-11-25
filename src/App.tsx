@@ -661,23 +661,26 @@ export default function App() {
     });
 
     const combined: Track[] = [];
+    const seenIds = new Set<string>();
     const seenKeys = new Set<string>();
     for (const track of [
       ...personalizedFeedTracks,
       ...Object.values(recommendationLikedMap),
       ...recommendationRecentTracks,
       ...regionalTracks,
+      ...SEED_TRACKS,
     ]) {
-      if (isInstrumentalOrLowValueTrack(track)) continue;
+      if (!track?.id || seenIds.has(track.id) || isInstrumentalOrLowValueTrack(track)) continue;
       const key = `${track.name.toLowerCase()}::${track.artist.split(',')[0]?.trim().toLowerCase()}`;
       if (!seenKeys.has(key)) {
+        seenIds.add(track.id);
         seenKeys.add(key);
         combined.push(track);
       }
     }
 
     const curated = curateAIRecommendations(
-      [...combined, ...SEED_TRACKS],
+      combined,
       Object.values(recommendationLikedMap),
       recommendationRecentTracks,
       80,
@@ -724,10 +727,14 @@ export default function App() {
   }, [recommendedTracks, personalizedFeedTracks, regionalTracks, recommendationLikedMap]);
 
 // Keep Discover's input identity stable across unrelated player/time updates.
-  const discoverTracks = useMemo(
-    () => [...regionalTracks, ...personalizedFeedTracks, ...recommendedTracks],
-    [regionalTracks, personalizedFeedTracks, recommendedTracks]
-  );
+  const discoverTracks = useMemo(() => {
+    const seen = new Set<string>();
+    return [...regionalTracks, ...personalizedFeedTracks, ...recommendedTracks].filter((track) => {
+      if (!track?.id || seen.has(track.id)) return false;
+      seen.add(track.id);
+      return true;
+    });
+  }, [regionalTracks, personalizedFeedTracks, recommendedTracks]);
 
   // Navigation helper with Forward/Back history
   const navigateTo = useCallback(

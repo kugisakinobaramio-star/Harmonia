@@ -74,3 +74,10 @@ test('listening feedback learns from skips and completed listens', () => {
   assert.equal(neutral[0].track.id, 'skipped');
   assert.equal(learned[0].track.id, 'completed');
 });
+
+test('AI curation deduplicates identical track IDs across combined pools', () => {
+  const liked = [track({ id: 'seed', genre: 'romantic', moods: ['romantic'] })];
+  const kesariya = track({ id: 'hin-kesariya', name: 'Kesariya', artist: 'Arijit Singh', genre: 'romantic', moods: ['romantic'] });
+  const result = curateAIRecommendations([kesariya, { ...kesariya }], liked, [], 10);
+  assert.equal(result.filter((item) => item.track.id === 'hin-kesariya').length, 1);
+});

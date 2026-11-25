@@ -108,8 +108,15 @@ export function curateAIRecommendations(
   const taste = buildMusicTasteVector(liked, recent, guidance);
   const likedIds = new Set(liked.map((track) => track.id));
   const recentIds = new Set(recent.slice(0, 3).map((track) => track.id));
-  const ranked = candidates
-    .filter((track) => track.id && !likedIds.has(track.id) && !recentIds.has(track.id))
+  const seenCandidateIds = new Set<string>();
+  const uniqueCandidates = candidates.filter((track) => {
+    if (!track?.id || likedIds.has(track.id) || recentIds.has(track.id) || seenCandidateIds.has(track.id)) {
+      return false;
+    }
+    seenCandidateIds.add(track.id);
+    return true;
+  });
+  const ranked = uniqueCandidates
     .map((track) => {
       const result = explainMusicSimilarity(track, taste);
       const popularity = Math.min(0.04, Math.log10(Math.max(1, track.playCount || 1)) / 100);
