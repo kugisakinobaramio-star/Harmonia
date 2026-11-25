@@ -19,6 +19,7 @@ interface DiscoverViewProps {
   onRefresh: () => Promise<void>;
   likedTracks: Track[];
   playCounts: Record<string, number>;
+  listeningFeedback: Record<string, { skips: number; completions: number }>;
   artistAffinity: Record<string, number>;
   genreAffinity: Record<string, number>;
   preferredLanguages: MusicLanguage[];
@@ -68,7 +69,7 @@ export function DiscoverView({
       likedTracks,
       recentlyPlayed,
       80,
-      { preferredMoods, favoriteArtists, preferredLanguages, genreAffinity, artistAffinity, playCounts, targetMood: mode === 'Mood Mix' && mood !== 'All' ? mood : undefined },
+      { preferredMoods, favoriteArtists, preferredLanguages, genreAffinity, artistAffinity, playCounts, listeningFeedback, targetMood: mode === 'Mood Mix' && mood !== 'All' ? mood : undefined },
     ).map((recommendation) => recommendation.track),
     [candidatePool, likedTracks, recentlyPlayed, preferredMoods, favoriteArtists, preferredLanguages, genreAffinity, artistAffinity, playCounts, mode, mood, rotation]
   );
