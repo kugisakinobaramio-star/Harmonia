@@ -673,7 +673,7 @@ export default function App() {
       Object.values(recommendationLikedMap),
       recommendationRecentTracks,
       80,
-      { preferredMoods, favoriteArtists, preferredLanguages },
+      { preferredMoods, favoriteArtists, preferredLanguages, genreAffinity, artistAffinity, playCounts },
     ).map((item) => item.track);
 
     const highlights = deriveDynamicTasteHighlights(tasteProfile);
