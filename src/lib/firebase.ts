@@ -1,4 +1,5 @@
 import { Capacitor } from '@capacitor/core';
+import { FirebaseAuthentication } from '@capacitor-firebase/authentication';
 import { initializeApp } from 'firebase/app';
 import {
   browserLocalPersistence,
@@ -6,7 +7,6 @@ import {
   getAuth,
   getRedirectResult,
   GoogleAuthProvider,
-  inMemoryPersistence,
   indexedDBLocalPersistence,
   initializeAuth,
   sendEmailVerification,
@@ -15,19 +15,13 @@ import {
   signInWithEmailAndPassword,
   signInWithPopup,
   signInWithRedirect,
-  signOut,
+  signOut as signOutWeb,
   updateProfile,
   type Auth,
   type UserCredential,
 } from 'firebase/auth';
-import { doc, getDocFromServer, getFirestore } from 'firebase/firestore';
+import { getFirestore } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
-import {
-  initAndroidAuthBridge,
-  registerAndroidAuthFallbackHandler,
-  startAndroidGoogleOAuth,
-} from './androidAuthBridge';
-import { isNetworkOrOfflineError } from './firebaseErrors';
 
 export const app = initializeApp(firebaseConfig);
 const dbId = (firebaseConfig as { firestoreDatabaseId?: string }).firestoreDatabaseId;
@@ -36,11 +30,9 @@ export const db = dbId ? getFirestore(app, dbId) : getFirestore(app);
 function createPersistentAuth(): Auth {
   try {
     return initializeAuth(app, {
-      persistence: [
-        indexedDBLocalPersistence,
-        browserLocalPersistence,
-        inMemoryPersistence,
-      ],
+      persistence: Capacitor.isNativePlatform()
+        ? indexedDBLocalPersistence
+        : browserLocalPersistence,
     });
   } catch {
     return getAuth(app);
@@ -52,23 +44,19 @@ export const auth = createPersistentAuth();
 export const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: 'select_account' });
 
-registerAndroidAuthFallbackHandler(async (idToken: string) => {
-  const credential = GoogleAuthProvider.credential(idToken);
-  await signInWithCredential(auth, credential);
-});
-
-if (typeof window !== 'undefined' && Capacitor.isNativePlatform()) {
-  void initAndroidAuthBridge().catch(() => {
-    // Non-fatal: Android auth listener initializes on demand as well.
-  });
-}
-
 export async function signInWithGoogle(): Promise<UserCredential | null> {
   if (Capacitor.isNativePlatform()) {
-    const clientId = (firebaseConfig as { oAuthClientId?: string }).oAuthClientId || '';
-    const { idToken } = await startAndroidGoogleOAuth(clientId);
-    const credential = GoogleAuthProvider.credential(idToken);
-    return signInWithCredential(auth, credential);
+    // Google sign-in on Android must use the native account/credential UI,
+    // not an OAuth page embedded in or opened from the app WebView.
+    const result = await FirebaseAuthentication.signInWithGoogle({
+      skipNativeAuth: true,
+      useCredentialManager: true,
+    });
+    const idToken = result.credential?.idToken;
+    if (!idToken) {
+      throw new Error('Google did not return an ID token. Check the Android OAuth client and signing certificate setup.');
+    }
+    return signInWithCredential(auth, GoogleAuthProvider.credential(idToken));
   }
 
   try {
@@ -133,19 +121,10 @@ export async function resendVerificationEmail(): Promise<void> {
 }
 
 export async function logOut(): Promise<void> {
-  await signOut(auth);
-}
-
-async function testConnection(): Promise<void> {
-  try {
-    await getDocFromServer(doc(db, 'test', 'connection'));
-  } catch (error) {
-    if (isNetworkOrOfflineError(error)) {
-      console.warn('Firebase connection check: client is currently offline.');
-    }
+  if (Capacitor.isNativePlatform()) {
+    // Clears the native credential-provider state; the actual app session
+    // is maintained by the Firebase JavaScript SDK below.
+    await FirebaseAuthentication.signOut().catch(() => {});
   }
-}
-
-if (typeof window !== 'undefined') {
-  void testConnection();
+  await signOutWeb(auth);
 }
