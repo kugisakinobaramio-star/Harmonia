@@ -2158,12 +2158,14 @@ export default function App() {
         sourcePageUrl: res.id ? `https://open.spotify.com/playlist/${res.id}` : undefined,
       };
       setUserPlaylists((previous) => {
-        if (previous.some((playlist) => playlist.id === playlistId)) {
-          showToast('This Spotify playlist is already in your Library.');
-          return previous;
-        }
-        const next = [importedPlaylist, ...previous];
+        const alreadyImported = previous.some((playlist) => playlist.id === playlistId);
+        const next = alreadyImported
+          ? previous.map((playlist) => playlist.id === playlistId ? importedPlaylist : playlist)
+          : [importedPlaylist, ...previous];
         syncBackendPlaylists(next);
+        showToast(alreadyImported
+          ? `Updated “${importedPlaylist.name}” · ${importedTracks.length} source entries`
+          : `Added “${importedPlaylist.name}” to your Library`);
         return next;
       });
       const matchedCount = importedTracks.filter((track) => !track.metadataOnly).length;
