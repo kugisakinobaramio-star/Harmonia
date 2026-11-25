@@ -20,7 +20,7 @@ function normalizeWeights(source: Record<string, number>): Record<string, number
   return Object.fromEntries(Object.entries(source).map(([key, value]) => [key, value / max]));
 }
 
-export function buildMusicTasteVector(liked: Track[], recent: Track[]): MusicTasteVector {
+export interface TasteGuidance { preferredMoods?: string[]; favoriteArtists?: string[]; preferredLanguages?: string[]; }\n\nexport function buildMusicTasteVector(liked: Track[], recent: Track[], guidance: TasteGuidance = {}): MusicTasteVector {
   const genres: Record<string, number> = {};
   const moods: Record<string, number> = {};
   const artists: Record<string, number> = {};
