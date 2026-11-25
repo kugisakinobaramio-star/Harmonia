@@ -703,6 +703,7 @@ export default function App() {
     languageAffinity,
     genreAffinity,
     playCounts,
+    listeningFeedback,
     recommendationLikedMap,
     recommendationRecentTracks,
     regionalTracks,
