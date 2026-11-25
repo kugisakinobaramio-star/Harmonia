@@ -56,34 +56,32 @@ export function DiscoverView({
   const [mood, setMood] = useState<DiscoverMood | 'All'>('All');
   const [rotation, setRotation] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
+  const candidatePool = useMemo(() => {
+    if (mode === 'Global Charts') return globalTracks;
+    if (mode === 'Regional Discover') return regionalTracks;
+    return [...globalTracks, ...regionalTracks, ...tracks];
+  }, [mode, globalTracks, regionalTracks, tracks]);
+
   const varied = useMemo(
     () => curateAIRecommendations(
-      [...globalTracks, ...regionalTracks, ...tracks],
+      candidatePool,
       likedTracks,
       recentlyPlayed,
       80,
       { preferredMoods, favoriteArtists, preferredLanguages },
     ).map((recommendation) => recommendation.track),
-    [globalTracks, regionalTracks, tracks, likedTracks, recentlyPlayed, rotation]
+    [candidatePool, likedTracks, recentlyPlayed, preferredMoods, favoriteArtists, preferredLanguages, rotation]
   );
+
   const modePool = useMemo(() => {
-    let pool: Track[];
-    if (mode === 'Global Charts') {
-      pool = [...globalTracks].sort((a, b) => (b.playCount || 0) - (a.playCount || 0));
-    } else if (mode === 'Regional Discover') {
-      pool = regionalTracks;
-    } else if (mode === 'Global Discover' || mode === 'Language Mix' || mode === 'Mood Mix') {
-      pool = [...globalTracks, ...varied];
-    } else {
-      pool = tracks;
-    }
     const seen = new Set<string>();
-    return pool.filter((track) => {
+    return varied.filter((track) => {
       if (seen.has(track.id) || !isQualityDiscoverTrack(track)) return false;
       seen.add(track.id);
       return true;
     });
-  }, [mode, globalTracks, regionalTracks, tracks, varied]);
+  }, [varied]);
+
   const visible = modePool.filter((track) =>
     (mode !== 'Language Mix' || language === 'All' || normalizeDiscoverLanguage(track.language) === language) &&
     (mode !== 'Mood Mix' || mood === 'All' || trackMatchesDiscoverMood(track, mood))
