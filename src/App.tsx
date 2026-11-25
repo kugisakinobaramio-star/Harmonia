@@ -124,6 +124,7 @@ function loadLocalSnapshot(): {
   languageAffinity?: Record<string, number>;
   genreAffinity?: Record<string, number>;
   playCounts?: Record<string, number>;
+  listeningFeedback?: Record<string, { skips: number; completions: number }>;
   playedTracks?: Record<string, Track>;
   tasteResetActive?: boolean;
   tasteLikedMap?: Record<string, Track>;
@@ -215,6 +216,13 @@ export default function App() {
   const [playCounts, setPlayCounts] = useState<Record<string, number>>(
     initialSnap.playCounts || {}
   );
+  const [listeningFeedback, setListeningFeedback] = useState<Record<string, { skips: number; completions: number }>>(initialSnap.listeningFeedback || {});
+  const recordListeningFeedback = useCallback((trackId: string, signal: 'skip' | 'completion') => {
+    setListeningFeedback((previous) => {
+      const current = previous[trackId] || { skips: 0, completions: 0 };
+      return { ...previous, [trackId]: { ...current, [signal === 'skip' ? 'skips' : 'completions']: current[signal === 'skip' ? 'skips' : 'completions'] + 1 } };
+    });
+  }, []);
   const [playedTracks, setPlayedTracks] = useState<Record<string, Track>>(
     initialSnap.playedTracks || {}
   );
@@ -673,7 +681,7 @@ export default function App() {
       Object.values(recommendationLikedMap),
       recommendationRecentTracks,
       80,
-      { preferredMoods, favoriteArtists, preferredLanguages, genreAffinity, artistAffinity, playCounts },
+      { preferredMoods, favoriteArtists, preferredLanguages, genreAffinity, artistAffinity, playCounts, listeningFeedback },
     );
     const ranked = curated.map((item) => item.track);
     const strongestReason = curated.find((item) => item.confidence >= 0.25 && item.signals.length > 0)?.reason;
@@ -1562,7 +1570,7 @@ export default function App() {
       };
     });
     return () => cleanups.forEach((cleanup) => cleanup());
-  }, [advanceTrack, loadAndPlayCandidate, showToast, expandedPlayerOpen, activeView]);
+  }, [advanceTrack, loadAndPlayCandidate, showToast, expandedPlayerOpen, activeView, recordListeningFeedback]);
 
   const handleTogglePlay = useCallback(() => {
     if (!currentTrack) return;
