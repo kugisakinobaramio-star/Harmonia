@@ -1520,7 +1520,7 @@ export default function App() {
       const nextTrack = queue[nextIdx];
       if (nextTrack) startTrackPlayback(nextTrack);
     },
-    [queue, currentIndex, shuffle, repeatMode, startTrackPlayback]
+    [queue, currentIndex, shuffle, repeatMode, startTrackPlayback, duration, recordListeningFeedback]
   );
   advanceTrackRef.current = advanceTrack;
 
