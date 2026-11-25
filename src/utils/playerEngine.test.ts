@@ -202,6 +202,23 @@ test('scoreTrackForUser ranks tracks by user affinity, region, and lyrics priori
   assert.ok(sNoLyrics < 0);
 });
 
+test('recommendations treat language as a tie-breaker rather than musical similarity', () => {
+  const hindiOnly = { ...sampleTracks[0], id: 'hindi-only', genre: 'Pop', language: 'Hindi', region: 'GLOBAL', playCount: 0 };
+  const englishMatch = { ...sampleTracks[1], id: 'english-match', genre: 'Pop', language: 'English', region: 'GLOBAL', playCount: 0 };
+  const profile: UserTasteProfile = {
+    region: 'GLOBAL',
+    preferredLanguages: ['Hindi'],
+    artistAffinity: {},
+    languageAffinity: { Hindi: 1000 },
+    genreAffinity: { Pop: 8 },
+    playCounts: {},
+    likedIds: [],
+    recentIds: [],
+    preferredMoods: ['Romantic'],
+  };
+  assert.ok(scoreTrackForUser(hindiOnly, profile) - scoreTrackForUser(englishMatch, profile) < 7);
+  assert.equal(trackMatchesDiscoverMood({ ...englishMatch, language: 'Hindi', genre: 'Pop', moods: [] }, 'Bollywood Romantic'), false);
+});
 test('player controls, lyrics sync, quality selection, and sorting behave cleanly', () => {
   assert.equal(decodeHtmlEntities('Arijit &amp; Pritam'), 'Arijit & Pritam');
   assert.equal(cycleQuality('320kbps'), '160kbps');
