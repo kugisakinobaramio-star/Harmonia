@@ -2042,7 +2042,7 @@ export default function App() {
         id: pl.id,
         title: pl.name,
         subtitle: pl.description,
-        image: pl.tracks[0]?.image || pl.image || ARTWORK.englishVinyl,
+        image: pl.image || pl.tracks[0]?.image || ARTWORK.englishVinyl,
         tracks: pl.tracks,
         sourcePageUrl: pl.sourcePageUrl,
         spotifyEmbedUrl: pl.id.startsWith('spotify-pl-')
@@ -2143,11 +2143,15 @@ export default function App() {
       const importedPlaylist: CuratedPlaylist = {
         id: playlistId,
         name: res.title || 'Imported Spotify Playlist',
-        description: `Imported from Spotify · ${importedTracks.length} tracks · unmatched tracks retained`,
+        description: `Imported from Spotify · ${importedTracks.length} entries received · ${importedTracks.filter((track) => !track.metadataOnly).length} matched · ${importedTracks.filter((track) => track.metadataOnly).length} unmatched`,
         image: res.image || res.tracks[0]?.image || ARTWORK.englishVinyl,
         language: 'Mixed',
         tracks: importedTracks,
         isUserCreated: true,
+        sourceEntriesReceived: res.tracks.length,
+        matchedTrackCount: importedTracks.filter((track) => !track.metadataOnly).length,
+        unmatchedTrackCount: importedTracks.filter((track) => track.metadataOnly).length,
+        importedAt: new Date().toISOString(),
         sourcePageUrl: res.id ? `https://open.spotify.com/playlist/${res.id}` : undefined,
       };
       setUserPlaylists((previous) => {
@@ -2160,7 +2164,8 @@ export default function App() {
         return next;
       });
       const matchedCount = importedTracks.filter((track) => !track.metadataOnly).length;
-      showToast(`Imported “${importedPlaylist.name}” · ${matchedCount}/${importedTracks.length} matched`);
+      const unmatchedCount = importedTracks.length - matchedCount;
+      showToast(`Imported “${importedPlaylist.name}” · ${matchedCount} matched · ${unmatchedCount} kept as metadata`);
       return { ok: true };
     },
     [region, showToast]
