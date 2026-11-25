@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Apply MusicKK launcher and native Android splash branding to generated Capacitor resources."""
 from pathlib import Path
+import json
 import sys
 import xml.etree.ElementTree as ET
 
@@ -123,11 +124,35 @@ required_vars = {
 }
 for key, value in required_vars.items():
     if key not in gradle_vars:
-        gradle_vars = gradle_vars.replace("ext {", f"ext {{\\n    {key} = {value}", 1)
+        gradle_vars = gradle_vars.replace("ext {", f"ext {{\n    {key} = {value}", 1)
 variables.write_text(gradle_vars, encoding="utf-8")
 
 google_services = Path("android/app/google-services.json")
 if google_services.is_file():
+    try:
+        google_data = json.loads(google_services.read_text(encoding="utf-8"))
+        expected_project = json.loads(Path("firebase-applet-config.json").read_text(encoding="utf-8")).get("projectId")
+    except (OSError, json.JSONDecodeError) as exc:
+        sys.exit(f"Firebase Android configuration is not valid JSON: {exc}")
+
+    if google_data.get("project_info", {}).get("project_id") != expected_project:
+        sys.exit("google-services.json belongs to a different Firebase project than firebase-applet-config.json")
+
+    android_clients = [
+        client for client in google_data.get("client", [])
+        if client.get("client_info", {}).get("android_client_info", {}).get("package_name") == "com.harmonia.music"
+    ]
+    if not android_clients:
+        sys.exit("google-services.json does not contain the Android package com.harmonia.music")
+    web_client_ids = [
+        oauth.get("client_id")
+        for client in android_clients
+        for oauth in client.get("oauth_client", [])
+        if oauth.get("client_type") == 3 and oauth.get("client_id")
+    ]
+    if not web_client_ids:
+        sys.exit("google-services.json is missing the Web OAuth client ID required by Credential Manager")
+
     root_gradle = Path("android/build.gradle")
     if not root_gradle.is_file():
         sys.exit("Generated Android root build.gradle is missing")
@@ -138,7 +163,7 @@ if google_services.is_file():
             sys.exit("Could not find dependencies block in Android root build.gradle")
         root_text = root_text.replace(
             "dependencies {",
-            "dependencies {\\n        " + plugin_classpath,
+            "dependencies {\n        " + plugin_classpath,
             1,
         )
         root_gradle.write_text(root_text, encoding="utf-8")
@@ -149,7 +174,7 @@ if google_services.is_file():
     app_text = app_gradle.read_text(encoding="utf-8")
     google_plugin = "apply plugin: 'com.google.gms.google-services'"
     if google_plugin not in app_text:
-        app_gradle.write_text(app_text.rstrip() + "\\n\\n" + google_plugin + "\\n", encoding="utf-8")
+        app_gradle.write_text(app_text.rstrip() + "\n\n" + google_plugin + "\n", encoding="utf-8")
 else:
     print("WARNING: google-services.json not supplied; Android Google sign-in requires Firebase Android app registration before runtime use.")
 
