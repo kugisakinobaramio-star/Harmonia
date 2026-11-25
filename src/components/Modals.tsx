@@ -587,6 +587,15 @@ export function PersonaliseModal({
         </div>
 
         <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-4">
+          <div className="flex items-start gap-3 rounded-xl border border-[#1DB954]/20 bg-[#1DB954]/[0.07] p-3">
+            <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-[#1DB954]" />
+            <div>
+              <p className="text-xs font-bold text-white">Adaptive AI personalisation</p>
+              <p className="mt-1 text-[11px] leading-relaxed text-zinc-300">
+                MusicKK learns from your listening, likes and skips. These choices are gentle guidance, not fixed language or mood filters.
+              </p>
+            </div>
+          </div>
           {/* Display Name & Location */}
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
