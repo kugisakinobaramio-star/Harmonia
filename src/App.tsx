@@ -518,6 +518,7 @@ export default function App() {
           languageAffinity,
           genreAffinity,
           playCounts,
+          listeningFeedback: Object.fromEntries(Object.entries(listeningFeedback).slice(-1000)),
           playedTracks: Object.fromEntries(
             Object.entries(playedTracks).map(([id, track]) => [id, withoutPersistedProviderAudio(track)])
           ),
@@ -548,6 +549,7 @@ export default function App() {
     languageAffinity,
     genreAffinity,
     playCounts,
+    listeningFeedback,
     playedTracks,
     tasteResetActive,
     tasteLikedMap,
@@ -935,6 +937,8 @@ export default function App() {
               // Its ENDED event must never advance a track playing on the native audio engine.
               if (activeEngineRef.current !== 'yt') return;
               if (state === 0) {
+                const endedTrack = currentTrackRef.current;
+                if (endedTrack?.id) recordListeningFeedback(endedTrack.id, 'completion');
                 advanceTrackRef.current(1, true);
               } else if (state === 1) {
                 setIsPlaying(true);
@@ -1565,6 +1569,8 @@ export default function App() {
       const onEnded = () => {
         if (activeEngineRef.current !== 'audio' || !isActiveAudio(audio)) return;
         if (audio.src === SILENT_WAV_DATA_URI) return;
+        const endedTrack = currentTrackRef.current;
+        if (endedTrack?.id) recordListeningFeedback(endedTrack.id, 'completion');
         advanceTrack(1, true);
       };
       audio.addEventListener('timeupdate', onTime);
