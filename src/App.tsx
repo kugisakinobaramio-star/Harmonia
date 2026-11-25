@@ -668,19 +668,21 @@ export default function App() {
       }
     }
 
-    const ranked = curateAIRecommendations(
+    const curated = curateAIRecommendations(
       [...combined, ...SEED_TRACKS],
       Object.values(recommendationLikedMap),
       recommendationRecentTracks,
       80,
       { preferredMoods, favoriteArtists, preferredLanguages, genreAffinity, artistAffinity, playCounts },
-    ).map((item) => item.track);
-
-    const highlights = deriveDynamicTasteHighlights(tasteProfile);
+    );
+    const ranked = curated.map((item) => item.track);
+    const strongestReason = curated.find((item) => item.confidence >= 0.25 && item.signals.length > 0)?.reason;
+    const recommendationReason = strongestReason
+      || 'MusicKK is exploring new sounds while learning from your listening.';
 
     return {
       recommendedTracks: ranked,
-      recommendationReason: highlights.reason,
+      recommendationReason,
     };
   }, [
     region,
