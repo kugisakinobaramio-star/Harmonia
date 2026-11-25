@@ -203,8 +203,8 @@ test('scoreTrackForUser ranks tracks by user affinity, region, and lyrics priori
 });
 
 test('recommendations treat language as a tie-breaker rather than musical similarity', () => {
-  const hindiOnly = { ...sampleTracks[0], id: 'hindi-only', genre: 'Pop', language: 'Hindi', region: 'GLOBAL', playCount: 0 };
-  const englishMatch = { ...sampleTracks[1], id: 'english-match', genre: 'Pop', language: 'English', region: 'GLOBAL', playCount: 0 };
+  const hindiOnly = { ...sampleTracks[0], id: 'hindi-only', genre: 'Pop', language: 'Hindi' as const, region: 'GLOBAL' as const, playCount: 0 };
+  const englishMatch = { ...sampleTracks[1], id: 'english-match', genre: 'Pop', language: 'English' as const, region: 'GLOBAL' as const, playCount: 0 };
   const profile: UserTasteProfile = {
     region: 'GLOBAL',
     preferredLanguages: ['Hindi'],
