@@ -36,3 +36,14 @@ test('AI curation excludes recently played and liked tracks and diversifies arti
   assert.ok(!result.some((item) => item.track.id === 'liked' || item.track.id === 'recent'));
   assert.ok(result.filter((item) => item.track.artist === 'Same Artist').length <= 2);
 });
+
+test('explicit preferences guide taste without making language a similarity feature', () => {
+  const taste = buildMusicTasteVector([], [], {
+    preferredMoods: ['romantic'],
+    favoriteArtists: ['Arijit Singh'],
+    preferredLanguages: ['Hindi'],
+  });
+  assert.ok(taste.moods.romantic > 0);
+  assert.ok(taste.artists.arijit > 0);
+  assert.equal(taste.languageCounts.Hindi, 0.25);
+});
