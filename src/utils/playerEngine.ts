@@ -1159,6 +1159,11 @@ export function rankDiscoverTracks(
   const preferredMoods = taste.preferredMoods;
   const artistWeights = Object.entries(taste.artistAffinity).map(([key, value]) => [normalize(key), value] as const);
   const genreWeights = Object.entries(taste.genreAffinity).map(([key, value]) => [normalize(key), value] as const);
+  const likedWithBpm = taste.likedTracks.map((track) => track.bpm).filter((bpm): bpm is number => typeof bpm === 'number' && bpm > 0);
+  const likedWithEnergy = taste.likedTracks.map((track) => track.energy).filter((energy): energy is number => typeof energy === 'number' && energy >= 0 && energy <= 1);
+  const averageBpm = likedWithBpm.length ? likedWithBpm.reduce((sum, bpm) => sum + bpm, 0) / likedWithBpm.length : null;
+  const averageEnergy = likedWithEnergy.length ? likedWithEnergy.reduce((sum, energy) => sum + energy, 0) / likedWithEnergy.length : null;
+  const likedMoodTokens = new Set(taste.likedTracks.flatMap((track) => (track.moods || []).flatMap((mood) => normalize(mood).split(/[^a-z0-9]+/).filter((token) => token.length >= 3))));
 
   const score = (track: Track): number => {
     const artist = artistKey(track);
@@ -1174,15 +1179,23 @@ export function rankDiscoverTracks(
       }
     }
     if (likedGenres.has(genre) && genre) value += 2.5;
+    const candidateGenreTokens = new Set(genre.split(/[^a-z0-9]+/).filter((token) => token.length >= 3));
     for (const [name, weight] of genreWeights) {
-      if (name && genre && (genre.includes(name) || name.includes(genre))) {
-        value += Math.min(3, Math.log1p(Math.max(0, weight)) * 1.2);
-        break;
+      const affinityTokens = name.split(/[^a-z0-9]+/).filter((token) => token.length >= 3);
+      const overlap = affinityTokens.filter((token) => candidateGenreTokens.has(token)).length;
+      if (overlap > 0 && affinityTokens.length) {
+        value += Math.min(3, Math.log1p(Math.max(0, weight)) * 1.2 * (overlap / affinityTokens.length));
       }
     }
+    // Language is only a small tie-breaker; similarity comes from sound and genre.
     const languageIndex = preferredLanguages.indexOf(language);
-    if (languageIndex >= 0) value += Math.max(0.8, 2.8 - languageIndex * 0.35);
+    if (languageIndex >= 0) value += Math.max(0.15, 0.65 - languageIndex * 0.1);
     if (preferredMoods.some((mood) => trackMatchesDiscoverMood(track, mood as DiscoverMood))) value += 1.6;
+    const candidateMoodTokens = new Set((track.moods || []).flatMap((mood) => normalize(mood).split(/[^a-z0-9]+/).filter((token) => token.length >= 3)));
+    const sharedMoodCount = [...candidateMoodTokens].filter((token) => likedMoodTokens.has(token)).length;
+    value += Math.min(2.4, sharedMoodCount * 0.8);
+    if (averageBpm !== null && typeof track.bpm === 'number') value += Math.max(0, 1.8 - Math.abs(track.bpm - averageBpm) / 18);
+    if (averageEnergy !== null && typeof track.energy === 'number') value += Math.max(0, 1.5 - Math.abs(track.energy - averageEnergy) * 5);
     const plays = Math.max(0, taste.playCounts[track.id] || 0);
     value -= Math.min(2.8, Math.log1p(plays) * 0.9);
     if (recentIds.has(track.id)) value -= 5;
