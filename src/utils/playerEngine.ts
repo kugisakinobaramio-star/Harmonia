@@ -810,26 +810,15 @@ export function scoreTrackForUser(track: Track, profile: UserTasteProfile): numb
     }
   }
 
-  // Preferred languages are ranked from the listener's own settings and history.
+  // Language and region are light discovery preferences, not musical similarity.
+  // Keep them as tie-breakers so a language label cannot dominate recommendations.
   if (track.language && track.language !== 'Other') {
     const prefIdx = profile.preferredLanguages.indexOf(track.language);
-    if (prefIdx >= 0) {
-      score += 36 - prefIdx * 6;
-    }
-    const langAff = profile.languageAffinity[track.language] || 0;
-    score += Math.min(28, Math.log1p(langAff) * 9);
+    if (prefIdx >= 0) score += Math.max(1, 3 - prefIdx * 0.5);
+    const langAff = Math.max(0, profile.languageAffinity[track.language] || 0);
+    score += Math.min(2.5, Math.log1p(langAff) * 0.8);
   }
-
-  // Regional match boost
-  if (track.region === profile.region) {
-    score += 12;
-  } else if (profile.region === 'IN' && track.language === 'Hindi') {
-    score += 12;
-  } else if (profile.region === 'JP' && track.language === 'J-Pop') {
-    score += 12;
-  } else if ((profile.region === 'US' || profile.region === 'GB') && track.language === 'English') {
-    score += 10;
-  }
+  if (track.region === profile.region) score += 1.5;
 
   // Artist affinity from user's plays, likes & explicit personalisation picks
   const primaryArtist = track.artist.split(',')[0]?.trim().toLowerCase() || '';
