@@ -2,6 +2,7 @@ import { Compass, Home, Library, Search } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 import { MediaSession } from '@capgo/capacitor-media-session';
 import { apiUrl } from './utils/apiUrl';
+import { curateAIRecommendations } from './ai';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CollectionView } from './components/CollectionView';
 import { DiscoverView } from './components/DiscoverView';
@@ -668,10 +669,12 @@ export default function App() {
       }
     }
 
-    const ranked = combined
-      .map((track) => ({ track, score: scoreTrackForUser(track, tasteProfile) }))
-      .sort((a, b) => b.score - a.score)
-      .map((item) => item.track);
+    const ranked = curateAIRecommendations(
+      [...combined, ...SEED_TRACKS],
+      Object.values(recommendationLikedMap),
+      recommendationRecentTracks,
+      80,
+    ).map((item) => item.track);
 
     const highlights = deriveDynamicTasteHighlights(tasteProfile);
 
