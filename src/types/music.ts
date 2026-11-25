@@ -145,6 +145,9 @@ export interface CollectionTarget {
   subtitle: string;
   image: string;
   tracks: Track[];
+  sourceEntriesReceived?: number;
+  matchedTrackCount?: number;
+  unmatchedTrackCount?: number;
 }
 
 declare global {
