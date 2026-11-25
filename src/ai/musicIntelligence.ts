@@ -20,7 +20,7 @@ function normalizeWeights(source: Record<string, number>): Record<string, number
   return Object.fromEntries(Object.entries(source).map(([key, value]) => [key, value / max]));
 }
 
-export interface TasteGuidance { preferredMoods?: string[]; favoriteArtists?: string[]; preferredLanguages?: string[]; }
+export interface TasteGuidance { preferredMoods?: string[]; favoriteArtists?: string[]; preferredLanguages?: string[]; genreAffinity?: Record<string, number>; artistAffinity?: Record<string, number>; playCounts?: Record<string, number>; targetMood?: string; }
 
 export function buildMusicTasteVector(liked: Track[], recent: Track[], guidance: TasteGuidance = {}): MusicTasteVector {
   const genres: Record<string, number> = {};
@@ -46,6 +46,9 @@ export function buildMusicTasteVector(liked: Track[], recent: Track[], guidance:
   addWeights(moods, tokens(guidance.preferredMoods || []), 0.65);
   addWeights(artists, tokens(guidance.favoriteArtists || []), 0.65);
   for (const language of guidance.preferredLanguages || []) languageCounts[language] = (languageCounts[language] || 0) + 0.25;
+  for (const [genre, count] of Object.entries(guidance.genreAffinity || {})) addWeights(genres, tokens(genre), Math.log1p(Math.max(0, count)) * 0.35);
+  for (const [artist, count] of Object.entries(guidance.artistAffinity || {})) addWeights(artists, tokens(artist), Math.log1p(Math.max(0, count)) * 0.25);
+  if (guidance.targetMood) addWeights(moods, tokens(guidance.targetMood), 1.5);
   return {
     genres: normalizeWeights(genres),
     moods: normalizeWeights(moods),
@@ -111,7 +114,14 @@ export function curateAIRecommendations(
       const result = explainMusicSimilarity(track, taste);
       const popularity = Math.min(0.04, Math.log10(Math.max(1, track.playCount || 1)) / 100);
       const exploration = result.confidence < 0.25 ? 0.08 : 0;
-      return { track, score: result.score + popularity + exploration, confidence: result.confidence, reason: result.reason, signals: result.signals };
+      const repeatPenalty = Math.min(0.12, Math.log1p(Math.max(0, guidance.playCounts?.[track.id] || 0)) * 0.025);
+      const targetMoodMatch = guidance.targetMood
+        ? weightedOverlap([...tokens(track.moods || []), ...tokens(track.synthMood), ...tokens(track.genre)], Object.fromEntries(tokens(guidance.targetMood).map((token) => [token, 1])))
+        : 0;
+      const moodBoost = guidance.targetMood ? targetMoodMatch * 0.24 : 0;
+      const signals = [...result.signals];
+      if (targetMoodMatch > 0.05 && guidance.targetMood) signals.unshift(`fits ${guidance.targetMood}`);
+      return { track, score: result.score + popularity + exploration + moodBoost - repeatPenalty, confidence: result.confidence, reason: signals.length ? `Selected for ${signals.slice(0, 2).join(' and ')}.` : result.reason, signals };
     })
     .sort((a, b) => b.score - a.score);
   const selected: AIRecommendation[] = [];
