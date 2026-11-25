@@ -100,8 +100,9 @@ export function curateAIRecommendations(
   liked: Track[],
   recent: Track[],
   limit = 40,
+  guidance: TasteGuidance = {},
 ): AIRecommendation[] {
-  const taste = buildMusicTasteVector(liked, recent);
+  const taste = buildMusicTasteVector(liked, recent, guidance);
   const likedIds = new Set(liked.map((track) => track.id));
   const recentIds = new Set(recent.slice(0, 3).map((track) => track.id));
   const ranked = candidates
