@@ -500,6 +500,21 @@ test('rankDiscoverTracks uses local taste signals and suppresses recently played
   assert.deepEqual(new Set(ranked.map((track) => track.id)).size, ranked.length);
 });
 
+test('Discover ranks cross-language tracks with closer sound metadata above language-only matches', () => {
+  const liked = { ...sampleTracks[0], id: 'liked-reference', genre: 'Pop', bpm: 100, energy: 0.5, moods: ['romantic'] };
+  const languageOnly = { ...sampleTracks[0], id: 'language-only', name: 'Different Hindi Song', artist: 'New Hindi Artist', genre: 'Pop', bpm: 180, energy: 0.95, moods: ['energetic'] };
+  const soundMatch = { ...sampleTracks[1], id: 'sound-match', name: 'Related Sound', artist: 'Different English Artist', genre: 'Pop', bpm: 102, energy: 0.52, moods: ['romantic'] };
+  const ranked = rankDiscoverTracks([languageOnly, soundMatch], [], {
+    likedTracks: [liked],
+    playCounts: {},
+    artistAffinity: {},
+    genreAffinity: { Pop: 4 },
+    preferredLanguages: ['Hindi'],
+    favoriteArtists: [],
+    preferredMoods: [],
+  });
+  assert.equal(ranked[0].id, 'sound-match');
+});
 test('rankDiscoverTracks diversifies artists, preserves a fallback when everything is recent, and does not mutate inputs', () => {
   const pool: Track[] = [
     { ...sampleTracks[0], id: 'artist-a1', name: 'A1', artist: 'Same Artist', genre: 'Pop' },
