@@ -835,20 +835,29 @@ export function scoreTrackForUser(track: Track, profile: UserTasteProfile): numb
     }
   }
 
-  // Preferred moods & Genre affinity
-  const genreOrAlbum = `${track.genre || ''} ${track.albumName || ''}`.toLowerCase();
+  // Match musical descriptors, never language labels or album names, as mood signals.
+  const normalizeTokens = (value: string) => value.toLowerCase()
+    .normalize('NFKD')
+    .replace(/[\\u0300-\\u036f]/g, '')
+    .split(/[^a-z0-9]+/)
+    .filter((token) => token.length >= 3);
+  const genreTokens = new Set(normalizeTokens(track.genre || ''));
+  const moodTokens = new Set((track.moods || []).flatMap(normalizeTokens));
   for (const mood of profile.preferredMoods || []) {
-    const mTokens = mood.toLowerCase().split(/[\s&/]+/).filter((t) => t.length >= 3);
-    if (mTokens.some((tok) => genreOrAlbum.includes(tok) || (track.language || '').toLowerCase().includes(tok))) {
-      score += 22;
+    const tokens = normalizeTokens(mood);
+    if (tokens.some((token) => genreTokens.has(token) || moodTokens.has(token))) score += 8;
+  }
+  for (const [genreKey, weight] of Object.entries(profile.genreAffinity)) {
+    const affinityTokens = normalizeTokens(genreKey);
+    const overlap = affinityTokens.filter((token) => genreTokens.has(token)).length;
+    if (overlap > 0 && affinityTokens.length) {
+      score += Math.min(18, Math.max(0, weight) * 2.5 * (overlap / affinityTokens.length));
     }
   }
-  if (track.genre) {
-    for (const [genreKey, weight] of Object.entries(profile.genreAffinity)) {
-      if (track.genre.toLowerCase().includes(genreKey.toLowerCase())) {
-        score += Math.min(40, weight * 5);
-      }
-    }
+  if (profile.preferredMoods?.length && moodTokens.size) {
+    const preferred = new Set(profile.preferredMoods.flatMap(normalizeTokens));
+    const overlap = [...moodTokens].filter((token) => preferred.has(token)).length;
+    score += Math.min(12, overlap * 4);
   }
 
   // Liked tracks boost & mild novelty penalty if just played very recently
