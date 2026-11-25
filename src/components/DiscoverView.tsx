@@ -71,7 +71,7 @@ export function DiscoverView({
       80,
       { preferredMoods, favoriteArtists, preferredLanguages, genreAffinity, artistAffinity, playCounts, listeningFeedback, targetMood: mode === 'Mood Mix' && mood !== 'All' ? mood : undefined },
     ).map((recommendation) => recommendation.track),
-    [candidatePool, likedTracks, recentlyPlayed, preferredMoods, favoriteArtists, preferredLanguages, genreAffinity, artistAffinity, playCounts, mode, mood, rotation]
+    [candidatePool, likedTracks, recentlyPlayed, preferredMoods, favoriteArtists, preferredLanguages, genreAffinity, artistAffinity, playCounts, listeningFeedback, mode, mood, rotation]
   );
 
   const modePool = useMemo(() => {
