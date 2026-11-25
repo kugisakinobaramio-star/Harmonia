@@ -11,3 +11,6 @@ coverage/
 .wrangler/
 .dev.vars*
 !.dev.vars.example
+
+# Firebase Android client config (generated/downloaded from Firebase Console)
+android/app/google-services.json
