@@ -16,7 +16,7 @@
     "cf:dry-run": "npm run build && wrangler deploy --dry-run",
     "android:sync": "npm run build && cap sync android && python3 scripts/apply-android-branding.py && python3 scripts/test-android-branding.py",
     "android:open": "cap open android",
-    "test:firestore-rules": "npx --yes firebase-tools@14.19.0 emulators:exec --only firestore --project demo-musick \"node --import tsx --test src/lib/firestore.rules.emulator.test.ts\""
+    "test:firestore-rules": "npx --yes firebase-tools@15.37.0 emulators:exec --only firestore --project demo-musick \"node --import tsx --test src/lib/firestore.rules.emulator.test.ts\""
   },
   "dependencies": {
     "@capacitor/android": "^8.0.0",
