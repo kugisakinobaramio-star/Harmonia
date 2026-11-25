@@ -734,3 +734,42 @@ test('shuffle bag handles empty queues and duplicate track IDs', () => {
   const duplicateQueue = [sampleTracks[0], sampleTracks[0], sampleTracks[1]];
   assert.deepEqual(createShuffleBag(duplicateQueue, 'missing', () => 0.25).sort(), ['t1', 't2']);
 });
+
+test('Discover eligibility rejects emoji spam uploader handles and deduplicates soundtrack co-credits', () => {
+  const spamUploader: Track = {
+    ...sampleTracks[0],
+    id: 'sc-spam',
+    artist: '❤️DILLSEDESI❤️',
+    sourceAvailability: 'full',
+    streamUrls: { '160kbps': 'https://audio.example.com/sc.mp3' },
+  };
+  assert.equal(isQualityDiscoverTrack(spamUploader), false);
+  assert.equal(isQualityDiscoverTrack({ ...sampleTracks[0], id: 'sc-rip-1', name: '_Song Full Video Song _(MP3_70K)', streamUrls: { '160kbps': 'https://audio.example.com/sc.mp3' } }), false);
+  assert.equal(isQualityDiscoverTrack({ ...sampleTracks[0], id: 'sc-rip-2', name: 'Alag Aasmaan ( Lyrics )', streamUrls: { '160kbps': 'https://audio.example.com/sc.mp3' } }), false);
+
+  const dupA: Track = {
+    ...sampleTracks[0],
+    id: 'dup-a',
+    name: 'Tum Hi Ho (From "Aashiqui 2")',
+    artist: 'Mithoon, Arijit Singh',
+    duration: 262,
+  };
+  const dupB: Track = {
+    ...sampleTracks[0],
+    id: 'dup-b',
+    name: 'Tum Hi Ho - From "Aashiqui 2"',
+    artist: 'Arijit Singh, Mithoon',
+    duration: 262,
+  };
+  const ranked = rankDiscoverTracks([dupA, dupB], [], {
+    likedTracks: [],
+    playCounts: {},
+    artistAffinity: {},
+    genreAffinity: {},
+    preferredLanguages: [],
+    favoriteArtists: [],
+    preferredMoods: [],
+  });
+  assert.equal(ranked.length, 1);
+  assert.equal(ranked[0].id, 'dup-a');
+});

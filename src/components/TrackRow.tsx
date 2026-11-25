@@ -1,5 +1,6 @@
 import { Heart, ListPlus, Play, Plus, Video } from 'lucide-react';
 import type { Track } from '../types/music';
+import { extractPrimaryArtistName } from '../utils/artistProfile';
 import { formatPlayCount, formatTime, hasFullAudioStream } from '../utils/playerEngine';
 import { CoverImage } from './CoverImage';
 import { DownloadButton } from './DownloadButton';
@@ -18,6 +19,7 @@ interface TrackRowProps {
   onToggleDownload: () => void;
   onAddToPlaylist: () => void;
   onOpenVideo: () => void;
+  onOpenArtistName?: (artistName: string) => void;
 }
 
 export function TrackRow({
@@ -34,8 +36,10 @@ export function TrackRow({
   onToggleDownload,
   onAddToPlaylist,
   onOpenVideo,
+  onOpenArtistName,
 }: TrackRowProps) {
   const playLabel = formatPlayCount(track.playCount);
+  const primaryArtist = extractPrimaryArtistName(track.artist);
   const sourceLabel =
     track.sourceAvailability === 'metadata' || track.metadataOnly
       ? 'Catalogue info only · source not confirmed'
@@ -47,8 +51,7 @@ export function TrackRow({
   const sourceText = track.sourceProvider
     ? sourceLabel + ' · ' + track.sourceProvider
     : sourceLabel;
-  const metaParts = [
-    track.artist,
+  const secondaryMetaParts = [
     track.albumName,
     track.language || '',
     playLabel ? `${playLabel} plays` : '',
@@ -94,8 +97,23 @@ export function TrackRow({
           >
             {track.name}
           </div>
-          <div className="truncate text-xs text-zinc-400">{metaParts.join(' · ')}</div>
         </button>
+        <div className="flex min-w-0 items-center truncate text-xs text-zinc-400">
+          {onOpenArtistName && primaryArtist && primaryArtist !== 'Unknown Artist' ? (
+            <button
+              type="button"
+              onClick={() => onOpenArtistName(primaryArtist)}
+              className="shrink-0 truncate font-medium text-zinc-300 hover:text-white hover:underline focus:outline-none"
+            >
+              {track.artist}
+            </button>
+          ) : (
+            <span className="truncate">{track.artist}</span>
+          )}
+          {secondaryMetaParts.length > 0 && (
+            <span className="truncate text-zinc-400">{` · ${secondaryMetaParts.join(' · ')}`}</span>
+          )}
+        </div>
         <div
           className="truncate text-[10px] text-zinc-500"
           title={sourceText}

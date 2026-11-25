@@ -1,6 +1,7 @@
 import { Compass, Play, Shuffle } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { MusicLanguage, Track } from '../types/music';
+import { dedupeCanonicalTracks, extractPrimaryArtistName } from '../utils/artistProfile';
 import { isQualityDiscoverTrack, normalizeDiscoverLanguage, type DiscoverMood } from '../utils/playerEngine';
 import { curateAIRecommendations } from '../ai';
 import { CoverImage } from './CoverImage';
@@ -17,6 +18,7 @@ interface DiscoverViewProps {
   onPlayTrackList: (tracks: Track[], startIndex: number) => void;
   onToggleDownload: (track: Track) => void;
   onRefresh: () => Promise<void>;
+  onOpenArtistName?: (artistName: string) => void;
   likedTracks: Track[];
   playCounts: Record<string, number>;
   listeningFeedback: Record<string, { skips: number; completions: number }>;
@@ -44,6 +46,7 @@ export function DiscoverView({
   onPlayTrackList,
   onToggleDownload,
   onRefresh,
+  onOpenArtistName,
   likedTracks,
   playCounts,
   listeningFeedback,
@@ -59,9 +62,13 @@ export function DiscoverView({
   const [rotation, setRotation] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const candidatePool = useMemo(() => {
-    if (mode === 'Global Charts') return globalTracks;
-    if (mode === 'Regional Discover') return regionalTracks;
-    return [...globalTracks, ...regionalTracks, ...tracks];
+    const rawPool =
+      mode === 'Global Charts'
+        ? globalTracks
+        : mode === 'Regional Discover'
+          ? regionalTracks
+          : [...globalTracks, ...regionalTracks, ...tracks];
+    return dedupeCanonicalTracks(rawPool.filter(isQualityDiscoverTrack));
   }, [mode, globalTracks, regionalTracks, tracks]);
 
   const varied = useMemo(
@@ -70,23 +77,25 @@ export function DiscoverView({
       likedTracks,
       recentlyPlayed,
       80,
-      { preferredMoods, favoriteArtists, preferredLanguages, genreAffinity, artistAffinity, playCounts, listeningFeedback, targetMood: mode === 'Mood Mix' && mood !== 'All' ? mood : undefined },
+      {
+        preferredMoods,
+        favoriteArtists,
+        preferredLanguages,
+        genreAffinity,
+        artistAffinity,
+        playCounts,
+        listeningFeedback,
+        targetMood: mode === 'Mood Mix' && mood !== 'All' ? mood : undefined,
+        rotation,
+      },
     ).map((recommendation) => recommendation.track),
     [candidatePool, likedTracks, recentlyPlayed, preferredMoods, favoriteArtists, preferredLanguages, genreAffinity, artistAffinity, playCounts, listeningFeedback, mode, mood, rotation]
   );
 
-  const modePool = useMemo(() => {
-    const seen = new Set<string>();
-    return varied.filter((track) => {
-      if (seen.has(track.id) || !isQualityDiscoverTrack(track)) return false;
-      seen.add(track.id);
-      return true;
-    });
-  }, [varied]);
+  const modePool = useMemo(() => dedupeCanonicalTracks(varied.filter(isQualityDiscoverTrack)), [varied]);
 
   const visible = modePool.filter((track) =>
-    (mode !== 'Language Mix' || language === 'All' || normalizeDiscoverLanguage(track.language) === language) &&
-    true
+    mode !== 'Language Mix' || language === 'All' || normalizeDiscoverLanguage(track.language) === language
   );
 
   return (
@@ -134,11 +143,11 @@ export function DiscoverView({
       <p className="text-[11px] text-zinc-500">Filters use catalogue language, genre, tempo and explicit mood tags. Unknown metadata stays unclassified.</p>
 
       <div className="flex items-baseline justify-between gap-2">
-        <div>
+        <div className="min-w-0">
           <h2 className="text-xl font-bold text-white">{mode}</h2>
           <p className="text-xs text-zinc-400">Chart data ranks popular tracks; discovery pools diversify repeated artists.</p>
         </div>
-        {visible.length > 0 && <button type="button" onClick={() => onPlayTrackList(visible, 0)} className="text-xs font-bold text-zinc-300 hover:text-white"><Play className="mr-1 inline h-3.5 w-3.5 fill-current" /> Play all</button>}
+        {visible.length > 0 && <button type="button" onClick={() => onPlayTrackList(visible, 0)} className="shrink-0 whitespace-nowrap text-xs font-bold text-zinc-300 hover:text-white"><Play className="mr-1 inline h-3.5 w-3.5 fill-current" /> Play all</button>}
       </div>
 
       {visible.length ? (
@@ -147,6 +156,7 @@ export function DiscoverView({
             const isDownloaded = downloadedIds.has(track.id);
             const isDownloading = downloadingIds.has(track.id);
             const isOnlineOnly = track.offlineAvailable === false || track.sourceProvider === 'Jamendo';
+            const primaryArtist = extractPrimaryArtistName(track.artist);
             return (
               <div
                 key={track.id}
@@ -159,16 +169,26 @@ export function DiscoverView({
                 >
                   <div className="relative aspect-square overflow-hidden rounded-md bg-black">
                     <CoverImage src={track.image} alt={track.name} className="h-full w-full object-cover" />
-                    <span className="absolute bottom-2 right-2 grid h-9 w-9 place-items-center rounded-full bg-[#1DB954] text-black opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
+                    <span className="absolute bottom-2 right-2 grid h-9 w-9 place-items-center rounded-full bg-[#1DB954] text-black opacity-90 shadow-lg transition-opacity sm:opacity-0 sm:group-hover:opacity-100">
                       <Play className="h-4 w-4 fill-current" />
                     </span>
                   </div>
                   <div className="mt-2 truncate text-sm font-bold text-white">{track.name}</div>
-                  <div className="mt-0.5 truncate text-xs text-zinc-400">{track.artist}</div>
-                  <div className="mt-1 truncate text-[10px] text-zinc-500">
-                    {[track.language, track.genre].filter(Boolean).join(' · ') || 'Explore'}
-                  </div>
                 </button>
+                {onOpenArtistName ? (
+                  <button
+                    type="button"
+                    onClick={() => onOpenArtistName(primaryArtist)}
+                    className="mt-0.5 block max-w-full truncate text-left text-xs text-zinc-400 hover:text-white hover:underline"
+                  >
+                    {track.artist}
+                  </button>
+                ) : (
+                  <div className="mt-0.5 truncate text-xs text-zinc-400">{track.artist}</div>
+                )}
+                <div className="mt-1 truncate text-[10px] text-zinc-500">
+                  {[track.language, track.genre].filter(Boolean).join(' · ') || 'Explore'}
+                </div>
                 <DownloadButton
                   trackName={track.name}
                   downloaded={isDownloaded}

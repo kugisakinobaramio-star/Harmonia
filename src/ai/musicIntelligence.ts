@@ -20,7 +20,7 @@ function normalizeWeights(source: Record<string, number>): Record<string, number
   return Object.fromEntries(Object.entries(source).map(([key, value]) => [key, value / max]));
 }
 
-export interface TasteGuidance { preferredMoods?: string[]; favoriteArtists?: string[]; preferredLanguages?: string[]; genreAffinity?: Record<string, number>; artistAffinity?: Record<string, number>; playCounts?: Record<string, number>; listeningFeedback?: Record<string, { skips?: number; completions?: number }>; targetMood?: string; }
+export interface TasteGuidance { preferredMoods?: string[]; favoriteArtists?: string[]; preferredLanguages?: string[]; genreAffinity?: Record<string, number>; artistAffinity?: Record<string, number>; playCounts?: Record<string, number>; listeningFeedback?: Record<string, { skips?: number; completions?: number }>; targetMood?: string; rotation?: number; }
 
 export function buildMusicTasteVector(liked: Track[], recent: Track[], guidance: TasteGuidance = {}): MusicTasteVector {
   const genres: Record<string, number> = {};
@@ -116,6 +116,17 @@ export function curateAIRecommendations(
     seenCandidateIds.add(track.id);
     return true;
   });
+  const rotationSeed = typeof guidance.rotation === 'number' && guidance.rotation > 0 ? guidance.rotation : 0;
+  const rotationJitter = (id: string): number => {
+    if (!rotationSeed) return 0;
+    let hash = 2166136261;
+    const input = `${id}:${rotationSeed}`;
+    for (let i = 0; i < input.length; i += 1) {
+      hash ^= input.charCodeAt(i);
+      hash = Math.imul(hash, 16777619);
+    }
+    return ((hash >>> 0) / 0xffffffff) * 0.14;
+  };
   const ranked = uniqueCandidates
     .map((track) => {
       const result = explainMusicSimilarity(track, taste);
@@ -131,7 +142,7 @@ export function curateAIRecommendations(
       const moodBoost = guidance.targetMood ? targetMoodMatch * 0.24 : 0;
       const signals = [...result.signals];
       if (targetMoodMatch > 0.05 && guidance.targetMood) signals.unshift(`fits ${guidance.targetMood}`);
-      return { track, score: result.score + popularity + exploration + moodBoost + completionBoost - repeatPenalty - skipPenalty, confidence: result.confidence, reason: signals.length ? `Selected for ${signals.slice(0, 2).join(' and ')}.` : result.reason, signals };
+      return { track, score: result.score + popularity + exploration + moodBoost + completionBoost + rotationJitter(track.id) - repeatPenalty - skipPenalty, confidence: result.confidence, reason: signals.length ? `Selected for ${signals.slice(0, 2).join(' and ')}.` : result.reason, signals };
     })
     .sort((a, b) => b.score - a.score);
   const selected: AIRecommendation[] = [];

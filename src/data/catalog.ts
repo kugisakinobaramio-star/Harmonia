@@ -581,7 +581,7 @@ export const SEED_PLAYLISTS: CuratedPlaylist[] = [
     image: 'https://cdn-images.dzcdn.net/images/cover/c028acc15f911c6ca3ff821abbb64aa3/250x250-000000-80-0-0.jpg',
     language: 'Japanese',
     region: 'JP',
-    tracks: SEED_TRACKS.filter((t) => t.language === 'J-Pop'),
+    tracks: SEED_TRACKS.filter((t) => t.language === 'Japanese' || t.language === 'J-Pop'),
   },
   {
     id: 'pl-english-afterhours',

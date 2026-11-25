@@ -4,6 +4,7 @@ import { MediaSession } from '@capgo/capacitor-media-session';
 import { apiUrl } from './utils/apiUrl';
 import { curateAIRecommendations } from './ai';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ArtistView } from './components/ArtistView';
 import { CollectionView } from './components/CollectionView';
 import { DiscoverView } from './components/DiscoverView';
 import { ExpandedPlayer } from './components/ExpandedPlayer';
@@ -15,11 +16,15 @@ import { LyricsView } from './components/LyricsView';
 import {
   AddToPlaylistModal,
   CreatePlaylistModal,
+  MigrationPreviewModal,
   PersonaliseModal,
   ProfileModal,
   SpotifyImportModal,
   VideoModal,
 } from './components/Modals';
+import { SCHEMA_VERSION } from './lib/cloudSanitizer';
+import type { MusicKKLocalSnapshot } from './lib/syncEngine';
+import { useCloudSync } from './lib/useCloudSync';
 import { PlayerBar } from './components/PlayerBar';
 import { RightPanel } from './components/RightPanel';
 import { SearchView } from './components/SearchView';
@@ -27,11 +32,13 @@ import { WelcomeExperience } from './components/WelcomeExperience';
 import { Sidebar } from './components/Sidebar';
 import { ARTWORK, SEED_ARTISTS, SEED_PLAYLISTS, SEED_TRACKS } from './data/catalog';
 import type {
-  ArtistProfile,
+  ArtistAlbumSummary,
+  ArtistTarget,
   AudioQuality,
   CollectionTarget,
   CuratedPlaylist,
   EqPreset,
+  FollowedArtist,
   LyricLine,
   MusicLanguage,
   MusicRegion,
@@ -44,10 +51,16 @@ import type {
   ViewName,
 } from './types/music';
 import {
+  dedupeCanonicalTracks,
+  normalizeArtistNameKey,
+  toggleFollowedArtistMap,
+} from './utils/artistProfile';
+import {
   buildTasteProfile,
   fetchBackendUserState,
   fetchPlayableDiscoveries,
   fetchTrackLyrics,
+  loadCollectionTracks,
   resolveSpotifyUrl,
   resolveTrackStreams,
   searchSongs,
@@ -99,6 +112,7 @@ function buildStreamCandidates(
 interface NavEntry {
   view: ViewName;
   collection: CollectionTarget | null;
+  artist?: ArtistTarget | null;
 }
 
 const STORAGE_KEY = 'harmonia_spotify_state_v2';
@@ -110,29 +124,7 @@ function withoutPersistedProviderAudio(track: Track): Track {
   return { ...track, streamUrls: undefined, previewUrl: undefined, offlineAvailable: false };
 }
 
-function loadLocalSnapshot(): {
-  displayName?: string;
-  region?: MusicRegion;
-  preferredLanguages?: MusicLanguage[];
-  favoriteArtists?: string[];
-  preferredMoods?: string[];
-  prioritizeLyrics?: boolean;
-  likedMap?: Record<string, Track>;
-  playlists?: CuratedPlaylist[];
-  recentlyPlayed?: Track[];
-  artistAffinity?: Record<string, number>;
-  languageAffinity?: Record<string, number>;
-  genreAffinity?: Record<string, number>;
-  playCounts?: Record<string, number>;
-  listeningFeedback?: Record<string, { skips: number; completions: number }>;
-  playedTracks?: Record<string, Track>;
-  tasteResetActive?: boolean;
-  tasteLikedMap?: Record<string, Track>;
-  tasteRecentTracks?: Track[];
-  volume?: number;
-  quality?: AudioQuality;
-  eqPreset?: EqPreset;
-} {
+function loadLocalSnapshot(): MusicKKLocalSnapshot {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     return raw ? JSON.parse(raw) : {};
@@ -148,11 +140,12 @@ export default function App() {
   );
   const [welcomeVisible, setWelcomeVisible] = useState(() => !welcomeSetupComplete);
   // Navigation & history stack
-  const [navHistory, setNavHistory] = useState<NavEntry[]>([{ view: 'home', collection: null }]);
+  const [navHistory, setNavHistory] = useState<NavEntry[]>([{ view: 'home', collection: null, artist: null }]);
   const [navIndex, setNavIndex] = useState(0);
-  const currentNav = navHistory[navIndex] || { view: 'home', collection: null };
+  const currentNav = navHistory[navIndex] || { view: 'home', collection: null, artist: null };
   const activeView = currentNav.view;
   const activeCollection = currentNav.collection;
+  const activeArtist = currentNav.artist || null;
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [rightPanelMode, setRightPanelMode] = useState<RightPanelMode>(() =>
@@ -231,6 +224,16 @@ export default function App() {
   const [tasteResetActive, setTasteResetActive] = useState(Boolean(initialSnap.tasteResetActive));
   const [tasteLikedMap, setTasteLikedMap] = useState<Record<string, Track>>(initialSnap.tasteLikedMap || {});
   const [tasteRecentTracks, setTasteRecentTracks] = useState<Track[]>(initialSnap.tasteRecentTracks || []);
+  const [likedTimestamps, setLikedTimestamps] = useState<Record<string, number>>(initialSnap.likedTimestamps || {});
+  const [playlistUpdatedAtMs, setPlaylistUpdatedAtMs] = useState<Record<string, number>>(initialSnap.playlistUpdatedAtMs || {});
+  const [deletedPlaylistIds, setDeletedPlaylistIds] = useState<Record<string, number>>(initialSnap.deletedPlaylistIds || {});
+  const [deletedLikedIds, setDeletedLikedIds] = useState<Record<string, number>>(initialSnap.deletedLikedIds || {});
+  const [followedArtists, setFollowedArtists] = useState<Record<string, FollowedArtist>>(
+    initialSnap.followedArtists || {}
+  );
+  const [deletedFollowedArtistIds, setDeletedFollowedArtistIds] = useState<Record<string, number>>(
+    initialSnap.deletedFollowedArtistIds || {}
+  );
   const recommendationLikedMap = tasteResetActive ? tasteLikedMap : likedMap;
   const recommendationRecentTracks = tasteResetActive ? tasteRecentTracks : recentlyPlayed;
 
@@ -494,46 +497,47 @@ export default function App() {
     };
   }, []);
 
-  // Persist local snapshot
-  useEffect(() => {
-    try {
-      localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify({
-          displayName,
-          region,
-          preferredLanguages,
-          favoriteArtists,
-          preferredMoods,
-          prioritizeLyrics,
-          likedMap: Object.fromEntries(
-            Object.entries(likedMap).map(([id, track]) => [id, withoutPersistedProviderAudio(track)])
-          ),
-          playlists: userPlaylists.map((playlist) => ({
-            ...playlist,
-            tracks: playlist.tracks.map(withoutPersistedProviderAudio),
-          })),
-          recentlyPlayed: recentlyPlayed.slice(0, 20).map(withoutPersistedProviderAudio),
-          artistAffinity,
-          languageAffinity,
-          genreAffinity,
-          playCounts,
-          playedTracks: Object.fromEntries(
-            Object.entries(playedTracks).map(([id, track]) => [id, withoutPersistedProviderAudio(track)])
-          ),
-          tasteResetActive,
-          tasteLikedMap: Object.fromEntries(
-            Object.entries(tasteLikedMap).map(([id, track]) => [id, withoutPersistedProviderAudio(track)])
-          ),
-          tasteRecentTracks: tasteRecentTracks.map(withoutPersistedProviderAudio),
-          volume,
-          quality,
-          eqPreset,
-        })
-      );
-    } catch {
-      // Ignore storage quota issues
-    }
+  const getCurrentSnapshot = useCallback((): MusicKKLocalSnapshot => {
+    return {
+      schemaVersion: SCHEMA_VERSION,
+      updatedAtMs: Date.now(),
+      displayName,
+      region,
+      preferredLanguages,
+      favoriteArtists,
+      preferredMoods,
+      prioritizeLyrics,
+      likedMap: Object.fromEntries(
+        Object.entries(likedMap).map(([id, track]) => [id, withoutPersistedProviderAudio(track)])
+      ),
+      likedTimestamps,
+      playlists: userPlaylists.map((playlist) => ({
+        ...playlist,
+        tracks: playlist.tracks.map(withoutPersistedProviderAudio),
+      })),
+      playlistUpdatedAtMs,
+      recentlyPlayed: recentlyPlayed.slice(0, 20).map(withoutPersistedProviderAudio),
+      artistAffinity,
+      languageAffinity,
+      genreAffinity,
+      playCounts,
+      listeningFeedback,
+      playedTracks: Object.fromEntries(
+        Object.entries(playedTracks).map(([id, track]) => [id, withoutPersistedProviderAudio(track)])
+      ),
+      tasteResetActive,
+      tasteLikedMap: Object.fromEntries(
+        Object.entries(tasteLikedMap).map(([id, track]) => [id, withoutPersistedProviderAudio(track)])
+      ),
+      tasteRecentTracks: tasteRecentTracks.map(withoutPersistedProviderAudio),
+      volume,
+      quality,
+      eqPreset,
+      deletedPlaylistIds,
+      deletedLikedIds,
+      followedArtists,
+      deletedFollowedArtistIds,
+    };
   }, [
     displayName,
     region,
@@ -542,12 +546,15 @@ export default function App() {
     preferredMoods,
     prioritizeLyrics,
     likedMap,
+    likedTimestamps,
     userPlaylists,
+    playlistUpdatedAtMs,
     recentlyPlayed,
     artistAffinity,
     languageAffinity,
     genreAffinity,
     playCounts,
+    listeningFeedback,
     playedTracks,
     tasteResetActive,
     tasteLikedMap,
@@ -555,7 +562,64 @@ export default function App() {
     volume,
     quality,
     eqPreset,
+    deletedPlaylistIds,
+    deletedLikedIds,
+    followedArtists,
+    deletedFollowedArtistIds,
   ]);
+
+  const applyCloudSnapshot = useCallback((snap: MusicKKLocalSnapshot) => {
+    setDisplayName(snap.displayName || 'Listener');
+    setRegion(snap.region || 'IN');
+    setPreferredLanguages(snap.preferredLanguages || []);
+    setFavoriteArtists(snap.favoriteArtists || []);
+    setPreferredMoods(snap.preferredMoods || []);
+    setPrioritizeLyrics(typeof snap.prioritizeLyrics === 'boolean' ? snap.prioritizeLyrics : true);
+    setLikedMap(snap.likedMap || {});
+    setLikedTimestamps(snap.likedTimestamps || {});
+    setUserPlaylists(snap.playlists || []);
+    setPlaylistUpdatedAtMs(snap.playlistUpdatedAtMs || {});
+    setRecentlyPlayed(snap.recentlyPlayed || []);
+    setArtistAffinity(snap.artistAffinity || {});
+    setLanguageAffinity(snap.languageAffinity || {});
+    setGenreAffinity(snap.genreAffinity || {});
+    setPlayCounts(snap.playCounts || {});
+    setListeningFeedback(snap.listeningFeedback || {});
+    setPlayedTracks(snap.playedTracks || {});
+    setTasteResetActive(Boolean(snap.tasteResetActive));
+    setTasteLikedMap(snap.tasteLikedMap || {});
+    setTasteRecentTracks(snap.tasteRecentTracks || []);
+    if (typeof snap.volume === 'number') setVolume(snap.volume);
+    if (snap.quality) setQuality(snap.quality);
+    if (snap.eqPreset) setEqPreset(snap.eqPreset);
+    setDeletedPlaylistIds(snap.deletedPlaylistIds || {});
+    setDeletedLikedIds(snap.deletedLikedIds || {});
+    setFollowedArtists(snap.followedArtists || {});
+    setDeletedFollowedArtistIds(snap.deletedFollowedArtistIds || {});
+  }, []);
+
+  const cloudSync = useCloudSync({
+    getCurrentSnapshot,
+    applySnapshot: applyCloudSnapshot,
+    onToast: showToast,
+  });
+
+  const didMountPersistRef = useRef(false);
+
+  // Persist local snapshot and schedule cloud sync when authenticated
+  useEffect(() => {
+    const snap = getCurrentSnapshot();
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(snap));
+    } catch {
+      // Ignore storage quota issues
+    }
+    if (!didMountPersistRef.current) {
+      didMountPersistRef.current = true;
+      return;
+    }
+    cloudSync.scheduleSync('local-update');
+  }, [getCurrentSnapshot, cloudSync.scheduleSync]);
 
   // Warm worldwide discovery in the background so the first Discover visit is not a cold fetch.
   const [globalTracks, setGlobalTracks] = useState<Track[]>([]);
@@ -588,12 +652,22 @@ export default function App() {
     };
   }, [region]);
 
+  const followedArtistNames = useMemo(
+    () => Object.values(followedArtists).map((artist) => artist.name).filter(Boolean),
+    [followedArtists]
+  );
+
+  const effectiveFavoriteArtists = useMemo(
+    () => [...new Set([...favoriteArtists, ...followedArtistNames])],
+    [favoriteArtists, followedArtistNames]
+  );
+
   // Build discovery queries only from explicit picks and the listener's own activity.
   useEffect(() => {
     let cancelled = false;
     const historyTracks = [...Object.values(recommendationLikedMap), ...recommendationRecentTracks];
     const artistSeeds = [
-      ...favoriteArtists,
+      ...effectiveFavoriteArtists,
       ...Object.entries(artistAffinity)
         .filter(([, weight]) => weight > 0)
         .sort((a, b) => b[1] - a[1])
@@ -626,30 +700,21 @@ export default function App() {
       queries.map((query) => searchSongs(query, { region, prioritizeLyrics }))
     ).then((settled) => {
       if (cancelled) return;
-      const seen = new Set<string>();
-      const combined: Track[] = [];
-      for (const result of settled) {
-        if (result.status !== 'fulfilled') continue;
-        for (const track of result.value.tracks) {
-          const key = `${track.name.toLowerCase()}::${track.artist.split(',')[0]?.trim().toLowerCase()}`;
-          if (!seen.has(key)) {
-            seen.add(key);
-            combined.push(track);
-          }
-        }
-      }
+      const combined = dedupeCanonicalTracks(
+        settled.flatMap((result) => (result.status === 'fulfilled' ? result.value.tracks : []))
+      );
       setPersonalizedFeedTracks(combined.slice(0, 24));
     });
 
     return () => { cancelled = true; };
-  }, [favoriteArtists, artistAffinity, genreAffinity, recommendationLikedMap, recommendationRecentTracks, region, prioritizeLyrics]);
+  }, [effectiveFavoriteArtists, artistAffinity, genreAffinity, recommendationLikedMap, recommendationRecentTracks, region, prioritizeLyrics]);
 
   // Dynamic User-Based Recommendation Ranking
   const { recommendedTracks, recommendationReason } = useMemo(() => {
     const tasteProfile = buildTasteProfile({
       region,
       preferredLanguages,
-      favoriteArtists,
+      favoriteArtists: effectiveFavoriteArtists,
       preferredMoods,
       prioritizeLyrics,
       artistAffinity,
@@ -660,31 +725,22 @@ export default function App() {
       recentlyPlayed: recommendationRecentTracks,
     });
 
-    const combined: Track[] = [];
-    const seenIds = new Set<string>();
-    const seenKeys = new Set<string>();
-    for (const track of [
-      ...personalizedFeedTracks,
-      ...Object.values(recommendationLikedMap),
-      ...recommendationRecentTracks,
-      ...regionalTracks,
-      ...SEED_TRACKS,
-    ]) {
-      if (!track?.id || seenIds.has(track.id) || isInstrumentalOrLowValueTrack(track)) continue;
-      const key = `${track.name.toLowerCase()}::${track.artist.split(',')[0]?.trim().toLowerCase()}`;
-      if (!seenKeys.has(key)) {
-        seenIds.add(track.id);
-        seenKeys.add(key);
-        combined.push(track);
-      }
-    }
+    const combined = dedupeCanonicalTracks(
+      [
+        ...personalizedFeedTracks,
+        ...Object.values(recommendationLikedMap),
+        ...recommendationRecentTracks,
+        ...regionalTracks,
+        ...SEED_TRACKS,
+      ].filter((track) => track?.id && !isInstrumentalOrLowValueTrack(track))
+    );
 
     const curated = curateAIRecommendations(
       combined,
       Object.values(recommendationLikedMap),
       recommendationRecentTracks,
       80,
-      { preferredMoods, favoriteArtists, preferredLanguages, genreAffinity, artistAffinity, playCounts, listeningFeedback },
+      { preferredMoods, favoriteArtists: effectiveFavoriteArtists, preferredLanguages, genreAffinity, artistAffinity, playCounts, listeningFeedback },
     );
     const ranked = curated.map((item) => item.track);
     const strongestReason = curated.find((item) => item.confidence >= 0.25 && item.signals.length > 0)?.reason;
@@ -698,13 +754,14 @@ export default function App() {
   }, [
     region,
     preferredLanguages,
-    favoriteArtists,
+    effectiveFavoriteArtists,
     preferredMoods,
     prioritizeLyrics,
     artistAffinity,
     languageAffinity,
     genreAffinity,
     playCounts,
+    listeningFeedback,
     recommendationLikedMap,
     recommendationRecentTracks,
     regionalTracks,
@@ -727,25 +784,31 @@ export default function App() {
   }, [recommendedTracks, personalizedFeedTracks, regionalTracks, recommendationLikedMap]);
 
 // Keep Discover's input identity stable across unrelated player/time updates.
-  const discoverTracks = useMemo(() => {
-    const seen = new Set<string>();
-    return [...regionalTracks, ...personalizedFeedTracks, ...recommendedTracks].filter((track) => {
-      if (!track?.id || seen.has(track.id)) return false;
-      seen.add(track.id);
-      return true;
-    });
-  }, [regionalTracks, personalizedFeedTracks, recommendedTracks]);
+  const discoverTracks = useMemo(
+    () => dedupeCanonicalTracks([...regionalTracks, ...personalizedFeedTracks, ...recommendedTracks]),
+    [regionalTracks, personalizedFeedTracks, recommendedTracks]
+  );
 
   // Navigation helper with Forward/Back history
   const navigateTo = useCallback(
-    (view: ViewName, collection: CollectionTarget | null = null) => {
+    (
+      view: ViewName,
+      collection: CollectionTarget | null = null,
+      artist: ArtistTarget | null = null
+    ) => {
       setNavHistory((prev) => {
         const sliced = prev.slice(0, navIndex + 1);
         const last = sliced[sliced.length - 1];
-        if (last && last.view === view && last.collection?.id === collection?.id) {
+        if (
+          last &&
+          last.view === view &&
+          last.collection?.id === collection?.id &&
+          last.artist?.id === artist?.id &&
+          last.artist?.name === artist?.name
+        ) {
           return prev;
         }
-        return [...sliced, { view, collection }];
+        return [...sliced, { view, collection, artist }];
       });
       setNavIndex((prev) => prev + 1);
       mainScrollRef.current?.scrollTo({ top: 0 });
@@ -1865,6 +1928,7 @@ export default function App() {
         setAddToPlaylistTrack(null);
         setSpotifyImportOpen(false);
         setPersonaliseOpen(false);
+        setProfileOpen(false);
         setVideoModalOpen(false);
         setMobileMenuOpen(false);
       }
@@ -1877,7 +1941,20 @@ export default function App() {
   const handleToggleLike = useCallback(
     (track: Track) => {
       const { nextMap, added } = toggleTrackInLiked(likedMap, track);
+      const now = Date.now();
       setLikedMap(nextMap);
+      setLikedTimestamps((prev) => {
+        const next = { ...prev };
+        if (added) next[track.id] = now;
+        else delete next[track.id];
+        return next;
+      });
+      setDeletedLikedIds((prev) => {
+        const next = { ...prev };
+        if (added) delete next[track.id];
+        else next[track.id] = now;
+        return next;
+      });
       if (tasteResetActive) {
         setTasteLikedMap((previous) => {
           const next = { ...previous };
@@ -1915,8 +1992,9 @@ export default function App() {
         : includeQueue
           ? queue.slice()
           : [];
+      const now = Date.now();
       const newPl: CuratedPlaylist = {
-        id: `user-pl-${Date.now()}`,
+        id: `user-pl-${now}`,
         name,
         description: 'Created by you on MusicKK',
         image: tracks[0]?.image || ARTWORK.englishVinyl,
@@ -1929,6 +2007,13 @@ export default function App() {
         syncBackendPlaylists(next);
         return next;
       });
+      setPlaylistUpdatedAtMs((prev) => ({ ...prev, [newPl.id]: now }));
+      setDeletedPlaylistIds((prev) => {
+        if (!prev[newPl.id]) return prev;
+        const next = { ...prev };
+        delete next[newPl.id];
+        return next;
+      });
       showToast(`Created playlist "${name}"`);
     },
     [queue, showToast]
@@ -1936,9 +2021,13 @@ export default function App() {
 
   const handleAddTrackToPlaylist = useCallback(
     (playlistId: string, track: Track) => {
+      const now = Date.now();
       setUserPlaylists((prev) => {
         const { playlists, added } = addTrackToPlaylist(prev, playlistId, track);
         syncBackendPlaylists(playlists);
+        if (added) {
+          setPlaylistUpdatedAtMs((tsPrev) => ({ ...tsPrev, [playlistId]: now }));
+        }
         showToast(added ? `Added "${track.name}" to playlist` : `Already in playlist`);
         return playlists;
       });
@@ -1948,11 +2037,13 @@ export default function App() {
 
   const handleDeletePlaylist = useCallback(
     (playlistId: string) => {
+      const now = Date.now();
       setUserPlaylists((prev) => {
         const next = prev.filter((p) => p.id !== playlistId);
         syncBackendPlaylists(next);
         return next;
       });
+      setDeletedPlaylistIds((prev) => ({ ...prev, [playlistId]: now }));
       showToast('Playlist deleted');
     },
     [showToast]
@@ -2077,21 +2168,94 @@ export default function App() {
     });
   }, [recentlyPlayed, navigateTo]);
 
-  const openArtistCollection = useCallback(
-    (artist: ArtistProfile) => {
-      const tracks = artist.topTrackIds
-        .map((id) => SEED_TRACKS.find((t) => t.id === id))
-        .filter((t): t is Track => Boolean(t));
-      navigateTo('collection', {
-        kind: 'artist',
-        id: artist.id,
-        title: artist.name,
-        subtitle: `${artist.genre} · ${artist.monthlyListeners}`,
-        image: artist.image,
-        tracks,
-      });
+  const openArtist = useCallback(
+    (artist: ArtistTarget) => {
+      navigateTo('artist', null, artist);
     },
     [navigateTo]
+  );
+
+  const openArtistByName = useCallback(
+    (artistName: string) => {
+      const cleanName = String(artistName || '').trim();
+      if (!cleanName) return;
+      const targetKey = normalizeArtistNameKey(cleanName);
+      const matchedFollowed = Object.values(followedArtists).find(
+        (a) => normalizeArtistNameKey(a.name) === targetKey
+      );
+      if (matchedFollowed) {
+        navigateTo('artist', null, matchedFollowed);
+        return;
+      }
+      const matchedSeed = SEED_ARTISTS.find(
+        (a) => normalizeArtistNameKey(a.name) === targetKey
+      );
+      if (matchedSeed) {
+        navigateTo('artist', null, matchedSeed);
+        return;
+      }
+      navigateTo('artist', null, {
+        id: `artist-name:${targetKey.replace(/\s+/g, '-') || 'artist'}`,
+        name: cleanName,
+      });
+    },
+    [followedArtists, navigateTo]
+  );
+
+  const handleToggleFollowArtist = useCallback(
+    (target: ArtistTarget) => {
+      const now = Date.now();
+      const { nextMap, followed, entryKey } = toggleFollowedArtistMap(followedArtists, target, now);
+      const nameKey = target.name.trim().toLowerCase();
+      setFollowedArtists(nextMap);
+      setDeletedFollowedArtistIds((prev) => {
+        const next = { ...prev };
+        if (followed) {
+          delete next[entryKey];
+          if (target.id) delete next[target.id];
+          if (nameKey) delete next[`name:${nameKey}`];
+        } else {
+          next[entryKey] = now;
+          if (target.id) next[target.id] = now;
+          if (nameKey) next[`name:${nameKey}`] = now;
+        }
+        return next;
+      });
+      showToast(followed ? `Following ${target.name}` : `Unfollowed ${target.name}`);
+    },
+    [followedArtists, showToast]
+  );
+
+  const openAlbumCollection = useCallback(
+    async (album: ArtistAlbumSummary) => {
+      if (album.tracks.length > 0) {
+        navigateTo('collection', {
+          kind: 'album',
+          id: album.id,
+          title: album.name,
+          subtitle: `${album.artist}${album.year ? ` · ${album.year}` : ''} · ${album.tracks.length} tracks`,
+          image: album.image || album.tracks[0]?.image || ARTWORK.englishVinyl,
+          tracks: album.tracks,
+        });
+        return;
+      }
+      if (album.id.startsWith('saavn-alb:') || album.id.startsWith('dz-alb:') || album.id.startsWith('alb-')) {
+        const loaded = await loadCollectionTracks('albums', album.id);
+        if (loaded.tracks.length > 0) {
+          navigateTo('collection', {
+            kind: 'album',
+            id: album.id,
+            title: loaded.title || album.name,
+            subtitle: loaded.subtitle || `${album.artist}${album.year ? ` · ${album.year}` : ''}`,
+            image: loaded.image || album.image || ARTWORK.englishVinyl,
+            tracks: loaded.tracks,
+          });
+          return;
+        }
+      }
+      showToast(`No playable tracks found for "${album.name}".`);
+    },
+    [navigateTo, showToast]
   );
 
   // Zero-API Spotify link streaming handler
@@ -2280,10 +2444,11 @@ export default function App() {
         <Sidebar
           activeView={activeView}
           activeCollectionId={activeCollection?.id}
+          activeArtistId={activeArtist?.id}
           onSelectView={(v) => navigateTo(v, null)}
           onOpenPlaylist={openPlaylistCollection}
           onOpenLiked={openLikedCollection}
-          onOpenArtist={openArtistCollection}
+          onOpenArtist={openArtist}
           onOpenCreatePlaylist={() => setCreatePlaylistOpen(true)}
           onOpenSpotifyImport={() => setSpotifyImportOpen(true)}
           onOpenVideos={() =>
@@ -2293,6 +2458,7 @@ export default function App() {
           }
           likedTracks={likedTracks}
           userPlaylists={userPlaylists}
+          followedArtists={Object.values(followedArtists)}
           mobileOpen={mobileMenuOpen}
           onCloseMobile={() => setMobileMenuOpen(false)}
         />
@@ -2321,6 +2487,7 @@ export default function App() {
                 onOpenLiked={openLikedCollection}
                 onOpenRecent={openRecentCollection}
                 onOpenPersonalise={openPersonalise}
+                onOpenArtistName={openArtistByName}
               />
             )}
 
@@ -2335,6 +2502,7 @@ export default function App() {
                 downloadingIds={downloadingIds}
                 onPlayTrackList={playTrackList}
                 onToggleDownload={handleToggleDownload}
+                onOpenArtistName={openArtistByName}
                 onRefresh={async () => {
                   const [freshGlobal, freshRegional] = await Promise.all([
                     fetchPlayableDiscoveries('GLOBAL', true),
@@ -2350,7 +2518,7 @@ export default function App() {
                 artistAffinity={artistAffinity}
                 genreAffinity={genreAffinity}
                 preferredLanguages={preferredLanguages}
-                favoriteArtists={favoriteArtists}
+                favoriteArtists={effectiveFavoriteArtists}
                 preferredMoods={preferredMoods}
               />
             )}
@@ -2367,6 +2535,10 @@ export default function App() {
                 drillCollection={drillCollection}
                 onClearDrill={() => setDrillCollection(null)}
                 onOpenDrill={(kind, id) => setDrillCollection({ kind, id })}
+                followedArtists={followedArtists}
+                onOpenArtist={openArtist}
+                onToggleFollowArtist={handleToggleFollowArtist}
+                onOpenArtistName={openArtistByName}
                 currentTrackId={currentTrack?.id}
                 isPlaying={isPlaying}
                 likedIds={likedMap}
@@ -2391,6 +2563,7 @@ export default function App() {
                 likedMap={likedMap}
                 playlists={userPlaylists}
                 recentlyPlayed={recentlyPlayed}
+                followedArtists={Object.values(followedArtists)}
                 currentTrackId={currentTrack?.id}
                 isPlaying={isPlaying}
                 downloadedIds={downloadedIds}
@@ -2404,6 +2577,8 @@ export default function App() {
                 onOpenCreatePlaylist={() => setCreatePlaylistOpen(true)}
                 onDeletePlaylist={handleDeletePlaylist}
                 onOpenVideoQuery={openVideosForQuery}
+                onOpenArtist={openArtist}
+                onToggleFollowArtist={handleToggleFollowArtist}
               />
             )}
 
@@ -2426,7 +2601,33 @@ export default function App() {
                 onEnqueue={handleEnqueue}
                 onAddToPlaylist={(t) => setAddToPlaylistTrack(t)}
                 onOpenVideo={(t) => openVideosForQuery(`${t.name} ${t.artist} official video`)}
+                onOpenArtistName={openArtistByName}
                 suggestionCandidates={suggestionCandidates}
+              />
+            )}
+
+            {activeView === 'artist' && activeArtist && (
+              <ArtistView
+                target={activeArtist}
+                region={region}
+                localHistoryTracks={suggestionCandidates}
+                followedArtists={followedArtists}
+                currentTrackId={currentTrack?.id}
+                isPlaying={isPlaying}
+                likedMap={likedMap}
+                downloadedIds={downloadedIds}
+                downloadingIds={downloadingIds}
+                onToggleFollow={handleToggleFollowArtist}
+                onPlayList={playTrackList}
+                onToggleLike={handleToggleLike}
+                onToggleDownload={handleToggleDownload}
+                onDownloadAll={handleDownloadAll}
+                onEnqueue={handleEnqueue}
+                onAddToPlaylist={(t) => setAddToPlaylistTrack(t)}
+                onOpenVideo={(t) => openVideosForQuery(`${t.name} ${t.artist} official video`)}
+                onOpenVideoQuery={openVideosForQuery}
+                onOpenAlbum={(album) => void openAlbumCollection(album)}
+                onSelectArtist={openArtist}
               />
             )}
 
@@ -2458,6 +2659,7 @@ export default function App() {
           downloadingIds={downloadingIds}
           onToggleDownload={handleToggleDownload}
           onOpenFullLyrics={() => navigateTo('lyrics', null)}
+          onOpenArtistName={openArtistByName}
           onPlayIndex={(idx) => {
             if (queue[idx]) {
               setCurrentIndex(idx);
@@ -2471,14 +2673,14 @@ export default function App() {
             setCurrentIndex(result.currentIndex);
             if (!result.removedCurrent) return;
 
+            // Invalidate pending resolver/playback callbacks and stop every engine
+            // when the final queued track is removed.
             const nextTrack = result.queue[result.currentIndex] || null;
             if (nextTrack) {
               startTrackPlayback(nextTrack);
               return;
             }
 
-            // Invalidate pending resolver/playback callbacks and stop every engine
-            // when the final queued track is removed.
             playbackSeqRef.current += 1;
             currentTrackRef.current = null;
             resolvedPlaybackTrackRef.current = null;
@@ -2564,6 +2766,7 @@ export default function App() {
           showToast(`Audio quality: ${nextQ}`);
         }}
         onDownload={() => currentTrack && void handleToggleDownload(currentTrack)}
+        onOpenArtistName={openArtistByName}
       />
 
       {/* Expandable Full-Screen Spotify Now Playing Overlay */}
@@ -2585,7 +2788,7 @@ export default function App() {
         onTogglePlay={handleTogglePlay}
         onPrev={() => advanceTrack(-1, false)}
         onNext={() => advanceTrack(1, false)}
-        onToggleShuffle={() => setShuffle((s) => !s)}
+        onToggleShuffle={handleToggleShuffle}
         onCycleRepeat={() => setRepeatMode((r) => ((r + 1) % 3) as RepeatMode)}
         onToggleLike={() => currentTrack && handleToggleLike(currentTrack)}
         onToggleDownload={() => currentTrack && handleToggleDownload(currentTrack)}
@@ -2616,6 +2819,7 @@ export default function App() {
         }}
         onEnqueueSuggested={handleEnqueue}
         onAddSuggestedToPlaylist={(track) => setAddToPlaylistTrack(track)}
+        onOpenArtistName={openArtistByName}
       />
 
       {/* Mobile Bottom Navigation Bar */}
@@ -2703,11 +2907,29 @@ export default function App() {
         totalPlays={Object.values(playCounts).reduce((sum, count) => sum + count, 0)}
         uniqueTracks={Object.keys(playCounts).length}
         likedCount={likedTracks.length}
+        user={cloudSync.user}
+        isOnline={cloudSync.isOnline}
+        syncState={cloudSync.syncState}
+        lastSyncedAtMs={cloudSync.lastSyncedAtMs}
+        pendingQueueCount={cloudSync.pendingQueueCount}
+        syncError={cloudSync.syncError}
+        backups={cloudSync.backups}
+        onManualSync={cloudSync.manualSync}
+        onCreateBackup={cloudSync.createManualBackup}
+        onRestoreBackup={cloudSync.restoreBackup}
+        onReviewMigration={cloudSync.openMigrationPreviewIfPending}
         onClose={() => setProfileOpen(false)}
         onEditPreferences={() => {
           setProfileOpen(false);
           setPersonaliseOpen(true);
         }}
+      />
+
+      <MigrationPreviewModal
+        open={Boolean(cloudSync.migrationPrompt)}
+        email={cloudSync.migrationPrompt?.email || null}
+        diff={cloudSync.migrationPrompt?.diff || null}
+        onResolve={cloudSync.resolveMigration}
       />
 
       <PersonaliseModal

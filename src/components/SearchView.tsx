@@ -1,7 +1,16 @@
-import { ArrowLeft, Play, Search as SearchIcon, X } from 'lucide-react';
+import { ArrowLeft, Play, Search as SearchIcon, UserCheck, UserPlus, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { QUICK_SEARCH_CHIPS } from '../data/catalog';
-import type { MusicLanguage, MusicRegion, SearchTab, Track, VideoResult } from '../types/music';
+import type {
+  ArtistTarget,
+  FollowedArtist,
+  MusicLanguage,
+  MusicRegion,
+  SearchTab,
+  Track,
+  VideoResult,
+} from '../types/music';
+import { isArtistFollowed } from '../utils/artistProfile';
 import {
   loadCollectionTracks,
   searchAlbums,
@@ -24,6 +33,10 @@ interface SearchViewProps {
   drillCollection: { kind: 'albums' | 'playlists' | 'artists'; id: string } | null;
   onClearDrill: () => void;
   onOpenDrill: (kind: 'albums' | 'playlists' | 'artists', id: string) => void;
+  followedArtists?: Record<string, FollowedArtist>;
+  onOpenArtist?: (artist: ArtistTarget) => void;
+  onToggleFollowArtist?: (artist: ArtistTarget) => void;
+  onOpenArtistName?: (artistName: string) => void;
   currentTrackId?: string;
   isPlaying: boolean;
   likedIds: Record<string, Track>;
@@ -57,6 +70,10 @@ export function SearchView({
   drillCollection,
   onClearDrill,
   onOpenDrill,
+  followedArtists = {},
+  onOpenArtist,
+  onToggleFollowArtist,
+  onOpenArtistName,
   currentTrackId,
   isPlaying,
   likedIds,
@@ -424,6 +441,7 @@ export function SearchView({
                 onOpenVideo={() =>
                   onOpenVideoQuery(`${track.name} ${track.artist} official music video`)
                 }
+                onOpenArtistName={onOpenArtistName}
               />
             ))}
             {!drillCollection && canLoadMoreSongs && (
@@ -512,27 +530,66 @@ export function SearchView({
           </div>
         ) : (
         <div className="grid grid-cols-2 gap-3.5 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5">
-          {artists.map((art) => (
-            <button
-              key={art.id}
-              type="button"
-              onClick={() => onOpenDrill('artists', art.id)}
-              className="group rounded-lg bg-[#161619] p-3 text-left transition-colors hover:bg-[#222227]"
-            >
-              <div className="relative aspect-square overflow-hidden rounded-full bg-black">
-                <CoverImage
-                  src={art.image}
-                  alt={art.name}
-                  className="h-full w-full object-cover"
-                />
-                <span className="absolute bottom-2 right-2 grid h-9 w-9 place-items-center rounded-full bg-[#1DB954] text-black opacity-0 transition-opacity group-hover:opacity-100">
-                  <Play className="h-4 w-4 fill-current pl-0.5" />
-                </span>
-              </div>
-              <div className="mt-2.5 truncate text-sm font-bold text-white">{art.name}</div>
-              <div className="truncate text-xs text-zinc-400">{art.subtitle}</div>
-            </button>
-          ))}
+          {artists.map((art) => {
+            const target: ArtistTarget = {
+              id: art.id,
+              name: art.name,
+              image: art.image,
+              genre: art.subtitle,
+            };
+            const followed = isArtistFollowed(followedArtists, art.id, art.name);
+            return (
+              <article
+                key={art.id}
+                className="group flex flex-col justify-between rounded-lg bg-[#161619] p-3 transition-colors hover:bg-[#222227]"
+              >
+                <button
+                  type="button"
+                  onClick={() =>
+                    onOpenArtist ? onOpenArtist(target) : onOpenDrill('artists', art.id)
+                  }
+                  className="w-full text-left focus:outline-none"
+                >
+                  <div className="relative aspect-square overflow-hidden rounded-full bg-black">
+                    <CoverImage
+                      src={art.image}
+                      alt={art.name}
+                      className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
+                    />
+                    <span className="absolute bottom-2 right-2 grid h-9 w-9 place-items-center rounded-full bg-[#1DB954] text-black opacity-0 transition-opacity group-hover:opacity-100">
+                      <Play className="h-4 w-4 fill-current pl-0.5" />
+                    </span>
+                  </div>
+                  <div className="mt-2.5 truncate text-sm font-bold text-white">{art.name}</div>
+                  <div className="truncate text-xs text-zinc-400">{art.subtitle}</div>
+                </button>
+                {onToggleFollowArtist && (
+                  <button
+                    type="button"
+                    onClick={() => onToggleFollowArtist(target)}
+                    aria-pressed={followed}
+                    className={`mt-2.5 inline-flex min-h-8 w-full items-center justify-center gap-1.5 rounded-full border text-xs font-bold transition ${
+                      followed
+                        ? 'border-[#1DB954]/50 bg-[#1DB954]/12 text-[#8df8a7] hover:bg-[#1DB954]/22'
+                        : 'border-white/15 bg-white/[0.04] text-zinc-200 hover:border-white hover:text-white'
+                    }`}
+                  >
+                    {followed ? (
+                      <>
+                        <UserCheck className="h-3.5 w-3.5" />
+                        Following
+                      </>
+                    ) : (
+                      <>
+                        <UserPlus className="h-3.5 w-3.5" />
+                        Follow
+                      </>
+                    )}
+                  </button>
+                )}
+              </article>
+            );
+          })}
         </div>
         )
       ) : videos.length === 0 ? (

@@ -220,7 +220,7 @@ export function Header({
             <div
               role="dialog"
               aria-label="Location and language taste"
-              className="absolute right-0 top-11 z-40 w-72 rounded-xl border border-white/10 bg-[#1f1f24] p-3.5 shadow-2xl"
+              className="fixed inset-x-3 top-16 z-40 max-h-[calc(100dvh-5.5rem)] overflow-y-auto rounded-xl border border-white/10 bg-[#1f1f24] p-3.5 shadow-2xl sm:absolute sm:inset-x-auto sm:right-0 sm:top-11 sm:max-h-[75dvh] sm:w-72"
             >
               <div className="flex items-center justify-between pb-2">
                 <span className="text-xs font-bold text-white">Location-Based Music</span>
@@ -307,7 +307,7 @@ export function Header({
             <div
               role="dialog"
               aria-label="Audio Equalizer and Sleep Timer"
-              className="absolute right-0 top-11 z-40 w-64 rounded-xl border border-white/10 bg-[#1f1f24] p-3.5 shadow-2xl"
+              className="fixed inset-x-3 top-16 z-40 max-h-[calc(100dvh-5.5rem)] overflow-y-auto rounded-xl border border-white/10 bg-[#1f1f24] p-3.5 shadow-2xl sm:absolute sm:inset-x-auto sm:right-0 sm:top-11 sm:max-h-[75dvh] sm:w-64"
             >
               <div className="mb-2 text-xs font-bold text-white">Audio Equalizer</div>
               <div className="grid grid-cols-2 gap-1.5">
@@ -373,7 +373,7 @@ export function Header({
             <div
               role="dialog"
               aria-label="Recommended drops"
-              className="absolute right-0 top-11 z-40 w-72 rounded-xl border border-white/10 bg-[#1f1f24] p-3 shadow-2xl"
+              className="fixed inset-x-3 top-16 z-40 max-h-[calc(100dvh-5.5rem)] overflow-y-auto rounded-xl border border-white/10 bg-[#1f1f24] p-3 shadow-2xl sm:absolute sm:inset-x-auto sm:right-0 sm:top-11 sm:max-h-[75dvh] sm:w-72"
             >
               <div className="mb-2 text-xs font-bold text-white">Fresh Picks With Lyrics</div>
               <div className="space-y-1.5">
@@ -412,7 +412,7 @@ export function Header({
           title={`Your profile (${displayName || 'Listener'})`}
           className="grid h-8 w-8 shrink-0 place-items-center rounded-full border-4 border-[#1f1f1f] bg-[#19e68c] text-xs font-extrabold text-black transition-transform hover:scale-105"
         >
-          {(displayName.trim()[0] || 'H').toUpperCase()}
+          {(displayName.trim()[0] || 'M').toUpperCase()}
         </button>
       </div>
     </header>

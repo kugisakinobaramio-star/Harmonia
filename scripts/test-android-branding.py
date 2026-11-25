@@ -46,4 +46,20 @@ label = strings.find("./string[@name='app_name']")
 if label is None or (label.text or "").strip() != "MusicKK":
     sys.exit("Android launcher label must be MusicKK")
 
-print("MusicKK Android splash resources and theme verified.")
+manifest = Path("android/app/src/main/AndroidManifest.xml")
+if manifest.is_file():
+    ANDROID_NS = "http://schemas.android.com/apk/res/android"
+    m_root = ET.parse(manifest).getroot()
+    found_oauth = False
+    for data_node in m_root.findall(".//intent-filter/data"):
+        if (
+            data_node.get(f"{{{ANDROID_NS}}}scheme") == "com.harmonia.music"
+            and data_node.get(f"{{{ANDROID_NS}}}host") == "auth"
+        ):
+            found_oauth = True
+            break
+    if not found_oauth:
+        sys.exit("AndroidManifest.xml is missing com.harmonia.music://auth deep-link intent-filter")
+
+print("MusicKK Android splash resources, theme, and OAuth manifest verified.")
+

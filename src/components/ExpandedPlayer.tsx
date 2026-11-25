@@ -15,6 +15,7 @@ import {
   Video,
 } from 'lucide-react';
 import type { AudioQuality, LyricLine, RepeatMode, Track } from '../types/music';
+import { extractPrimaryArtistName } from '../utils/artistProfile';
 import { formatTime, QUALITY_LABELS, resolveActiveLyricPair } from '../utils/playerEngine';
 import { CoverImage } from './CoverImage';
 import { DownloadButton } from './DownloadButton';
@@ -51,6 +52,7 @@ interface ExpandedPlayerProps {
   onPlaySuggested: (track: Track) => void;
   onEnqueueSuggested: (track: Track) => void;
   onAddSuggestedToPlaylist: (track: Track) => void;
+  onOpenArtistName?: (artistName: string) => void;
 }
 
 export function ExpandedPlayer({
@@ -84,6 +86,7 @@ export function ExpandedPlayer({
   onPlaySuggested,
   onEnqueueSuggested,
   onAddSuggestedToPlaylist,
+  onOpenArtistName,
 }: ExpandedPlayerProps) {
   const lyricListRef = useRef<HTMLDivElement | null>(null);
   const activeLyricRef = useRef<HTMLButtonElement | null>(null);
@@ -153,7 +156,20 @@ export function ExpandedPlayer({
               <h2 className="truncate text-xl font-extrabold tracking-tight text-white sm:text-2xl">
                 {track.name}
               </h2>
-              <p className="mt-0.5 truncate text-sm font-medium text-zinc-300">{track.artist}</p>
+              {onOpenArtistName ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onOpenArtistName(extractPrimaryArtistName(track.artist));
+                  }}
+                  className="mt-0.5 block max-w-full truncate text-left text-sm font-medium text-zinc-300 hover:text-white hover:underline"
+                >
+                  {track.artist}
+                </button>
+              ) : (
+                <p className="mt-0.5 truncate text-sm font-medium text-zinc-300">{track.artist}</p>
+              )}
               {track.sourceProvider && (
                 <p className="mt-1 truncate text-[10px] text-zinc-500">
                   Source: {track.sourceProvider}
@@ -218,6 +234,7 @@ export function ExpandedPlayer({
               type="button"
               onClick={onToggleShuffle}
               aria-label={shuffle ? 'Disable shuffle' : 'Enable shuffle'}
+              aria-pressed={shuffle}
               className={`p-2 ${shuffle ? 'text-[#1DB954]' : 'text-zinc-400 hover:text-white'}`}
             >
               <Shuffle className="h-5 w-5" />
@@ -257,7 +274,14 @@ export function ExpandedPlayer({
             <button
               type="button"
               onClick={onCycleRepeat}
-              aria-label="Cycle repeat mode"
+              aria-label={
+                repeatMode === 0
+                  ? 'Enable repeat all'
+                  : repeatMode === 1
+                    ? 'Enable repeat one'
+                    : 'Disable repeat'
+              }
+              aria-pressed={repeatMode > 0}
               className={`p-2 ${repeatMode > 0 ? 'text-[#1DB954]' : 'text-zinc-400 hover:text-white'}`}
             >
               {repeatMode === 2 ? <Repeat1 className="h-5 w-5" /> : <Repeat className="h-5 w-5" />}

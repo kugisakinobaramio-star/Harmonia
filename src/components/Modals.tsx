@@ -1,9 +1,37 @@
-import { Check, Crosshair, Loader2, Play, Plus, RotateCcw, Search, Sparkles, UserRound, X } from 'lucide-react';
+import {
+  AlertTriangle,
+  Archive,
+  Check,
+  CheckCircle2,
+  Cloud,
+  CloudOff,
+  Crosshair,
+  Loader2,
+  Mail,
+  Play,
+  Plus,
+  RefreshCw,
+  RotateCcw,
+  Search,
+  ShieldCheck,
+  Sparkles,
+  UserRound,
+  X,
+} from 'lucide-react';
 import { useEffect, useState } from 'react';
+import type { User } from 'firebase/auth';
 import { SEED_ARTISTS } from '../data/catalog';
 import { apiUrl } from '../utils/apiUrl';
-import { auth, signInWithGoogle, logOut } from '../lib/firebase';
-import { onAuthStateChanged, type User } from 'firebase/auth';
+import {
+  logOut,
+  registerWithEmail,
+  resendVerificationEmail,
+  resetPassword,
+  signInWithEmail,
+  signInWithGoogle,
+} from '../lib/firebase';
+import { toFriendlyAuthError } from '../lib/firebaseErrors';
+import type { CloudSyncState, LocalBackupEntry, MigrationDiff, MigrationResolution } from '../lib/syncEngine';
 import type {
   CuratedPlaylist,
   MusicLanguage,
@@ -846,6 +874,18 @@ export function PersonaliseModal({
 }
 
 
+type AuthTab = 'signin' | 'register' | 'reset';
+
+function formatSyncTimestamp(ts: number | null): string {
+  if (!ts) return 'Not synced yet';
+  const diffSec = Math.max(0, Math.round((Date.now() - ts) / 1000));
+  if (diffSec < 15) return 'Just now';
+  if (diffSec < 60) return `${diffSec}s ago`;
+  const diffMin = Math.round(diffSec / 60);
+  if (diffMin < 60) return `${diffMin}m ago`;
+  return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
 interface ProfileModalProps {
   open: boolean;
   displayName: string;
@@ -856,6 +896,17 @@ interface ProfileModalProps {
   totalPlays: number;
   uniqueTracks: number;
   likedCount: number;
+  user: User | null;
+  isOnline: boolean;
+  syncState: CloudSyncState;
+  lastSyncedAtMs: number | null;
+  pendingQueueCount: number;
+  syncError: string;
+  backups: LocalBackupEntry[];
+  onManualSync: () => Promise<void>;
+  onCreateBackup: () => void;
+  onRestoreBackup: (backupId: string) => void;
+  onReviewMigration?: () => void;
   onClose: () => void;
   onEditPreferences: () => void;
 }
@@ -870,42 +921,173 @@ export function ProfileModal({
   totalPlays,
   uniqueTracks,
   likedCount,
+  user,
+  isOnline,
+  syncState,
+  lastSyncedAtMs,
+  pendingQueueCount,
+  syncError,
+  backups,
+  onManualSync,
+  onCreateBackup,
+  onRestoreBackup,
+  onReviewMigration,
   onClose,
   onEditPreferences,
 }: ProfileModalProps) {
-  const [user, setUser] = useState<User | null>(auth.currentUser);
+  const [authTab, setAuthTab] = useState<AuthTab>('signin');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [regName, setRegName] = useState('');
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState('');
+  const [authNotice, setAuthNotice] = useState('');
+  const [showBackups, setShowBackups] = useState(false);
+  const [confirmRestoreId, setConfirmRestoreId] = useState<string | null>(null);
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (u) => setUser(u));
-    return () => unsub();
-  }, []);
+    if (open) {
+      setAuthError('');
+      setAuthNotice('');
+      setConfirmRestoreId(null);
+    }
+  }, [open, user?.uid]);
 
   if (!open) return null;
+
   const currentName = user?.displayName || displayName.trim() || 'Listener';
-  const initial = currentName.charAt(0).toUpperCase() || 'H';
+  const initial = currentName.charAt(0).toUpperCase() || 'M';
+  const isPasswordProvider = Boolean(
+    user?.providerData?.some((p) => p.providerId === 'password')
+  );
+  const providerLabel = user?.providerData?.some((p) => p.providerId === 'google.com')
+    ? 'Google Account'
+    : isPasswordProvider
+      ? 'Email Account'
+      : 'Cloud Account';
+
+  const syncStatusBadge = (() => {
+    if (!user) return { text: 'Guest Mode · Local-First', cls: 'bg-white/10 text-zinc-200' };
+    if (!isOnline || syncState === 'offline') {
+      return { text: 'Offline · Saved Locally', cls: 'bg-amber-500/20 text-amber-300' };
+    }
+    if (syncState === 'syncing') {
+      return { text: 'Syncing…', cls: 'bg-[#1DB954]/20 text-[#9ce8b7]' };
+    }
+    if (syncState === 'migration-pending') {
+      return { text: 'Merge Review Needed', cls: 'bg-amber-500/20 text-amber-300' };
+    }
+    if (syncState === 'error') {
+      return { text: 'Sync Paused', cls: 'bg-red-500/20 text-red-300' };
+    }
+    return { text: 'Cloud Synced', cls: 'bg-[#1DB954]/20 text-[#9ce8b7]' };
+  })();
+
+  const handleGoogleSignIn = async () => {
+    try {
+      setAuthLoading(true);
+      setAuthError('');
+      setAuthNotice('');
+      await signInWithGoogle();
+    } catch (e: unknown) {
+      setAuthError(toFriendlyAuthError(e));
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleEmailSignIn = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email.trim() || !password) {
+      setAuthError('Enter both your email and password.');
+      return;
+    }
+    try {
+      setAuthLoading(true);
+      setAuthError('');
+      setAuthNotice('');
+      await signInWithEmail(email, password);
+      setPassword('');
+    } catch (err: unknown) {
+      setAuthError(toFriendlyAuthError(err));
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email.trim()) {
+      setAuthError('Please enter a valid email address.');
+      return;
+    }
+    if (password.length < 6) {
+      setAuthError('Password must be at least 6 characters long.');
+      return;
+    }
+    try {
+      setAuthLoading(true);
+      setAuthError('');
+      setAuthNotice('');
+      await registerWithEmail(email, password, regName || displayName);
+      setPassword('');
+      setAuthNotice('Account created! A verification email has been sent.');
+    } catch (err: unknown) {
+      setAuthError(toFriendlyAuthError(err));
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email.trim()) {
+      setAuthError('Enter your account email to receive a password reset link.');
+      return;
+    }
+    try {
+      setAuthLoading(true);
+      setAuthError('');
+      setAuthNotice('');
+      await resetPassword(email);
+      setAuthNotice('Password reset link sent! Check your inbox and spam folder.');
+    } catch (err: unknown) {
+      setAuthError(toFriendlyAuthError(err));
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
   return (
-    <div role="dialog" aria-modal="true" aria-label="Your MusicKK profile" className="fixed inset-0 z-50 grid place-items-center bg-black/80 p-4 backdrop-blur-sm">
-      <div className="max-h-[90dvh] w-full max-w-lg overflow-y-auto rounded-2xl border border-white/10 bg-[#18181b] shadow-2xl">
+    <div role="dialog" aria-modal="true" aria-label="Your MusicKK profile" className="fixed inset-0 z-50 grid place-items-center bg-black/80 p-3 backdrop-blur-sm sm:p-4">
+      <div className="max-h-[92dvh] w-full max-w-lg overflow-y-auto rounded-2xl border border-white/10 bg-[#18181b] shadow-2xl">
         <div className="relative bg-gradient-to-br from-[#183b2a] via-[#20252a] to-[#18181b] px-5 pb-5 pt-4">
-          <div className="flex justify-end">
+          <div className="flex items-center justify-between gap-2 pb-2">
+            <span className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[11px] font-bold ${syncStatusBadge.cls}`}>
+              {user ? (isOnline ? <Cloud className="h-3.5 w-3.5" /> : <CloudOff className="h-3.5 w-3.5" />) : <ShieldCheck className="h-3.5 w-3.5" />}
+              {syncStatusBadge.text}
+            </span>
             <button type="button" onClick={onClose} aria-label="Close profile" className="rounded-full bg-black/30 p-2 text-zinc-200 hover:bg-black/50"><X className="h-4 w-4" /></button>
           </div>
           <div className="flex items-end gap-4">
             {user?.photoURL ? (
-              <img src={user.photoURL} alt={currentName} className="h-20 w-20 shrink-0 rounded-full border-4 border-white/10 object-cover shadow-xl" />
+              <img src={user.photoURL} alt={currentName} className="h-16 w-16 shrink-0 rounded-full border-4 border-white/10 object-cover shadow-xl sm:h-20 sm:w-20" />
             ) : (
-              <div className="grid h-20 w-20 shrink-0 place-items-center rounded-full border-4 border-white/10 bg-[#1DB954] text-3xl font-black text-black shadow-xl">{initial}</div>
+              <div className="grid h-16 w-16 shrink-0 place-items-center rounded-full border-4 border-white/10 bg-[#1DB954] text-2xl font-black text-black shadow-xl sm:h-20 sm:w-20 sm:text-3xl">{initial}</div>
             )}
             <div className="min-w-0 pb-1">
-              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#9ce8b7]">Your listener profile</p>
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#9ce8b7]">
+                {user ? providerLabel : 'Guest Listener'}
+              </p>
               <h2 className="truncate text-2xl font-extrabold text-white">{currentName}</h2>
-              <p className="text-xs text-zinc-300">Harmonia · {region}</p>
+              <p className="truncate text-xs text-zinc-300">
+                MusicKK · {region}{user?.email ? ` · ${user.email}` : ''}
+              </p>
             </div>
           </div>
         </div>
-        <div className="space-y-5 p-5">
+
+        <div className="space-y-4 p-5">
           <div className="grid grid-cols-3 gap-2">
             <div className="rounded-xl bg-[#242429] p-3"><div className="text-xl font-extrabold text-white">{totalPlays}</div><div className="text-[11px] text-zinc-400">Total plays</div></div>
             <div className="rounded-xl bg-[#242429] p-3"><div className="text-xl font-extrabold text-white">{uniqueTracks}</div><div className="text-[11px] text-zinc-400">Tracks played</div></div>
@@ -913,71 +1095,462 @@ export function ProfileModal({
           </div>
 
           <section className="rounded-xl border border-white/10 bg-[#202024] p-4">
-            <h3 className="mb-1 text-sm font-bold text-white">Cloud Account (Firebase Auth)</h3>
-            <p className="mb-3 text-xs text-zinc-400">Sign in with Google to sync your profile across devices.</p>
             {user ? (
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="truncate text-xs font-bold text-white">{user.displayName || user.email}</p>
-                  <p className="truncate text-[11px] text-zinc-400">{user.email}</p>
+              <div className="space-y-3">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <h3 className="text-sm font-bold text-white">Cloud Sync &amp; Account</h3>
+                    <p className="truncate text-xs text-zinc-300">{user.email || user.displayName || user.uid}</p>
+                    <p className="mt-0.5 text-[11px] text-zinc-400">
+                      Last synced: <span className="font-semibold text-zinc-200">{formatSyncTimestamp(lastSyncedAtMs)}</span>
+                      {pendingQueueCount > 0 ? ` · ${pendingQueueCount} change queued` : ''}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void onManualSync()}
+                      disabled={syncState === 'syncing' || !isOnline}
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-[#1DB954] px-3 py-1.5 text-xs font-extrabold text-black hover:bg-[#1ed760] disabled:opacity-50"
+                    >
+                      <RefreshCw className={`h-3.5 w-3.5 ${syncState === 'syncing' ? 'animate-spin' : ''}`} />
+                      {syncState === 'syncing' ? 'Syncing' : 'Sync Now'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          setAuthLoading(true);
+                          setAuthError('');
+                          await logOut();
+                        } catch (e: unknown) {
+                          setAuthError(toFriendlyAuthError(e));
+                        } finally {
+                          setAuthLoading(false);
+                        }
+                      }}
+                      disabled={authLoading}
+                      className="rounded-lg bg-white/10 px-3 py-1.5 text-xs font-bold text-white hover:bg-white/20 disabled:opacity-50"
+                    >
+                      Sign Out
+                    </button>
+                  </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={async () => {
-                    try {
-                      setAuthLoading(true);
-                      await logOut();
-                    } catch (e: unknown) {
-                      setAuthError(e instanceof Error ? e.message : 'Failed to sign out');
-                    } finally {
-                      setAuthLoading(false);
-                    }
-                  }}
-                  disabled={authLoading}
-                  className="rounded-full bg-white/10 px-3.5 py-1.5 text-xs font-bold text-white hover:bg-white/20 disabled:opacity-50"
-                >
-                  Sign Out
-                </button>
+
+                {syncState === 'migration-pending' && onReviewMigration && (
+                  <div className="flex items-center justify-between gap-2 rounded-lg border border-amber-400/30 bg-amber-500/10 p-2.5 text-xs text-amber-200">
+                    <span>Review local vs cloud merge before syncing.</span>
+                    <button
+                      type="button"
+                      onClick={onReviewMigration}
+                      className="shrink-0 rounded-md bg-amber-400 px-2.5 py-1 text-[11px] font-extrabold text-black"
+                    >
+                      Review Merge
+                    </button>
+                  </div>
+                )}
+
+                {isPasswordProvider && !user.emailVerified && (
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-white/10 bg-black/25 p-2.5 text-[11px] text-zinc-300">
+                    <span className="inline-flex items-center gap-1.5">
+                      <Mail className="h-3.5 w-3.5 text-amber-300" />
+                      Email not verified yet.
+                    </span>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          setAuthLoading(true);
+                          await resendVerificationEmail();
+                          setAuthNotice('Verification email sent!');
+                        } catch (err) {
+                          setAuthError(toFriendlyAuthError(err));
+                        } finally {
+                          setAuthLoading(false);
+                        }
+                      }}
+                      disabled={authLoading || !isOnline}
+                      className="font-bold text-[#1DB954] hover:underline disabled:opacity-50"
+                    >
+                      Resend verification
+                    </button>
+                  </div>
+                )}
+
+                {!isOnline && (
+                  <p className="rounded-lg bg-amber-500/10 px-3 py-2 text-xs text-amber-200" role="status">
+                    You are offline. MusicKK continues working locally and will sync automatically when online.
+                  </p>
+                )}
+
+                {syncError && (
+                  <p className="rounded-lg bg-red-500/10 px-3 py-2 text-xs text-red-300" role="alert">
+                    {syncError}
+                  </p>
+                )}
               </div>
             ) : (
+              <div className="space-y-3">
+                <div>
+                  <h3 className="text-sm font-bold text-white">Optional Cloud Sync &amp; Account</h3>
+                  <p className="mt-1 text-xs leading-relaxed text-zinc-400">
+                    Guest Mode keeps all your playlists, likes, and stats on this device offline. Sign in anytime to sync across devices — we preview and preserve your local library before merging.
+                  </p>
+                </div>
+
+                {!isOnline && (
+                  <p className="rounded-lg bg-amber-500/10 px-3 py-2 text-xs text-amber-200" role="status">
+                    Offline mode active — guest playback and library stay available; connect to sign in.
+                  </p>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => void handleGoogleSignIn()}
+                  disabled={authLoading || !isOnline}
+                  className="flex w-full items-center justify-center gap-2 rounded-lg bg-white px-4 py-2.5 text-xs font-extrabold text-black hover:bg-zinc-200 disabled:opacity-50"
+                >
+                  {authLoading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <svg className="h-4 w-4" viewBox="0 0 24 24" aria-hidden="true">
+                      <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17Z" />
+                      <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.11-6.72-4.96H1.29v3.14C3.26 21.3 7.31 24 12 24Z" />
+                      <path fill="#FBBC05" d="M5.28 14.24c-.24-.72-.38-1.49-.38-2.24s.14-1.52.38-2.24V6.62H1.29C.47 8.24 0 10.06 0 12s.47 3.76 1.29 5.38l3.99-3.14Z" />
+                      <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.31 0 3.26 2.7 1.29 6.62l3.99 3.14c.95-2.85 3.6-4.96 6.72-4.96Z" />
+                    </svg>
+                  )}
+                  Continue with Google
+                </button>
+
+                <div className="grid grid-cols-3 gap-1 rounded-lg bg-black/35 p-1 text-[11px] font-bold">
+                  <button
+                    type="button"
+                    onClick={() => { setAuthTab('signin'); setAuthError(''); setAuthNotice(''); }}
+                    className={`rounded-md py-1.5 transition-colors ${authTab === 'signin' ? 'bg-[#2a2a32] text-white' : 'text-zinc-400 hover:text-white'}`}
+                  >
+                    Sign In
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setAuthTab('register'); setAuthError(''); setAuthNotice(''); }}
+                    className={`rounded-md py-1.5 transition-colors ${authTab === 'register' ? 'bg-[#2a2a32] text-white' : 'text-zinc-400 hover:text-white'}`}
+                  >
+                    Create Account
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setAuthTab('reset'); setAuthError(''); setAuthNotice(''); }}
+                    className={`rounded-md py-1.5 transition-colors ${authTab === 'reset' ? 'bg-[#2a2a32] text-white' : 'text-zinc-400 hover:text-white'}`}
+                  >
+                    Reset
+                  </button>
+                </div>
+
+                {authTab === 'signin' && (
+                  <form onSubmit={handleEmailSignIn} className="space-y-2.5">
+                    <input
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="Email address"
+                      aria-label="Sign in email"
+                      autoComplete="email"
+                      className="w-full rounded-lg border border-white/10 bg-[#242429] px-3 py-2 text-xs text-white placeholder-zinc-500 focus:border-[#1DB954] focus:outline-none"
+                    />
+                    <input
+                      type="password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="Password"
+                      aria-label="Sign in password"
+                      autoComplete="current-password"
+                      className="w-full rounded-lg border border-white/10 bg-[#242429] px-3 py-2 text-xs text-white placeholder-zinc-500 focus:border-[#1DB954] focus:outline-none"
+                    />
+                    <button
+                      type="submit"
+                      disabled={authLoading || !isOnline}
+                      className="w-full rounded-lg bg-[#1DB954] px-4 py-2 text-xs font-extrabold text-black hover:bg-[#1ed760] disabled:opacity-50"
+                    >
+                      {authLoading ? 'Signing in…' : 'Sign in with Email'}
+                    </button>
+                  </form>
+                )}
+
+                {authTab === 'register' && (
+                  <form onSubmit={handleRegister} className="space-y-2.5">
+                    <input
+                      type="text"
+                      value={regName}
+                      onChange={(e) => setRegName(e.target.value)}
+                      placeholder="Display name (optional)"
+                      aria-label="Display name"
+                      maxLength={80}
+                      className="w-full rounded-lg border border-white/10 bg-[#242429] px-3 py-2 text-xs text-white placeholder-zinc-500 focus:border-[#1DB954] focus:outline-none"
+                    />
+                    <input
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="Email address"
+                      aria-label="Registration email"
+                      autoComplete="email"
+                      className="w-full rounded-lg border border-white/10 bg-[#242429] px-3 py-2 text-xs text-white placeholder-zinc-500 focus:border-[#1DB954] focus:outline-none"
+                    />
+                    <input
+                      type="password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="Password (min 6 characters)"
+                      aria-label="Registration password"
+                      autoComplete="new-password"
+                      className="w-full rounded-lg border border-white/10 bg-[#242429] px-3 py-2 text-xs text-white placeholder-zinc-500 focus:border-[#1DB954] focus:outline-none"
+                    />
+                    <button
+                      type="submit"
+                      disabled={authLoading || !isOnline}
+                      className="w-full rounded-lg bg-[#1DB954] px-4 py-2 text-xs font-extrabold text-black hover:bg-[#1ed760] disabled:opacity-50"
+                    >
+                      {authLoading ? 'Creating account…' : 'Create Account & Link Library'}
+                    </button>
+                  </form>
+                )}
+
+                {authTab === 'reset' && (
+                  <form onSubmit={handleResetPassword} className="space-y-2.5">
+                    <input
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="Account email address"
+                      aria-label="Password reset email"
+                      autoComplete="email"
+                      className="w-full rounded-lg border border-white/10 bg-[#242429] px-3 py-2 text-xs text-white placeholder-zinc-500 focus:border-[#1DB954] focus:outline-none"
+                    />
+                    <button
+                      type="submit"
+                      disabled={authLoading || !isOnline}
+                      className="w-full rounded-lg bg-[#2a2a32] px-4 py-2 text-xs font-extrabold text-white hover:bg-[#353540] disabled:opacity-50"
+                    >
+                      {authLoading ? 'Sending…' : 'Send Password Reset Email'}
+                    </button>
+                  </form>
+                )}
+              </div>
+            )}
+
+            {authError && (
+              <p className="mt-2.5 rounded-lg bg-red-500/10 px-3 py-2 text-xs text-red-300" role="alert">
+                {authError}
+              </p>
+            )}
+            {authNotice && (
+              <p className="mt-2.5 rounded-lg bg-[#1DB954]/15 px-3 py-2 text-xs text-[#9ce8b7]" role="status">
+                {authNotice}
+              </p>
+            )}
+          </section>
+
+          <section className="rounded-xl border border-white/10 bg-[#202024] p-3.5">
+            <div className="flex items-center justify-between gap-2">
               <button
                 type="button"
-                onClick={async () => {
-                  try {
-                    setAuthLoading(true);
-                    setAuthError('');
-                    await signInWithGoogle();
-                  } catch (e: unknown) {
-                    setAuthError(e instanceof Error ? e.message : 'Failed to sign in with Google');
-                  } finally {
-                    setAuthLoading(false);
-                  }
-                }}
-                disabled={authLoading}
-                className="inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-xs font-extrabold text-black hover:bg-zinc-200 disabled:opacity-50"
+                onClick={() => setShowBackups((prev) => !prev)}
+                className="flex items-center gap-2 text-xs font-bold text-white hover:text-[#9ce8b7]"
               >
-                {authLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                Sign in with Google
+                <Archive className="h-3.5 w-3.5 text-[#1DB954]" />
+                Local Backups ({backups.length})
               </button>
+              <button
+                type="button"
+                onClick={onCreateBackup}
+                className="rounded-md bg-white/10 px-2.5 py-1 text-[11px] font-bold text-zinc-200 hover:bg-white/20"
+              >
+                Save Backup
+              </button>
+            </div>
+            {showBackups && (
+              <div className="mt-3 space-y-2">
+                {backups.length === 0 ? (
+                  <p className="text-[11px] text-zinc-400">
+                    Automatic backups are created before sign-in merges and account switches.
+                  </p>
+                ) : (
+                  backups.map((bak) => (
+                    <div key={bak.id} className="flex items-center justify-between gap-2 rounded-lg bg-black/25 p-2.5 text-[11px]">
+                      <div className="min-w-0">
+                        <p className="truncate font-semibold text-zinc-200">{bak.reason}</p>
+                        <p className="text-zinc-400">
+                          {new Date(bak.createdAtMs).toLocaleString()} · {bak.summary.playlists} playlists · {bak.summary.likedSongs} liked
+                        </p>
+                      </div>
+                      {confirmRestoreId === bak.id ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onRestoreBackup(bak.id);
+                            setConfirmRestoreId(null);
+                          }}
+                          className="shrink-0 rounded-md bg-amber-400 px-2.5 py-1 font-extrabold text-black"
+                        >
+                          Confirm
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setConfirmRestoreId(bak.id)}
+                          className="shrink-0 rounded-md bg-white/10 px-2.5 py-1 font-bold text-white hover:bg-white/20"
+                        >
+                          Restore
+                        </button>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
             )}
-            {authError && <p className="mt-2 text-xs text-amber-300" role="status">{authError}</p>}
           </section>
 
           <section>
             <h3 className="mb-2 text-sm font-bold text-white">Your music taste</h3>
             <p className="mb-2 text-xs text-zinc-400">Your mixes adapt as you listen, replay and save tracks.</p>
             <div className="flex flex-wrap gap-2">
-              {preferredLanguages.slice(0, 8).map((item, idx) => <span key={`lang-${item}-${idx}`} className="rounded-full bg-[#26382d] px-3 py-1 text-xs text-[#b7f4ca]">{item}</span>)}
-              {favoriteArtists.slice(0, 8).map((item, idx) => <span key={`artist-${item}-${idx}`} className="rounded-full bg-[#29292f] px-3 py-1 text-xs text-zinc-200">{item}</span>)}
-              {preferredMoods.slice(0, 5).map((item, idx) => <span key={`mood-${item}-${idx}`} className="rounded-full bg-[#29292f] px-3 py-1 text-xs text-zinc-300">{item}</span>)}
+              {preferredLanguages.slice(0, 8).map((item, idx) => <span key={`lang-${item}-${idx}`} className="rounded-md bg-[#26382d] px-2.5 py-1 text-xs text-[#b7f4ca]">{item}</span>)}
+              {favoriteArtists.slice(0, 8).map((item, idx) => <span key={`artist-${item}-${idx}`} className="rounded-md bg-[#29292f] px-2.5 py-1 text-xs text-zinc-200">{item}</span>)}
+              {preferredMoods.slice(0, 5).map((item, idx) => <span key={`mood-${item}-${idx}`} className="rounded-md bg-[#29292f] px-2.5 py-1 text-xs text-zinc-300">{item}</span>)}
               {!preferredLanguages.length && !favoriteArtists.length && !preferredMoods.length && <span className="text-xs text-zinc-500">Your taste profile is still learning. Play and like a few songs to shape it.</span>}
             </div>
           </section>
+
           <div className="flex flex-wrap gap-2 border-t border-white/[0.08] pt-4">
-            <button type="button" onClick={onEditPreferences} className="inline-flex flex-1 items-center justify-center gap-2 rounded-full bg-[#1DB954] px-4 py-2.5 text-xs font-extrabold text-black hover:bg-[#1ed760]"><UserRound className="h-4 w-4" /> Edit profile & taste</button>
+            <button type="button" onClick={onEditPreferences} className="inline-flex flex-1 items-center justify-center gap-2 rounded-full bg-[#1DB954] px-4 py-2.5 text-xs font-extrabold text-black hover:bg-[#1ed760]"><UserRound className="h-4 w-4" /> Edit profile &amp; taste</button>
             <button type="button" onClick={onClose} className="rounded-full bg-[#2a2a30] px-4 py-2.5 text-xs font-bold text-zinc-200 hover:bg-[#35353c]">Done</button>
           </div>
-          <p className="text-[10px] leading-relaxed text-zinc-500">Your profile and listening stats are secured with Firebase Cloud Authentication.</p>
+          <p className="text-[10px] leading-relaxed text-zinc-500">MusicKK saves everything locally first. Cloud accounts only sync durable playlists, favourites, stats, and preferences — never temporary stream URLs.</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+interface MigrationPreviewModalProps {
+  open: boolean;
+  email: string | null;
+  diff: MigrationDiff | null;
+  onResolve: (resolution: MigrationResolution) => Promise<void>;
+}
+
+export function MigrationPreviewModal({
+  open,
+  email,
+  diff,
+  onResolve,
+}: MigrationPreviewModalProps) {
+  const [busy, setBusy] = useState(false);
+
+  if (!open || !diff) return null;
+
+  const choose = async (resolution: MigrationResolution) => {
+    setBusy(true);
+    try {
+      await onResolve(resolution);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Cloud library migration preview"
+      className="fixed inset-0 z-[60] grid place-items-center bg-black/85 p-3 backdrop-blur-sm sm:p-4"
+    >
+      <div className="max-h-[92dvh] w-full max-w-lg overflow-y-auto rounded-2xl border border-white/10 bg-[#18181b] p-5 shadow-2xl">
+        <div className="flex items-start gap-3">
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#1DB954]/15 text-[#1DB954]">
+            <CheckCircle2 className="h-5 w-5" />
+          </span>
+          <div className="min-w-0">
+            <h2 className="text-lg font-extrabold text-white">Review Library Before Syncing</h2>
+            <p className="mt-1 text-xs leading-relaxed text-zinc-400">
+              Signed in as <span className="font-semibold text-white">{email || 'your account'}</span>. Choose how to combine your device data with your cloud library. A recoverable backup of this device is saved automatically first.
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="rounded-xl border border-white/10 bg-[#202026] p-3.5">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-[#9ce8b7]">On This Device</p>
+            <p className="mt-0.5 truncate text-sm font-bold text-white">{diff.localSummary.displayName}</p>
+            <ul className="mt-2 space-y-1 text-xs text-zinc-300">
+              <li>Playlists: <span className="font-bold text-white">{diff.localSummary.playlists}</span> ({diff.localSummary.playlistTracks} tracks)</li>
+              <li>Liked songs: <span className="font-bold text-white">{diff.localSummary.likedSongs}</span></li>
+              <li>Recent plays: <span className="font-bold text-white">{diff.localSummary.recentPlays}</span></li>
+              <li>Total plays: <span className="font-bold text-white">{diff.localSummary.totalPlays}</span></li>
+            </ul>
+          </div>
+
+          <div className="rounded-xl border border-white/10 bg-[#202026] p-3.5">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-zinc-400">In Cloud Account</p>
+            <p className="mt-0.5 truncate text-sm font-bold text-white">{diff.cloudSummary.displayName}</p>
+            <ul className="mt-2 space-y-1 text-xs text-zinc-300">
+              <li>Playlists: <span className="font-bold text-white">{diff.cloudSummary.playlists}</span> ({diff.cloudSummary.playlistTracks} tracks)</li>
+              <li>Liked songs: <span className="font-bold text-white">{diff.cloudSummary.likedSongs}</span></li>
+              <li>Recent plays: <span className="font-bold text-white">{diff.cloudSummary.recentPlays}</span></li>
+              <li>Total plays: <span className="font-bold text-white">{diff.cloudSummary.totalPlays}</span></li>
+            </ul>
+          </div>
+        </div>
+
+        {(diff.overlappingPlaylists.length > 0 || diff.overlappingLikedCount > 0) && (
+          <div className="mt-3 flex items-start gap-2 rounded-lg bg-[#1DB954]/10 p-3 text-xs text-[#b7f4ca]">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-[#1DB954]" />
+            <span>
+              Matching items ({diff.overlappingPlaylists.length} playlists, {diff.overlappingLikedCount} liked songs) will be deduplicated safely while preserving playlist track order and stats.
+            </span>
+          </div>
+        )}
+
+        <div className="mt-5 space-y-2">
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void choose('merge')}
+            className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#1DB954] px-4 py-2.5 text-xs font-extrabold text-black hover:bg-[#1ed760] disabled:opacity-50"
+          >
+            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+            Merge Device &amp; Cloud Libraries (Recommended)
+          </button>
+
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void choose('local-overwrite')}
+            className="w-full rounded-lg bg-[#2a2a32] px-4 py-2 text-xs font-bold text-white hover:bg-[#353540] disabled:opacity-50"
+          >
+            Keep Device Data &amp; Update Cloud
+          </button>
+
+          {diff.cloudSummary.playlists > 0 || diff.cloudSummary.likedSongs > 0 || diff.cloudSummary.totalPlays > 0 ? (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void choose('cloud-only')}
+              className="w-full rounded-lg bg-[#242429] px-4 py-2 text-xs font-bold text-zinc-200 hover:bg-[#303036] disabled:opacity-50"
+            >
+              Use Cloud Data Only (Keep Local Backup)
+            </button>
+          ) : null}
+
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void choose('cancel')}
+            className="w-full rounded-lg px-4 py-2 text-xs font-semibold text-zinc-400 hover:text-white disabled:opacity-50"
+          >
+            Cancel &amp; Stay in Guest Mode
+          </button>
         </div>
       </div>
     </div>

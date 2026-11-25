@@ -1,15 +1,17 @@
-import { Clock3, Heart, ListMusic, Music2, Play, Plus, Search, Sparkles, Trash2, Video } from 'lucide-react';
+import { Clock3, Heart, ListMusic, Music2, Play, Plus, Search, Sparkles, Trash2, UserCheck, Video } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import type { CuratedPlaylist, Track } from '../types/music';
+import type { ArtistTarget, CuratedPlaylist, FollowedArtist, Track } from '../types/music';
+import { extractPrimaryArtistName } from '../utils/artistProfile';
 import { CoverImage } from './CoverImage';
 import { DownloadButton } from './DownloadButton';
 
-type LibraryFilter = 'all' | 'playlists' | 'imported' | 'liked' | 'recent';
+type LibraryFilter = 'all' | 'playlists' | 'imported' | 'artists' | 'liked' | 'recent';
 
 interface LibraryViewProps {
   likedMap: Record<string, Track>;
   playlists: CuratedPlaylist[];
   recentlyPlayed: Track[];
+  followedArtists?: FollowedArtist[];
   currentTrackId?: string;
   isPlaying: boolean;
   downloadedIds: Set<string>;
@@ -23,11 +25,14 @@ interface LibraryViewProps {
   onOpenCreatePlaylist: () => void;
   onDeletePlaylist: (playlistId: string) => void;
   onOpenVideoQuery: (query: string) => void;
+  onOpenArtist?: (artist: ArtistTarget) => void;
+  onToggleFollowArtist?: (artist: ArtistTarget) => void;
 }
 
 const filters: { id: LibraryFilter; label: string }[] = [
   { id: 'all', label: 'Everything' },
   { id: 'playlists', label: 'Playlists' },
+  { id: 'artists', label: 'Following' },
   { id: 'imported', label: 'Imported' },
   { id: 'liked', label: 'Liked songs' },
   { id: 'recent', label: 'Recently played' },
@@ -41,6 +46,7 @@ export function LibraryView({
   likedMap,
   playlists,
   recentlyPlayed,
+  followedArtists = [],
   currentTrackId,
   isPlaying,
   downloadedIds,
@@ -54,6 +60,8 @@ export function LibraryView({
   onOpenCreatePlaylist,
   onDeletePlaylist,
   onOpenVideoQuery,
+  onOpenArtist,
+  onToggleFollowArtist,
 }: LibraryViewProps) {
   const [filter, setFilter] = useState<LibraryFilter>('all');
   const [query, setQuery] = useState('');
@@ -68,6 +76,16 @@ export function LibraryView({
     ),
     [playlists, normalizedQuery, filter]
   );
+  const visibleFollowedArtists = useMemo(
+    () =>
+      [...followedArtists]
+        .sort((a, b) => (b.followedAtMs || 0) - (a.followedAtMs || 0))
+        .filter((artist) =>
+          !normalizedQuery ||
+          matchesQuery(`${artist.name} ${artist.genre || ''} ${artist.language || ''}`, normalizedQuery)
+        ),
+    [followedArtists, normalizedQuery]
+  );
   const visibleLiked = useMemo(
     () => likedTracks.filter((track) => !normalizedQuery || matchesQuery(`${track.name} ${track.artist} ${track.albumName}`, normalizedQuery)),
     [likedTracks, normalizedQuery]
@@ -78,6 +96,7 @@ export function LibraryView({
   );
 
   const showPlaylists = filter === 'all' || filter === 'playlists' || filter === 'imported';
+  const showArtists = filter === 'artists' || (filter === 'all' && followedArtists.length > 0);
   const showLiked = filter === 'all' || filter === 'liked';
   const showRecent = filter === 'all' || filter === 'recent';
   const totalTracks = new Set([...likedTracks, ...recentlyPlayed].map((track) => track.id)).size;
@@ -105,10 +124,14 @@ export function LibraryView({
           </button>
         </div>
 
-        <div className="mt-7 grid grid-cols-3 gap-2 sm:max-w-[560px] sm:gap-3">
+        <div className="mt-7 grid grid-cols-2 gap-2 sm:max-w-[680px] sm:grid-cols-4 sm:gap-3">
           <div className="rounded-xl border border-white/[0.07] bg-black/20 px-3 py-3 sm:px-4">
             <div className="flex items-center gap-2 text-zinc-400"><ListMusic className="h-4 w-4" /><span className="text-[11px] font-semibold sm:text-xs">Playlists</span></div>
             <div className="mt-1.5 text-xl font-black tabular-nums text-white">{playlists.length}</div>
+          </div>
+          <div className="rounded-xl border border-white/[0.07] bg-black/20 px-3 py-3 sm:px-4">
+            <div className="flex items-center gap-2 text-zinc-400"><UserCheck className="h-4 w-4" /><span className="text-[11px] font-semibold sm:text-xs">Following</span></div>
+            <div className="mt-1.5 text-xl font-black tabular-nums text-white">{followedArtists.length}</div>
           </div>
           <div className="rounded-xl border border-white/[0.07] bg-black/20 px-3 py-3 sm:px-4">
             <div className="flex items-center gap-2 text-zinc-400"><Heart className="h-4 w-4" /><span className="text-[11px] font-semibold sm:text-xs">Liked</span></div>
@@ -121,8 +144,8 @@ export function LibraryView({
         </div>
       </header>
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex max-w-full gap-1.5 overflow-x-auto pb-1" role="tablist" aria-label="Library filters">
+      <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+        <div className="flex flex-wrap items-center gap-1.5" role="tablist" aria-label="Library filters">
           {filters.map((item) => (
             <button
               key={item.id}
@@ -130,13 +153,13 @@ export function LibraryView({
               role="tab"
               aria-selected={filter === item.id}
               onClick={() => setFilter(item.id)}
-              className={`shrink-0 rounded-full px-4 py-2 text-xs font-bold transition ${filter === item.id ? 'bg-white text-black' : 'border border-white/[0.08] bg-white/[0.035] text-zinc-400 hover:bg-white/[0.08] hover:text-white'}`}
+              className={`shrink-0 rounded-full px-3.5 py-2 text-xs font-bold transition ${filter === item.id ? 'bg-white text-black' : 'border border-white/[0.08] bg-white/[0.035] text-zinc-400 hover:bg-white/[0.08] hover:text-white'}`}
             >
               {item.label}
             </button>
           ))}
         </div>
-        <label className="flex min-h-10 w-full items-center gap-2 rounded-full border border-white/[0.09] bg-[#151917] px-4 text-zinc-400 focus-within:border-[#62f58a]/50 sm:max-w-[300px]">
+        <label className="flex min-h-10 w-full items-center gap-2 rounded-full border border-white/[0.09] bg-[#151917] px-4 text-zinc-400 focus-within:border-[#62f58a]/50 xl:max-w-[280px]">
           <Search className="h-4 w-4 shrink-0" />
           <input
             type="search"
@@ -192,6 +215,76 @@ export function LibraryView({
         </section>
       )}
 
+      {showArtists && (
+        <section aria-labelledby="library-artists">
+          <div className="mb-4 flex items-end justify-between gap-3">
+            <div>
+              <h2 id="library-artists" className="text-xl font-extrabold tracking-tight text-white">Followed artists</h2>
+              <p className="mt-1 text-xs text-zinc-500">Artists you follow for new releases and personalised picks</p>
+            </div>
+            <span className="text-xs font-semibold tabular-nums text-zinc-500">
+              {visibleFollowedArtists.length} {visibleFollowedArtists.length === 1 ? 'artist' : 'artists'}
+            </span>
+          </div>
+
+          {visibleFollowedArtists.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-white/[0.12] bg-white/[0.025] px-5 py-8 text-center">
+              <UserCheck className="mx-auto h-6 w-6 text-zinc-500" />
+              <p className="mt-2 text-sm font-bold text-white">
+                {query ? 'No matching followed artists' : 'No followed artists yet'}
+              </p>
+              <p className="mt-1 text-xs text-zinc-500">
+                {query ? 'Try another name or genre.' : 'Open any artist page and tap Follow to keep them here.'}
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              {visibleFollowedArtists.map((artist) => (
+                <article
+                  key={`lib-art-${artist.id}`}
+                  className="group flex min-w-0 items-center gap-3.5 rounded-2xl border border-white/[0.07] bg-[#151a17] p-3 transition hover:border-[#62f58a]/25 hover:bg-[#19221c]"
+                >
+                  <button
+                    type="button"
+                    onClick={() => onOpenArtist?.(artist)}
+                    aria-label={`Open ${artist.name}`}
+                    className="h-16 w-16 shrink-0 overflow-hidden rounded-full bg-black"
+                  >
+                    <CoverImage
+                      src={artist.image}
+                      alt={artist.name}
+                      className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
+                    />
+                  </button>
+                  <div className="min-w-0 flex-1">
+                    <button
+                      type="button"
+                      onClick={() => onOpenArtist?.(artist)}
+                      className="block max-w-full truncate text-left text-sm font-extrabold text-white hover:text-[#9fffb7]"
+                    >
+                      {artist.name}
+                    </button>
+                    <p className="mt-0.5 truncate text-xs text-zinc-400">
+                      {[artist.genre || 'Artist', artist.language].filter(Boolean).join(' · ')}
+                    </p>
+                  </div>
+                  {onToggleFollowArtist && (
+                    <button
+                      type="button"
+                      onClick={() => onToggleFollowArtist(artist)}
+                      aria-label={`Unfollow ${artist.name}`}
+                      className="shrink-0 rounded-full border border-[#1DB954]/50 bg-[#1DB954]/12 px-3 py-1.5 text-xs font-bold text-[#8df8a7] transition hover:bg-[#1DB954]/22"
+                    >
+                      Following
+                    </button>
+                  )}
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+
       {showLiked && (
         <section aria-labelledby="library-liked">
           <div className="mb-4 flex items-end justify-between gap-3">
@@ -213,7 +306,7 @@ export function LibraryView({
           ) : (
             <div className="overflow-hidden rounded-2xl border border-white/[0.07] bg-[#111512] p-2 sm:p-3">
               {visibleLiked.map((track, index) => (
-                <LibraryTrackRow key={track.id} track={track} index={index} currentTrackId={currentTrackId} isPlaying={isPlaying} isLiked downloaded={downloadedIds.has(track.id)} downloading={downloadingIds.has(track.id)} onPlay={() => onPlayList(visibleLiked, index)} onEnqueue={() => onEnqueue(track)} onToggleLike={() => onToggleLike(track)} onToggleDownload={() => onToggleDownload(track)} onAddToPlaylist={() => onAddToPlaylist(track)} onOpenVideo={() => onOpenVideoQuery(`${track.name} ${track.artist} official music video`)} />
+                <LibraryTrackRow key={track.id} track={track} index={index} currentTrackId={currentTrackId} isPlaying={isPlaying} isLiked downloaded={downloadedIds.has(track.id)} downloading={downloadingIds.has(track.id)} onPlay={() => onPlayList(visibleLiked, index)} onEnqueue={() => onEnqueue(track)} onToggleLike={() => onToggleLike(track)} onToggleDownload={() => onToggleDownload(track)} onAddToPlaylist={() => onAddToPlaylist(track)} onOpenVideo={() => onOpenVideoQuery(`${track.name} ${track.artist} official music video`)} onOpenArtist={onOpenArtist} />
               ))}
             </div>
           )}
@@ -238,7 +331,7 @@ export function LibraryView({
           ) : (
             <div className="overflow-hidden rounded-2xl border border-white/[0.07] bg-[#111512] p-2 sm:p-3">
               {visibleRecent.slice(0, 30).map((track, index) => (
-                <LibraryTrackRow key={`recent-${track.id}-${index}`} track={track} index={index} currentTrackId={currentTrackId} isPlaying={isPlaying} isLiked={Boolean(likedMap[track.id])} downloaded={downloadedIds.has(track.id)} downloading={downloadingIds.has(track.id)} onPlay={() => onPlayList(visibleRecent, index)} onEnqueue={() => onEnqueue(track)} onToggleLike={() => onToggleLike(track)} onToggleDownload={() => onToggleDownload(track)} onAddToPlaylist={() => onAddToPlaylist(track)} onOpenVideo={() => onOpenVideoQuery(`${track.name} ${track.artist} official music video`)} />
+                <LibraryTrackRow key={`recent-${track.id}-${index}`} track={track} index={index} currentTrackId={currentTrackId} isPlaying={isPlaying} isLiked={Boolean(likedMap[track.id])} downloaded={downloadedIds.has(track.id)} downloading={downloadingIds.has(track.id)} onPlay={() => onPlayList(visibleRecent, index)} onEnqueue={() => onEnqueue(track)} onToggleLike={() => onToggleLike(track)} onToggleDownload={() => onToggleDownload(track)} onAddToPlaylist={() => onAddToPlaylist(track)} onOpenVideo={() => onOpenVideoQuery(`${track.name} ${track.artist} official music video`)} onOpenArtist={onOpenArtist} />
               ))}
             </div>
           )}
@@ -262,10 +355,12 @@ interface LibraryTrackRowProps {
   onToggleDownload: () => void;
   onAddToPlaylist: () => void;
   onOpenVideo: () => void;
+  onOpenArtist?: (artist: ArtistTarget) => void;
 }
 
-function LibraryTrackRow({ track, index, currentTrackId, isPlaying, isLiked, downloaded, downloading, onPlay, onEnqueue, onToggleLike, onToggleDownload, onAddToPlaylist, onOpenVideo }: LibraryTrackRowProps) {
+function LibraryTrackRow({ track, index, currentTrackId, isPlaying, isLiked, downloaded, downloading, onPlay, onEnqueue, onToggleLike, onToggleDownload, onAddToPlaylist, onOpenVideo, onOpenArtist }: LibraryTrackRowProps) {
   const isCurrent = track.id === currentTrackId;
+  const primaryArtist = extractPrimaryArtistName(track.artist);
   return (
     <article className={`group flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 rounded-xl px-2 py-2.5 transition hover:bg-white/[0.045] sm:flex-nowrap sm:px-3 ${isCurrent ? 'bg-[#62f58a]/[0.07]' : ''}`}>
       <span className="w-5 shrink-0 text-center font-mono text-[11px] text-zinc-600">{isCurrent && isPlaying ? '♫' : index + 1}</span>
@@ -273,10 +368,21 @@ function LibraryTrackRow({ track, index, currentTrackId, isPlaying, isLiked, dow
         <CoverImage src={track.image} alt={track.name} className="h-full w-full object-cover" />
         <span className="absolute inset-0 grid place-items-center bg-black/50 opacity-0 transition group-hover:opacity-100"><Play className="h-4 w-4 fill-white text-white" /></span>
       </button>
-      <button type="button" onClick={onPlay} className="min-w-[120px] flex-1 text-left">
-        <span className={`block truncate text-sm font-bold ${isCurrent ? 'text-[#8df8a7]' : 'text-zinc-100'}`}>{track.name}</span>
-        <span className="mt-0.5 block truncate text-xs text-zinc-500">{track.artist}{track.albumName ? ` · ${track.albumName}` : ''}</span>
-      </button>
+      <div className="min-w-[120px] flex-1">
+        <button type="button" onClick={onPlay} className="block max-w-full truncate text-left">
+          <span className={`block truncate text-sm font-bold ${isCurrent ? 'text-[#8df8a7]' : 'text-zinc-100'}`}>{track.name}</span>
+        </button>
+        <div className="mt-0.5 flex min-w-0 items-center truncate text-xs text-zinc-500">
+          {onOpenArtist && primaryArtist && primaryArtist !== 'Unknown Artist' ? (
+            <button type="button" onClick={() => onOpenArtist({ id: '', name: primaryArtist, image: '' })} className="truncate text-left hover:text-zinc-300 hover:underline">
+              {track.artist}
+            </button>
+          ) : (
+            <span className="truncate">{track.artist}</span>
+          )}
+          {track.albumName && <span className="truncate">{` · ${track.albumName}`}</span>}
+        </div>
+      </div>
       <div className="flex w-full shrink-0 items-center justify-end gap-1 border-t border-white/[0.045] pt-1 sm:w-auto sm:border-0 sm:pt-0">
         <DownloadButton trackName={track.name} downloaded={downloaded} downloading={downloading} onClick={onToggleDownload} disabled={track.offlineAvailable === false || track.sourceProvider === 'Jamendo'} disabledReason="This provider supports online listening only" size="xs" />
         <button type="button" onClick={onToggleLike} aria-label={isLiked ? `Unlike ${track.name}` : `Like ${track.name}`} title={isLiked ? 'Remove from liked songs' : 'Like'} className={`grid h-8 w-8 place-items-center rounded-full transition hover:bg-white/[0.08] ${isLiked ? 'text-[#62f58a]' : 'text-zinc-500 hover:text-white'}`}><Heart className={`h-4 w-4 ${isLiked ? 'fill-current' : ''}`} /></button>

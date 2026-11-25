@@ -1,4 +1,4 @@
-export type ViewName = 'home' | 'discover' | 'search' | 'library' | 'downloads' | 'lyrics' | 'collection';
+export type ViewName = 'home' | 'discover' | 'search' | 'library' | 'downloads' | 'lyrics' | 'collection' | 'artist';
 export type SearchTab = 'songs' | 'albums' | 'playlists' | 'artists' | 'videos';
 export type AudioQuality = '320kbps' | '160kbps' | '96kbps' | 'auto';
 export type RepeatMode = 0 | 1 | 2; // 0 = off, 1 = all, 2 = one
@@ -87,6 +87,60 @@ export interface ArtistProfile {
   image: string;
   bio: string;
   topTrackIds: string[];
+}
+
+export interface FollowedArtist {
+  id: string;
+  name: string;
+  image: string;
+  genre?: string;
+  language?: string;
+  monthlyListeners?: string;
+  bio?: string;
+  followedAtMs: number;
+}
+
+export interface ArtistTarget {
+  id: string;
+  name: string;
+  image?: string;
+  genre?: string;
+  language?: string;
+  monthlyListeners?: string;
+  bio?: string;
+}
+
+export interface ArtistAlbumSummary {
+  id: string;
+  name: string;
+  artist: string;
+  year?: string;
+  image: string;
+  trackCount?: number;
+  type: 'Album' | 'Single' | 'EP';
+  tracks: Track[];
+}
+
+export interface RelatedArtistSummary {
+  id: string;
+  name: string;
+  subtitle: string;
+  image: string;
+  genre?: string;
+  language?: string;
+}
+
+export interface ArtistPageData {
+  artist: ArtistProfile & {
+    bannerImage?: string;
+    followerCount?: number;
+    isVerified?: boolean;
+  };
+  latestRelease: ArtistAlbumSummary | null;
+  popularTracks: Track[];
+  allSongs: Track[];
+  albums: ArtistAlbumSummary[];
+  relatedArtists: RelatedArtistSummary[];
 }
 
 export interface VideoResult {

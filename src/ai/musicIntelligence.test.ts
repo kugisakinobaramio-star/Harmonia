@@ -81,3 +81,16 @@ test('AI curation deduplicates identical track IDs across combined pools', () =>
   const result = curateAIRecommendations([kesariya, { ...kesariya }], liked, [], 10);
   assert.equal(result.filter((item) => item.track.id === 'hin-kesariya').length, 1);
 });
+
+test('AI curation rotation varies equal-affinity track order across refreshes', () => {
+  const liked = [track({ id: 'seed', genre: 'pop', moods: ['romantic'] })];
+  const pool = Array.from({ length: 8 }, (_, idx) =>
+    track({ id: `cand-${idx}`, name: `Track ${idx}`, artist: `Artist ${idx}`, genre: 'pop', moods: ['romantic'] })
+  );
+  const orders = [0, 7, 14, 21].map((rotation) =>
+    curateAIRecommendations(pool, liked, [], 10, { rotation })
+      .map((item) => item.track.id)
+      .join(',')
+  );
+  assert.ok(new Set(orders).size >= 2);
+});

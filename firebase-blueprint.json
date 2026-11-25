@@ -2,57 +2,203 @@
   "entities": {
     "user": {
       "title": "User Profile",
-      "description": "User profile document stored in Firestore",
+      "description": "Authenticated user profile, preferences, and personalisation settings",
       "type": "object",
       "properties": {
-        "uid": { "type": "string", "maxLength": 128 },
-        "displayName": { "type": "string", "maxLength": 100 },
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "schemaVersion": { "type": "number" },
+        "displayName": { "type": "string", "minLength": 1, "maxLength": 100 },
         "email": { "type": "string", "maxLength": 200 },
         "photoURL": { "type": "string", "maxLength": 500 },
-        "createdAt": { "type": "string" }
+        "region": { "type": "string", "enum": ["IN", "JP", "US", "GB", "GLOBAL"] },
+        "preferredLanguages": { "type": "array" },
+        "favoriteArtists": { "type": "array" },
+        "preferredMoods": { "type": "array" },
+        "prioritizeLyrics": { "type": "boolean" },
+        "volume": { "type": "number" },
+        "quality": { "type": "string", "enum": ["320kbps", "160kbps", "96kbps", "auto"] },
+        "eqPreset": { "type": "string", "enum": ["flat", "bass", "vocal", "latenight"] },
+        "tasteResetActive": { "type": "boolean" },
+        "lastSyncDevice": { "type": "string", "maxLength": 100 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["uid", "email"]
+      "required": [
+        "uid",
+        "schemaVersion",
+        "displayName",
+        "region",
+        "preferredLanguages",
+        "favoriteArtists",
+        "preferredMoods",
+        "prioritizeLyrics",
+        "createdAt",
+        "updatedAt"
+      ]
     },
     "playlist": {
       "title": "Playlist",
-      "description": "User custom playlist",
+      "description": "User custom or imported playlist metadata",
       "type": "object",
       "properties": {
-        "id": { "type": "string", "maxLength": 100 },
-        "name": { "type": "string", "maxLength": 100 },
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "id": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "schemaVersion": { "type": "number" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 120 },
         "description": { "type": "string", "maxLength": 300 },
         "image": { "type": "string", "maxLength": 500 },
-        "createdAt": { "type": "string" }
+        "language": { "type": "string", "maxLength": 40 },
+        "region": { "type": "string", "enum": ["IN", "JP", "US", "GB", "GLOBAL"] },
+        "isUserCreated": { "type": "boolean" },
+        "sourcePageUrl": { "type": "string", "maxLength": 500 },
+        "trackCount": { "type": "number" },
+        "orderIndex": { "type": "number" },
+        "updatedAtMs": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["id", "name"]
+      "required": ["uid", "id", "schemaVersion", "name", "description", "image", "trackCount", "orderIndex", "updatedAtMs", "createdAt", "updatedAt"]
+    },
+    "playlistEntry": {
+      "title": "Playlist Entry",
+      "description": "Ordered playlist track entry preserving sequence and intentional duplicates without temporary stream URLs",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "entryId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "playlistId": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "position": { "type": "number" },
+        "schemaVersion": { "type": "number" },
+        "track": { "type": "object" },
+        "addedAtMs": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "entryId", "playlistId", "position", "schemaVersion", "track", "addedAtMs", "createdAt", "updatedAt"]
     },
     "likedSong": {
       "title": "Liked Song",
-      "description": "Liked track entry",
+      "description": "Liked track entry without temporary stream URLs",
       "type": "object",
       "properties": {
-        "id": { "type": "string", "maxLength": 100 },
-        "name": { "type": "string", "maxLength": 200 },
-        "artist": { "type": "string", "maxLength": 200 },
-        "albumName": { "type": "string", "maxLength": 200 },
-        "duration": { "type": "number" },
-        "image": { "type": "string", "maxLength": 500 }
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "id": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "schemaVersion": { "type": "number" },
+        "track": { "type": "object" },
+        "likedAtMs": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["id", "name"]
+      "required": ["uid", "id", "schemaVersion", "track", "likedAtMs", "createdAt", "updatedAt"]
+    },
+    "recentHistoryItem": {
+      "title": "Recent History Item",
+      "description": "Recently played track entry",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "id": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "schemaVersion": { "type": "number" },
+        "position": { "type": "number" },
+        "playedAtMs": { "type": "number" },
+        "track": { "type": "object" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "id", "schemaVersion", "position", "playedAtMs", "track", "createdAt", "updatedAt"]
+    },
+    "playedTrackStat": {
+      "title": "Played Track Stat",
+      "description": "Per-track listening statistics and metadata snapshot",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "id": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "schemaVersion": { "type": "number" },
+        "playCount": { "type": "number" },
+        "skips": { "type": "number" },
+        "completions": { "type": "number" },
+        "lastPlayedAtMs": { "type": "number" },
+        "track": { "type": "object" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "id", "schemaVersion", "playCount", "skips", "completions", "lastPlayedAtMs", "track", "createdAt", "updatedAt"]
+    },
+    "tasteProfile": {
+      "title": "AI Taste Profile",
+      "description": "User affinity weights, play counts, and listening feedback",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "id": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "schemaVersion": { "type": "number" },
+        "artistAffinity": { "type": "object" },
+        "languageAffinity": { "type": "object" },
+        "genreAffinity": { "type": "object" },
+        "playCounts": { "type": "object" },
+        "listeningFeedback": { "type": "object" },
+        "tasteResetActive": { "type": "boolean" },
+        "totalPlays": { "type": "number" },
+        "updatedAtMs": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "id", "schemaVersion", "artistAffinity", "languageAffinity", "genreAffinity", "playCounts", "listeningFeedback", "tasteResetActive", "totalPlays", "updatedAtMs", "createdAt", "updatedAt"]
+    },
+    "followedArtist": {
+      "title": "Followed Artist",
+      "description": "User followed artist profile metadata",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "id": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "schemaVersion": { "type": "number" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "image": { "type": "string", "maxLength": 500 },
+        "genre": { "type": "string", "maxLength": 120 },
+        "language": { "type": "string", "maxLength": 40 },
+        "monthlyListeners": { "type": "string", "maxLength": 100 },
+        "bio": { "type": "string", "maxLength": 500 },
+        "followedAtMs": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "id", "schemaVersion", "name", "image", "followedAtMs", "createdAt", "updatedAt"]
     }
   },
   "firestore": {
     "/users/{userId}": {
       "schema": { "$ref": "#/entities/user" },
-      "description": "User profile document"
+      "description": "User profile, preferences, and personalisation settings"
     },
     "/users/{userId}/playlists/{playlistId}": {
       "schema": { "$ref": "#/entities/playlist" },
-      "description": "User playlists collection"
+      "description": "User custom and imported playlists"
     },
-    "/users/{userId}/likedSongs/{trackId}": {
+    "/users/{userId}/playlists/{playlistId}/entries/{entryId}": {
+      "schema": { "$ref": "#/entities/playlistEntry" },
+      "description": "Ordered playlist track entries"
+    },
+    "/users/{userId}/likedSongs/{trackDocId}": {
       "schema": { "$ref": "#/entities/likedSong" },
-      "description": "User liked songs collection"
+      "description": "User liked songs"
+    },
+    "/users/{userId}/recentHistory/{trackDocId}": {
+      "schema": { "$ref": "#/entities/recentHistoryItem" },
+      "description": "User recently played tracks"
+    },
+    "/users/{userId}/playedTracks/{trackDocId}": {
+      "schema": { "$ref": "#/entities/playedTrackStat" },
+      "description": "User per-track listening counts and feedback"
+    },
+    "/users/{userId}/tasteStats/{statId}": {
+      "schema": { "$ref": "#/entities/tasteProfile" },
+      "description": "User AI music taste affinity summary"
+    },
+    "/users/{userId}/followedArtists/{artistDocId}": {
+      "schema": { "$ref": "#/entities/followedArtist" },
+      "description": "User followed artists"
     }
   }
 }

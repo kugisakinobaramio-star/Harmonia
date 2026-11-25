@@ -109,4 +109,46 @@ set_style_item(launch_theme, "windowSplashScreenAnimatedIcon", "@drawable/musick
 set_style_item(launch_theme, "postSplashScreenTheme", "@style/AppTheme.NoActionBar")
 styles_tree.write(styles, encoding="utf-8", xml_declaration=True)
 
-print("Applied MusicKK launcher icons and native splash screen branding.")
+manifest = Path("android/app/src/main/AndroidManifest.xml")
+if manifest.is_file():
+    ANDROID_NS = "http://schemas.android.com/apk/res/android"
+    ET.register_namespace("android", ANDROID_NS)
+    manifest_tree = ET.parse(manifest)
+    manifest_root = manifest_tree.getroot()
+    app_node = manifest_root.find("./application")
+    if app_node is not None:
+        main_activity = None
+        for act in app_node.findall("./activity"):
+            name_attr = act.get(f"{{{ANDROID_NS}}}name", "")
+            if "MainActivity" in name_attr:
+                main_activity = act
+                break
+        if main_activity is None:
+            main_activity = app_node.find("./activity")
+        if main_activity is not None:
+            has_oauth_filter = False
+            for filt in main_activity.findall("./intent-filter"):
+                for data_node in filt.findall("./data"):
+                    if (
+                        data_node.get(f"{{{ANDROID_NS}}}scheme") == "com.harmonia.music"
+                        and data_node.get(f"{{{ANDROID_NS}}}host") == "auth"
+                    ):
+                        has_oauth_filter = True
+                        break
+            if not has_oauth_filter:
+                filt = ET.SubElement(main_activity, "intent-filter")
+                ET.SubElement(filt, "action", {f"{{{ANDROID_NS}}}name": "android.intent.action.VIEW"})
+                ET.SubElement(filt, "category", {f"{{{ANDROID_NS}}}name": "android.intent.category.DEFAULT"})
+                ET.SubElement(filt, "category", {f"{{{ANDROID_NS}}}name": "android.intent.category.BROWSABLE"})
+                ET.SubElement(
+                    filt,
+                    "data",
+                    {
+                        f"{{{ANDROID_NS}}}scheme": "com.harmonia.music",
+                        f"{{{ANDROID_NS}}}host": "auth",
+                    },
+                )
+                manifest_tree.write(manifest, encoding="utf-8", xml_declaration=True)
+
+print("Applied MusicKK launcher icons, native splash branding, and OAuth callback intent-filter.")
+

@@ -19,6 +19,7 @@ import {
   VolumeX,
 } from 'lucide-react';
 import type { AudioQuality, RepeatMode, RightPanelMode, Track } from '../types/music';
+import { extractPrimaryArtistName } from '../utils/artistProfile';
 import { formatTime, QUALITY_LABELS } from '../utils/playerEngine';
 import { CoverImage } from './CoverImage';
 import { DownloadButton } from './DownloadButton';
@@ -52,6 +53,7 @@ interface PlayerBarProps {
   onVolumeChange: (val: number) => void;
   onCycleQuality: () => void;
   onDownload: () => void;
+  onOpenArtistName?: (artistName: string) => void;
 }
 
 export function PlayerBar({
@@ -83,9 +85,11 @@ export function PlayerBar({
   onVolumeChange,
   onCycleQuality,
   onDownload,
+  onOpenArtistName,
 }: PlayerBarProps) {
-  const safeDuration = duration > 0 ? duration : currentTrack?.duration || 200;
-  const progressPct = Math.min(100, Math.max(0, (currentTime / safeDuration) * 100));
+  const hasTrack = Boolean(currentTrack);
+  const safeDuration = hasTrack ? (duration > 0 ? duration : currentTrack?.duration || 200) : 0;
+  const progressPct = safeDuration > 0 ? Math.min(100, Math.max(0, (currentTime / safeDuration) * 100)) : 0;
 
   return (
     <footer aria-label="MusicKK playback bar" className="harmonia-player-shell z-30 shrink-0">
@@ -126,9 +130,10 @@ export function PlayerBar({
           <button
             type="button"
             onClick={onToggleLike}
+            disabled={!hasTrack}
             aria-label={isLiked ? 'Remove from Liked Songs (mini player)' : 'Save to Liked Songs (mini player)'}
             aria-pressed={isLiked}
-            className={`grid h-8 w-8 shrink-0 place-items-center rounded-full ${
+            className={`grid h-8 w-8 shrink-0 place-items-center rounded-full disabled:opacity-40 ${
               isLiked ? 'text-[#1DB954]' : 'text-zinc-300 hover:text-white'
             }`}
           >
@@ -165,10 +170,11 @@ export function PlayerBar({
             type="range"
             min={0}
             max={1000}
+            disabled={!hasTrack}
             value={Math.round((progressPct / 100) * 1000)}
             aria-label="Playback progress"
-            onChange={(e) => onSeek((Number(e.target.value) / 1000) * safeDuration)}
-            className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+            onChange={(e) => hasTrack && onSeek((Number(e.target.value) / 1000) * safeDuration)}
+            className="absolute inset-0 h-full w-full cursor-pointer opacity-0 disabled:cursor-default"
           />
         </div>
       </div>
@@ -203,7 +209,17 @@ export function PlayerBar({
               {currentTrack?.name || 'Nothing playing'}
             </button>
             <div className="truncate text-xs text-zinc-400">
-              {currentTrack?.artist || 'Choose a song to get started'}
+              {currentTrack && onOpenArtistName ? (
+                <button
+                  type="button"
+                  onClick={() => onOpenArtistName(extractPrimaryArtistName(currentTrack.artist))}
+                  className="max-w-full truncate text-left hover:text-white hover:underline"
+                >
+                  {currentTrack.artist}
+                </button>
+              ) : (
+                <span>{currentTrack?.artist || 'Choose a song to get started'}</span>
+              )}
               {currentTrack?.sourceAvailability === 'preview' && !isDownloaded && (
                 <span className="ml-1.5 text-[10px] font-semibold text-amber-300/90">
                   · 30s preview
@@ -215,15 +231,20 @@ export function PlayerBar({
           <button
             type="button"
             onClick={onToggleLike}
+            disabled={!hasTrack}
             aria-label={isLiked ? 'Remove from Liked Songs' : 'Save to Liked Songs'}
             aria-pressed={isLiked}
-            className={`ml-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full transition-transform hover:scale-105 ${
-              isLiked
-                ? 'bg-[#1DB954] text-black'
-                : 'border border-zinc-400 text-zinc-300 hover:border-white hover:text-white'
-            }`}
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-full transition-transform hover:scale-105 disabled:opacity-40"
           >
-            {isLiked ? <Check className="h-3.5 w-3.5 stroke-[3]" /> : <Plus className="h-3.5 w-3.5" />}
+            <span
+              className={`grid h-6 w-6 place-items-center rounded-full ${
+                isLiked
+                  ? 'bg-[#1DB954] text-black'
+                  : 'border border-zinc-400 text-zinc-300 hover:border-white hover:text-white'
+              }`}
+            >
+              {isLiked ? <Check className="h-3.5 w-3.5 stroke-[3]" /> : <Plus className="h-3.5 w-3.5" />}
+            </span>
           </button>
         </div>
 
@@ -319,9 +340,10 @@ export function PlayerBar({
                 type="range"
                 min={0}
                 max={1000}
+                disabled={!hasTrack}
                 value={Math.round((progressPct / 100) * 1000)}
-                onChange={(e) => onSeek((Number(e.target.value) / 1000) * safeDuration)}
-                className="sp-range relative z-10 w-full"
+                onChange={(e) => hasTrack && onSeek((Number(e.target.value) / 1000) * safeDuration)}
+                className="sp-range relative z-10 w-full disabled:cursor-default disabled:opacity-50"
               />
             </div>
 
@@ -337,7 +359,7 @@ export function PlayerBar({
             aria-label="Toggle Now Playing sidebar"
             aria-pressed={rightPanelMode === 'nowplaying'}
             title="Now Playing view"
-            className={`shrink-0 p-1 transition-colors lg:p-1.5 ${
+            className={`grid h-8 w-8 shrink-0 place-items-center transition-colors ${
               rightPanelMode === 'nowplaying' ? 'text-[#1DB954]' : 'text-zinc-400 hover:text-white'
             }`}
           >
@@ -350,7 +372,7 @@ export function PlayerBar({
             aria-label="Toggle Lyrics view"
             aria-pressed={lyricsOpen}
             title="Lyrics"
-            className={`shrink-0 p-1 transition-colors lg:p-1.5 ${
+            className={`grid h-8 w-8 shrink-0 place-items-center transition-colors ${
               lyricsOpen ? 'text-[#1DB954]' : 'text-zinc-400 hover:text-white'
             }`}
           >
@@ -363,7 +385,7 @@ export function PlayerBar({
             aria-label="Toggle Queue sidebar"
             aria-pressed={rightPanelMode === 'queue'}
             title="Queue"
-            className={`shrink-0 p-1 transition-colors lg:p-1.5 ${
+            className={`grid h-8 w-8 shrink-0 place-items-center transition-colors ${
               rightPanelMode === 'queue' ? 'text-[#1DB954]' : 'text-zinc-400 hover:text-white'
             }`}
           >
@@ -375,7 +397,7 @@ export function PlayerBar({
             onClick={onOpenVideo}
             aria-label="Watch music video"
             title="Music video"
-            className="hidden shrink-0 p-1.5 text-zinc-400 transition-colors hover:text-white lg:inline-flex"
+            className="hidden h-8 w-8 shrink-0 place-items-center text-zinc-400 transition-colors hover:text-white lg:grid"
           >
             <Video className="h-4 w-4" />
           </button>
@@ -383,9 +405,10 @@ export function PlayerBar({
           <button
             type="button"
             onClick={onShare}
+            disabled={!hasTrack}
             aria-label="Share track"
             title="Share"
-            className="hidden shrink-0 p-1.5 text-zinc-400 transition-colors hover:text-white xl:inline-flex"
+            className="hidden h-8 w-8 shrink-0 place-items-center text-zinc-400 transition-colors hover:text-white disabled:opacity-40 xl:grid"
           >
             <Share2 className="h-4 w-4" />
           </button>
@@ -415,7 +438,7 @@ export function PlayerBar({
               type="button"
               onClick={() => onVolumeChange(volume === 0 ? 85 : 0)}
               aria-label={volume === 0 ? 'Unmute audio' : 'Mute audio'}
-              className="shrink-0 p-1 text-zinc-400 hover:text-white"
+              className="grid h-8 w-8 shrink-0 place-items-center text-zinc-400 hover:text-white"
             >
               {volume === 0 ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
             </button>
@@ -445,7 +468,7 @@ export function PlayerBar({
             onClick={onOpenExpanded}
             aria-label="Expand full screen player"
             title="Full screen player"
-            className="shrink-0 p-1 text-zinc-400 transition-colors hover:text-white lg:p-1.5"
+            className="grid h-8 w-8 shrink-0 place-items-center text-zinc-400 transition-colors hover:text-white"
           >
             <Maximize2 className="h-4 w-4" />
           </button>

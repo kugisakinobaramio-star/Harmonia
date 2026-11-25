@@ -2724,6 +2724,7 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
     const type = String(req.query.type || 'albums');
     const id = String(req.query.id || '').trim();
     const limit = Math.min(50, Math.max(1, Number(req.query.limit || 30)));
+    const page = Math.max(0, Math.floor(Number(req.query.page || 0)));
     if (!id) {
       res.status(400).json({ ok: false, error: 'Missing id parameter' });
       return;
@@ -2736,7 +2737,12 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
         return;
       }
       const mbJson = await fetchMusicBrainzJson(
-        'https://musicbrainz.org/ws/2/recording/?query=' + encodeURIComponent('arid:' + mbid) + '&fmt=json&limit=' + limit
+        'https://musicbrainz.org/ws/2/recording/?query=' +
+          encodeURIComponent('arid:' + mbid) +
+          '&fmt=json&limit=' +
+          limit +
+          '&offset=' +
+          page * limit
       );
       const recordings = (mbJson?.recordings || []) as MusicBrainzRecordingRaw[];
       const tracks = recordings.map(mapMusicBrainzRecording)
@@ -2755,13 +2761,19 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
         type === 'playlists'
           ? `https://api.deezer.com/playlist/${encodeURIComponent(dzId)}`
           : type === 'artists'
-            ? `https://api.deezer.com/artist/${encodeURIComponent(dzId)}/top?limit=${limit}`
+            ? `https://api.deezer.com/artist/${encodeURIComponent(dzId)}/top?limit=${limit}&index=${page * limit}`
             : `https://api.deezer.com/album/${encodeURIComponent(dzId)}`;
       try {
-        const [dzRes, artistMetaRes] = await Promise.all([
+        const [dzRes, artistMetaRes, artistAlbumsRes, artistRelatedRes] = await Promise.all([
           fetchWithTimeout(dzUrl, 4500),
           type === 'artists'
             ? fetchWithTimeout(`https://api.deezer.com/artist/${encodeURIComponent(dzId)}`, 3500).catch(() => null)
+            : Promise.resolve(null),
+          type === 'artists' && page === 0
+            ? fetchWithTimeout(`https://api.deezer.com/artist/${encodeURIComponent(dzId)}/albums?limit=16`, 3500).catch(() => null)
+            : Promise.resolve(null),
+          type === 'artists' && page === 0
+            ? fetchWithTimeout(`https://api.deezer.com/artist/${encodeURIComponent(dzId)}/related?limit=10`, 3500).catch(() => null)
             : Promise.resolve(null),
         ]);
         if (dzRes.ok) {
@@ -2781,11 +2793,39 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
                   name?: string;
                   picture_big?: string;
                   picture_medium?: string;
+                  nb_fan?: number;
+                  nb_album?: number;
                 })
               : null;
+          const dzAlbumsJson =
+            artistAlbumsRes && artistAlbumsRes.ok
+              ? ((await artistAlbumsRes.json()) as {
+                  data?: Array<{
+                    id?: number;
+                    title?: string;
+                    cover_big?: string;
+                    cover_medium?: string;
+                    release_date?: string;
+                    record_type?: string;
+                  }>;
+                })
+              : null;
+          const dzRelatedJson =
+            artistRelatedRes && artistRelatedRes.ok
+              ? ((await artistRelatedRes.json()) as {
+                  data?: Array<{
+                    id?: number;
+                    name?: string;
+                    picture_big?: string;
+                    picture_medium?: string;
+                    nb_fan?: number;
+                  }>;
+                })
+              : null;
+
           let rawTracks = dzJson.tracks?.data || dzJson.data || [];
           const artistName = artistMeta?.name || '';
-          if (type === 'artists' && artistName && rawTracks.length < 15) {
+          if (type === 'artists' && artistName && page === 0 && rawTracks.length < 15) {
             try {
               const extraRes = await fetchWithTimeout(
                 `https://api.deezer.com/search?q=${encodeURIComponent(artistName)}&limit=${limit}`,
@@ -2837,7 +2877,7 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
           // Enrich Deezer artist discography tracks with full-length JioSaavn IN streams when available
           if (type === 'artists' && artistName && mapped.length > 0) {
             try {
-              const saavnNative = await fetchSaavnNativeSongs(artistName, 0, limit, 2800);
+              const saavnNative = await fetchSaavnNativeSongs(artistName, page, limit, 2800);
               const saavnByKey = new Map<string, SaavnNormalizedSong>();
               const normArtist = artistName.normalize('NFKC').toLowerCase().trim();
               const normTitle = (v: string) =>
@@ -2878,13 +2918,45 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
             }
           }
 
+          const mappedDzAlbums = (dzAlbumsJson?.data || [])
+            .filter((alb) => alb.id && alb.title)
+            .map((alb) => ({
+              id: `dz-alb:${alb.id}`,
+              name: decodeHtmlEntities(alb.title || 'Album'),
+              artist: artistName || 'Artist',
+              year: alb.release_date ? alb.release_date.slice(0, 4) : undefined,
+              image: alb.cover_big || alb.cover_medium || albumCover || '',
+              type:
+                alb.record_type === 'single'
+                  ? 'Single'
+                  : alb.record_type === 'ep'
+                    ? 'EP'
+                    : 'Album',
+              trackCount: alb.record_type === 'single' ? 1 : 0,
+              tracks: [],
+            }));
+
+          const mappedDzRelated = (dzRelatedJson?.data || [])
+            .filter((rel) => rel.id && rel.name)
+            .map((rel) => ({
+              id: `dz-art:${rel.id}`,
+              name: decodeHtmlEntities(rel.name || 'Artist'),
+              subtitle: rel.nb_fan ? `${Math.round(rel.nb_fan / 1000)}K fans` : 'Artist',
+              image: rel.picture_big || rel.picture_medium || '',
+            }));
+
+          const fanCount = typeof artistMeta?.nb_fan === 'number' ? artistMeta.nb_fan : undefined;
           res.json({
-            ok: mapped.length > 0,
+            ok: mapped.length > 0 || mappedDzAlbums.length > 0,
             source: 'deezer',
             data: {
               name: dzJson.title || dzJson.name || artistName || 'Collection',
               image: albumCover || mapped[0]?.image || '',
               tracks: mapped,
+              followerCount: fanCount,
+              isVerified: Boolean(fanCount && fanCount > 5000),
+              albums: mappedDzAlbums.length > 0 ? mappedDzAlbums : undefined,
+              relatedArtists: mappedDzRelated.length > 0 ? mappedDzRelated : undefined,
             },
           });
           return;
@@ -2899,13 +2971,15 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
     if (type === 'artists') {
       try {
         const [nativeArtistRes, mirrorArtistRes] = await Promise.allSettled([
+          page === 0
+            ? fetchWithTimeout(
+                `${JIOSAAVN_API_BASE}?__call=artist.getArtistPageDetails&artistId=${encodeURIComponent(id)}&n_song=${limit}&n_album=20&_format=json&_marker=0&api_version=4`,
+                4500,
+                JIOSAAVN_NATIVE_HEADERS
+              ).then((r) => (r.ok ? r.json() : null))
+            : Promise.resolve(null),
           fetchWithTimeout(
-            `${JIOSAAVN_API_BASE}?__call=artist.getArtistPageDetails&artistId=${encodeURIComponent(id)}&n_song=${limit}&n_album=20&_format=json&_marker=0&api_version=4`,
-            4500,
-            JIOSAAVN_NATIVE_HEADERS
-          ).then((r) => (r.ok ? r.json() : null)),
-          fetchWithTimeout(
-            `${SAAVN_BASE}/api/artists/${encodeURIComponent(id)}/songs?page=0&limit=${limit}`,
+            `${SAAVN_BASE}/api/artists/${encodeURIComponent(id)}/songs?page=${page}&limit=${limit}`,
             4500
           ).then((r) => (r.ok ? r.json() : null)),
         ]);
@@ -2932,7 +3006,94 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
           if (sid) seenSongIds.add(sid);
           mergedSongs.push(s);
         }
-        if (mergedSongs.length > 0) {
+
+        const rawNativeAlbums = [
+          ...(Array.isArray(nativeArtistJson?.latest_release)
+            ? (nativeArtistJson.latest_release as NativeSaavnAlbumRaw[])
+            : []),
+          ...(Array.isArray(nativeArtistJson?.topAlbums?.albums)
+            ? (nativeArtistJson.topAlbums.albums as NativeSaavnAlbumRaw[])
+            : Array.isArray(nativeArtistJson?.topAlbums)
+              ? (nativeArtistJson.topAlbums as NativeSaavnAlbumRaw[])
+              : []),
+        ];
+        const seenAlbIds = new Set<string>();
+        const mappedAlbums: Array<{
+          id: string;
+          name: string;
+          artist: string;
+          year?: string;
+          image: string;
+          trackCount: number;
+          type: 'Album' | 'Single' | 'EP';
+          tracks: [];
+        }> = [];
+        for (const rawAlb of rawNativeAlbums) {
+          const mappedAlb = mapNativeSaavnAlbum(rawAlb);
+          if (!mappedAlb || seenAlbIds.has(mappedAlb.id)) continue;
+          seenAlbIds.add(mappedAlb.id);
+          const bestImg = mappedAlb.image.find((i) => i.quality === '500x500')?.url || mappedAlb.image[mappedAlb.image.length - 1]?.url || '';
+          const artistTitle = mappedAlb.artists.primary.map((a) => a.name).filter(Boolean).join(', ') || nativeArtistJson?.name || 'Artist';
+          mappedAlbums.push({
+            id: `saavn-alb:${mappedAlb.id}`,
+            name: decodeHtmlEntities(mappedAlb.name),
+            artist: decodeHtmlEntities(artistTitle),
+            year: mappedAlb.year,
+            image: bestImg,
+            trackCount: 0,
+            type: 'Album',
+            tracks: [],
+          });
+        }
+
+        const rawRelated = Array.isArray(nativeArtistJson?.similarArtists)
+          ? (nativeArtistJson.similarArtists as Array<NativeSaavnArtistRaw & { isVerified?: boolean }>)
+          : [];
+        const mappedRelated = rawRelated
+          .map((rawRel) => {
+            const rel = mapNativeSaavnArtist(rawRel);
+            if (!rel) return null;
+            const img = rel.image.find((i) => i.quality === '500x500')?.url || rel.image[rel.image.length - 1]?.url || '';
+            return {
+              id: `saavn-art:${rel.id}`,
+              name: decodeHtmlEntities(rel.name),
+              subtitle: 'Artist',
+              image: img,
+            };
+          })
+          .filter((item): item is NonNullable<typeof item> => Boolean(item));
+
+        const extractBioText = (raw: unknown): string => {
+          if (Array.isArray(raw)) {
+            return raw
+              .map((entry) => (typeof entry === 'string' ? entry : (entry as { text?: string })?.text || ''))
+              .filter(Boolean)
+              .join(' ')
+              .trim();
+          }
+          if (typeof raw === 'string') {
+            const trimmed = raw.trim();
+            if (!trimmed) return '';
+            if (trimmed.startsWith('[') || trimmed.startsWith('{')) {
+              try {
+                const parsed = JSON.parse(trimmed);
+                const extracted = extractBioText(Array.isArray(parsed) ? parsed : [parsed]);
+                if (extracted) return extracted;
+              } catch {
+                // Fall back to raw text when bio is plain prose
+              }
+            }
+            return trimmed;
+          }
+          if (raw && typeof raw === 'object' && 'text' in raw) {
+            return String((raw as { text?: unknown }).text || '').trim();
+          }
+          return '';
+        };
+        const bioText = extractBioText(nativeArtistJson?.bio).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+        const followerNum = Number(nativeArtistJson?.follower_count || nativeArtistJson?.fan_count || 0) || undefined;
+
+        if (mergedSongs.length > 0 || mappedAlbums.length > 0) {
           const artistImg =
             typeof nativeArtistJson?.image === 'string' &&
             !nativeArtistJson.image.includes('artist-default') &&
@@ -2944,7 +3105,13 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
             data: {
               name: nativeArtistJson?.name || mirrorData?.name || 'Artist',
               image: artistImg,
+              subtitle: nativeArtistJson?.subtitle || undefined,
+              bio: bioText ? decodeHtmlEntities(bioText) : undefined,
+              followerCount: followerNum,
+              isVerified: Boolean(nativeArtistJson?.isVerified || (followerNum && followerNum > 5000)),
               songs: mergedSongs,
+              albums: mappedAlbums.length > 0 ? mappedAlbums : undefined,
+              relatedArtists: mappedRelated.length > 0 ? mappedRelated : undefined,
             },
           });
           return;

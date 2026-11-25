@@ -1,5 +1,6 @@
 import { ArrowDown, ArrowUp, Mic2, Play, Trash2, X } from 'lucide-react';
 import type { LyricLine, RightPanelMode, Track } from '../types/music';
+import { extractPrimaryArtistName } from '../utils/artistProfile';
 import { resolveActiveLyricPair } from '../utils/playerEngine';
 import { CoverImage } from './CoverImage';
 import { DownloadButton } from './DownloadButton';
@@ -21,6 +22,7 @@ interface RightPanelProps {
   onRemoveIndex: (idx: number) => void;
   onMoveItem: (fromIdx: number, toIdx: number) => void;
   onClearQueue: () => void;
+  onOpenArtistName?: (artistName: string) => void;
 }
 
 export function RightPanel({
@@ -40,6 +42,7 @@ export function RightPanel({
   onRemoveIndex,
   onMoveItem,
   onClearQueue,
+  onOpenArtistName,
 }: RightPanelProps) {
   if (mode === 'closed') return null;
 
@@ -111,7 +114,17 @@ export function RightPanel({
                   <h2 className="truncate text-lg font-extrabold text-white">
                     {currentTrack.name}
                   </h2>
-                  <p className="truncate text-sm text-zinc-400">{currentTrack.artist}</p>
+                  {onOpenArtistName ? (
+                    <button
+                      type="button"
+                      onClick={() => onOpenArtistName(extractPrimaryArtistName(currentTrack.artist))}
+                      className="block max-w-full truncate text-left text-sm text-zinc-300 hover:text-white hover:underline"
+                    >
+                      {currentTrack.artist}
+                    </button>
+                  ) : (
+                    <p className="truncate text-sm text-zinc-400">{currentTrack.artist}</p>
+                  )}
                   <p className="mt-0.5 truncate text-xs text-zinc-500">
                     {currentTrack.albumName}
                     {currentTrack.language ? ` · ${currentTrack.language}` : ''}

@@ -10,15 +10,25 @@ import {
   SEED_VIDEOS,
 } from '../data/catalog';
 import type {
+  ArtistAlbumSummary,
+  ArtistPageData,
   ArtistProfile,
+  ArtistTarget,
   CuratedPlaylist,
   LyricLine,
   MusicLanguage,
   MusicRegion,
+  RelatedArtistSummary,
   Track,
   UserTasteProfile,
   VideoResult,
 } from '../types/music';
+import {
+  buildArtistPageData,
+  dedupeCanonicalTracks,
+  doesTrackBelongToArtist,
+  normalizeArtistNameKey,
+} from './artistProfile';
 import {
   decodeHtmlEntities,
   filterAndRankTracks,
@@ -324,7 +334,7 @@ export async function fetchPlayableDiscoveries(region: MusicRegion, refresh = fa
   } catch { /* Discovery remains usable when storage is unavailable. */ }
 
   if (!refresh && cached && Date.now() - cached.savedAt < PLAYABLE_DISCOVERY_CACHE_TTL_MS) {
-    return cached.tracks.filter(isQualityDiscoverTrack);
+    return dedupeCanonicalTracks(cached.tracks.filter(isQualityDiscoverTrack));
   }
 
   const queries = region === 'GLOBAL'
@@ -334,21 +344,17 @@ export async function fetchPlayableDiscoveries(region: MusicRegion, refresh = fa
     const settled = await Promise.allSettled(
       queries.map((query) => searchSongs(query, { region, prioritizeLyrics: false }))
     );
-    const byRecording = new Map<string, Track>();
+    const collected: Track[] = [];
     for (const result of settled) {
       if (result.status !== 'fulfilled') continue;
       for (const track of result.value.tracks) {
-        if (!isQualityDiscoverTrack(track)) continue;
-        const normalize = (value: string) => value.toLocaleLowerCase().normalize('NFKC').trim().replace(/\\s+/g, ' ');
-        const key = `${normalize(track.name)}::${normalize(track.artist.split(',')[0] || track.artist)}`;
-        const existing = byRecording.get(key);
-        if (!existing || (track.playCount || 0) > (existing.playCount || 0)) {
-          byRecording.set(key, track);
+        if (isQualityDiscoverTrack(track)) {
+          collected.push(track);
         }
       }
     }
 
-    const tracks = [...byRecording.values()]
+    const tracks = dedupeCanonicalTracks(collected)
       .sort((a, b) => (b.playCount || 0) - (a.playCount || 0))
       .slice(0, 80);
     if (tracks.length) {
@@ -361,7 +367,7 @@ export async function fetchPlayableDiscoveries(region: MusicRegion, refresh = fa
     }
   } catch { /* Use the last successful playable pool when providers are unavailable. */ }
 
-  return cached?.tracks.filter(isQualityDiscoverTrack) || [];
+  return cached ? dedupeCanonicalTracks(cached.tracks.filter(isQualityDiscoverTrack)) : [];
 }
 
 export async function searchSongs(
@@ -916,6 +922,265 @@ export async function loadCollectionTracks(
     subtitle: 'The provider could not load this collection. Try again later.',
     image: ARTWORK.englishVinyl,
     tracks: [],
+  };
+}
+
+interface RawArtistDetailResponse {
+  ok?: boolean;
+  source?: string;
+  data?: {
+    name?: string;
+    image?: SaavnImage[] | string;
+    subtitle?: string;
+    bio?: string;
+    followerCount?: number;
+    isVerified?: boolean;
+    songs?: SaavnSongRaw[];
+    tracks?: Track[];
+    albums?: Array<{
+      id: string;
+      name: string;
+      artist: string;
+      year?: string;
+      image?: string;
+      trackCount?: number;
+      type?: 'Album' | 'Single' | 'EP';
+      tracks?: Track[];
+    }>;
+    relatedArtists?: Array<{
+      id: string;
+      name: string;
+      subtitle?: string;
+      image?: string;
+    }>;
+  };
+}
+
+function isRemoteArtistId(id?: string): boolean {
+  if (!id) return false;
+  return id.startsWith('saavn-art:') || id.startsWith('dz-art:') || id.startsWith('mb-art:');
+}
+
+function stripRemoteArtistPrefix(id: string): string {
+  return id.startsWith('dz-') || id.startsWith('mb-art:')
+    ? id
+    : id.replace(/^saavn-art:/, '');
+}
+
+async function fetchArtistDetailFromServer(
+  remoteArtistId: string,
+  page = 0,
+  limit = 30
+): Promise<{
+  name?: string;
+  image?: string;
+  subtitle?: string;
+  bio?: string;
+  followerCount?: number;
+  isVerified?: boolean;
+  tracks: Track[];
+  albums: ArtistAlbumSummary[];
+  relatedArtists: RelatedArtistSummary[];
+} | null> {
+  if (!remoteArtistId) return null;
+  try {
+    const detailId = stripRemoteArtistPrefix(remoteArtistId);
+    const res = await fetch(
+      apiUrl(
+        `/api/music/detail?type=artists&id=${encodeURIComponent(detailId)}&limit=${limit}&page=${page}`
+      )
+    );
+    if (!res.ok) return null;
+    const json = (await res.json()) as RawArtistDetailResponse;
+    if (!json.ok || !json.data) return null;
+
+    const rawTracks =
+      json.source === 'deezer' || json.source === 'musicbrainz'
+        ? (json.data.tracks || []).map(normalizeRemoteTrack)
+        : (json.data.songs || [])
+            .map(mapSaavnSong)
+            .filter((t) => !isRemixOrKnockoff(t.name, '', t.artist, ''));
+
+    const rawImage = Array.isArray(json.data.image)
+      ? pickSaavnImage(json.data.image, '')
+      : typeof json.data.image === 'string' && json.data.image
+        ? toProxiedImageUrl(json.data.image)
+        : '';
+
+    const albums: ArtistAlbumSummary[] = (json.data.albums || []).map((alb) => ({
+      id: alb.id,
+      name: decodeHtmlEntities(alb.name || 'Release'),
+      artist: decodeHtmlEntities(alb.artist || json.data?.name || 'Artist'),
+      year: alb.year,
+      image: alb.image ? toProxiedImageUrl(alb.image) : '',
+      trackCount: alb.trackCount || 0,
+      type: alb.type || 'Album',
+      tracks: (alb.tracks || []).map(normalizeRemoteTrack),
+    }));
+
+    const relatedArtists: RelatedArtistSummary[] = (json.data.relatedArtists || []).map((rel) => ({
+      id: rel.id,
+      name: decodeHtmlEntities(rel.name || 'Artist'),
+      subtitle: rel.subtitle || 'Artist',
+      image: rel.image ? toProxiedImageUrl(rel.image) : ARTWORK.popArtist,
+    }));
+
+    return {
+      name: json.data.name ? decodeHtmlEntities(json.data.name) : undefined,
+      image: rawImage || undefined,
+      subtitle: json.data.subtitle ? decodeHtmlEntities(json.data.subtitle) : undefined,
+      bio: json.data.bio ? decodeHtmlEntities(json.data.bio) : undefined,
+      followerCount: json.data.followerCount,
+      isVerified: json.data.isVerified,
+      tracks: rawTracks,
+      albums,
+      relatedArtists,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export async function loadArtistPageData(
+  target: ArtistTarget,
+  options: {
+    region?: MusicRegion;
+    localHistoryTracks?: Track[];
+  } = {}
+): Promise<ArtistPageData & { resolvedRemoteId?: string }> {
+  const { region = 'IN', localHistoryTracks = [] } = options;
+  const targetNameKey = normalizeArtistNameKey(target.name);
+  const seedArtist = SEED_ARTISTS.find(
+    (a) =>
+      a.id === target.id ||
+      (targetNameKey && normalizeArtistNameKey(a.name) === targetNameKey)
+  );
+  const resolvedName = (seedArtist?.name || target.name || 'Artist').trim();
+
+  // Resolve a remote provider artist ID if the caller passed a local seed ID or bare artist name
+  let remoteArtistId = isRemoteArtistId(target.id) ? target.id : '';
+  if (!remoteArtistId && resolvedName) {
+    try {
+      const searchRes = await fetch(
+        apiUrl(`/api/music/search?type=artists&query=${encodeURIComponent(resolvedName)}&limit=8`)
+      );
+      if (searchRes.ok) {
+        const json = (await searchRes.json()) as {
+          ok?: boolean;
+          data?: {
+            results?: Array<{ id: string; name?: string }>;
+            deezerItems?: Array<{ id?: number; name?: string }>;
+          };
+        };
+        const targetKey = normalizeArtistNameKey(resolvedName);
+        const saavnList = json.data?.results || [];
+        const dzList = json.data?.deezerItems || [];
+        const exactSaavn = saavnList.find(
+          (a) => normalizeArtistNameKey(decodeHtmlEntities(a.name || '')) === targetKey
+        );
+        const exactDz = dzList.find(
+          (a) => normalizeArtistNameKey(decodeHtmlEntities(a.name || '')) === targetKey
+        );
+        if (exactSaavn?.id) remoteArtistId = `saavn-art:${exactSaavn.id}`;
+        else if (exactDz?.id) remoteArtistId = `dz-art:${exactDz.id}`;
+        else if (saavnList[0]?.id) remoteArtistId = `saavn-art:${saavnList[0].id}`;
+        else if (dzList[0]?.id) remoteArtistId = `dz-art:${dzList[0].id}`;
+      }
+    } catch {
+      // Proceed cleanly with song & album searches + local seed catalog
+    }
+  }
+
+  const [detailSettled, songsSettled, albumsSettled] = await Promise.allSettled([
+    remoteArtistId ? fetchArtistDetailFromServer(remoteArtistId, 0, 35) : Promise.resolve(null),
+    searchSongs(resolvedName, { region, prioritizeLyrics: false, page: 0 }),
+    searchAlbums(resolvedName),
+  ]);
+
+  const detail = detailSettled.status === 'fulfilled' ? detailSettled.value : null;
+  const searchedSongs = songsSettled.status === 'fulfilled' ? songsSettled.value.tracks : [];
+  const searchedAlbumsRaw = albumsSettled.status === 'fulfilled' ? albumsSettled.value.albums : [];
+
+  const matchedSearchedAlbums: ArtistAlbumSummary[] = searchedAlbumsRaw
+    .filter((alb) => !alb.isLocal)
+    .filter((alb) => {
+      const subKey = normalizeArtistNameKey(alb.subtitle);
+      return !subKey || subKey.includes(targetNameKey) || targetNameKey.includes(subKey);
+    })
+    .map((alb) => ({
+      id: alb.id,
+      name: alb.name,
+      artist: resolvedName,
+      year: alb.subtitle.match(/\b(19\d{2}|20\d{2})\b/)?.[1],
+      image: alb.image,
+      trackCount: 0,
+      type: 'Album' as const,
+      tracks: [],
+    }));
+
+  const pageData = buildArtistPageData({
+    target: {
+      ...target,
+      id: seedArtist?.id || target.id || remoteArtistId || resolvedName,
+      name: resolvedName,
+    },
+    seedArtist,
+    seedTracks: SEED_TRACKS,
+    seedAlbums: SEED_ALBUMS,
+    seedArtists: SEED_ARTISTS,
+    detailName: detail?.name,
+    detailImage: detail?.image,
+    detailSubtitle: detail?.subtitle,
+    detailBio: detail?.bio,
+    detailFollowerCount: detail?.followerCount,
+    detailVerified: detail?.isVerified,
+    detailSongs: detail?.tracks || [],
+    searchedSongs,
+    remoteAlbums: [...(detail?.albums || []), ...matchedSearchedAlbums],
+    remoteRelatedArtists: detail?.relatedArtists || [],
+    localHistoryTracks,
+  });
+
+  return {
+    ...pageData,
+    resolvedRemoteId: remoteArtistId || undefined,
+  };
+}
+
+export async function loadArtistMoreSongs(
+  artistName: string,
+  remoteArtistId: string | undefined,
+  page: number,
+  region: MusicRegion = 'IN'
+): Promise<{ tracks: Track[]; hasMore: boolean }> {
+  const safePage = Math.max(1, Math.floor(page));
+  const [detailSettled, searchSettled] = await Promise.allSettled([
+    remoteArtistId && isRemoteArtistId(remoteArtistId)
+      ? fetchArtistDetailFromServer(remoteArtistId, safePage, 25)
+      : Promise.resolve(null),
+    searchSongs(artistName, { region, prioritizeLyrics: false, page: safePage }),
+  ]);
+
+  const detailTracks =
+    detailSettled.status === 'fulfilled' && detailSettled.value
+      ? detailSettled.value.tracks
+      : [];
+  const searchTracks =
+    searchSettled.status === 'fulfilled'
+      ? searchSettled.value.tracks.filter((t) => doesTrackBelongToArtist(t, artistName))
+      : [];
+
+  const seenIds = new Set<string>();
+  const combined: Track[] = [];
+  for (const t of [...detailTracks, ...searchTracks]) {
+    if (!t?.id || seenIds.has(t.id)) continue;
+    seenIds.add(t.id);
+    combined.push(t);
+  }
+
+  return {
+    tracks: combined,
+    hasMore: detailTracks.length >= 10 || searchTracks.length >= 8,
   };
 }
 

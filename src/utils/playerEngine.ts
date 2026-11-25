@@ -1115,10 +1115,19 @@ export function trackMatchesDiscoverMood(track: Track, mood: DiscoverMood): bool
 
 /** Strict Discover eligibility: complete playable songs with credible metadata. */
 export function isQualityDiscoverTrack(track: Track): boolean {
+  const artistClean = String(track?.artist || '').trim();
+  const titleClean = String(track?.name || '').trim();
+  const hasSpamSymbols = /[\u{1F300}-\u{1FAFF}\u2600-\u27BF]/u.test(artistClean);
+  const hasRipFilenameNoise =
+    /^_+/.test(titleClean) ||
+    /\b(full\s+video\s+song|mp3[_\s-]*\d+k|lyrical\s+video|whatsapp\s+status|ringtone)\b/i.test(titleClean) ||
+    /\(\s*lyrics?\s*\)|\[\s*lyrics?\s*\]/i.test(titleClean);
   return Boolean(
     track?.id &&
-    track.name &&
-    track.artist &&
+    titleClean &&
+    artistClean &&
+    !hasSpamSymbols &&
+    !hasRipFilenameNoise &&
     !track.metadataOnly &&
     track.sourceAvailability !== 'metadata' &&
     track.sourceAvailability !== 'preview' &&
@@ -1202,13 +1211,47 @@ export function rankDiscoverTracks(
     return value;
   };
 
-  const unique = new Map<string, Track>();
+  const stripTitleForDedupe = (name: string): string =>
+    normalize(name)
+      .replace(/\([^)]*\)|\[[^\]]*\]/g, ' ')
+      .replace(/\s+[-–—]\s*(?:from\b.*|original\s+motion\s+picture.*|soundtrack.*)$/i, ' ')
+      .replace(/[^\p{L}\p{N}]+/gu, ' ')
+      .trim();
+  const variantTagForDedupe = (name: string): string => {
+    const match = name.toLowerCase().match(/\b(unplugged|acoustic|lofi|lo-fi|reprise|live|instrumental|slowed|reverb|remix|mashup|cover|sped\s*up)\b/);
+    return match ? match[1].replace(/\s+/g, '') : '';
+  };
+  const allCreditsOf = (artist: string): string[] =>
+    artist
+      .split(/\s*(?:,|&|\bfeat\.?\b|\bft\.?\b|\bwith\b|\bx\b|·)\s*/i)
+      .map((part) => normalize(part))
+      .filter(Boolean);
+
+  const unique: Track[] = [];
+  const seenIds = new Set<string>();
+  const byTitleVariant = new Map<string, Track[]>();
   for (const track of tracks) {
     if (!track || !track.id || !track.name || !track.artist) continue;
-    const key = `${normalize(track.name)}::${artistKey(track)}`;
-    if (!unique.has(key)) unique.set(key, track);
+    if (seenIds.has(track.id)) continue;
+    const baseTitle = stripTitleForDedupe(track.name) || normalize(track.name);
+    const titleVariant = `${baseTitle}::${variantTagForDedupe(track.name)}`;
+    const credits = new Set(allCreditsOf(track.artist));
+    const bucket = byTitleVariant.get(titleVariant) || [];
+    const isDuplicate = bucket.some((existing) => {
+      const sharesCredit = allCreditsOf(existing.artist).some((c) => credits.has(c));
+      const sameDuration =
+        track.duration > 0 &&
+        existing.duration > 0 &&
+        Math.abs(track.duration - existing.duration) <= 5;
+      return sharesCredit || sameDuration;
+    });
+    if (isDuplicate) continue;
+    seenIds.add(track.id);
+    bucket.push(track);
+    byTitleVariant.set(titleVariant, bucket);
+    unique.push(track);
   }
-  let pool = [...unique.values()];
+  let pool = unique;
   const freshPool = pool.filter((track) => !recentIds.has(track.id));
   if (freshPool.length) pool = freshPool;
   if (!pool.length) return [];

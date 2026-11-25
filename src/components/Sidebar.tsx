@@ -1,21 +1,24 @@
 import { Compass, Download, Heart, Library, Plus, X } from 'lucide-react';
 import { useState } from 'react';
 import { ARTWORK, SEED_ARTISTS, SEED_PLAYLISTS } from '../data/catalog';
-import type { ArtistProfile, CuratedPlaylist, Track, ViewName } from '../types/music';
+import type { ArtistTarget, CuratedPlaylist, FollowedArtist, Track, ViewName } from '../types/music';
+import { normalizeArtistNameKey } from '../utils/artistProfile';
 import { CoverImage } from './CoverImage';
 
 interface SidebarProps {
   activeView: ViewName;
   activeCollectionId?: string;
+  activeArtistId?: string;
   onSelectView: (view: ViewName) => void;
   onOpenPlaylist: (pl: CuratedPlaylist) => void;
   onOpenLiked: () => void;
-  onOpenArtist: (artist: ArtistProfile) => void;
+  onOpenArtist: (artist: ArtistTarget) => void;
   onOpenCreatePlaylist: () => void;
   onOpenSpotifyImport: () => void;
   onOpenVideos: () => void;
   likedTracks: Track[];
   userPlaylists: CuratedPlaylist[];
+  followedArtists?: FollowedArtist[];
   mobileOpen: boolean;
   onCloseMobile: () => void;
 }
@@ -23,6 +26,7 @@ interface SidebarProps {
 export function Sidebar({
   activeView,
   activeCollectionId,
+  activeArtistId,
   onSelectView,
   onOpenPlaylist,
   onOpenLiked,
@@ -32,12 +36,48 @@ export function Sidebar({
   onOpenVideos,
   likedTracks,
   userPlaylists,
+  followedArtists = [],
   mobileOpen,
   onCloseMobile,
 }: SidebarProps) {
   const [libFilter, setLibFilter] = useState<'all' | 'playlists' | 'artists'>('all');
 
   const allPlaylists = [...userPlaylists, ...SEED_PLAYLISTS];
+  const combinedArtists = (() => {
+    const seen = new Set<string>();
+    const list: Array<{
+      id: string;
+      name: string;
+      image: string;
+      genre?: string;
+      language?: string;
+      monthlyListeners?: string;
+      bio?: string;
+      isFollowed: boolean;
+    }> = [];
+    for (const fol of [...followedArtists].sort((a, b) => (b.followedAtMs || 0) - (a.followedAtMs || 0))) {
+      const key = normalizeArtistNameKey(fol.name);
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      list.push({ ...fol, isFollowed: true });
+    }
+    for (const seed of SEED_ARTISTS) {
+      const key = normalizeArtistNameKey(seed.name);
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      list.push({
+        id: seed.id,
+        name: seed.name,
+        image: seed.image,
+        genre: seed.genre,
+        language: seed.language,
+        monthlyListeners: seed.monthlyListeners,
+        bio: seed.bio,
+        isFollowed: false,
+      });
+    }
+    return list;
+  })();
 
   return (
     <>
@@ -182,14 +222,24 @@ export function Sidebar({
             })}
 
           {libFilter !== 'playlists' &&
-            SEED_ARTISTS.map((art) => {
-              const isActive = activeCollectionId === art.id;
+            combinedArtists.map((art) => {
+              const isActive =
+                activeCollectionId === art.id ||
+                (Boolean(activeArtistId) && activeArtistId === art.id);
               return (
                 <button
-                  key={art.id}
+                  key={`${art.isFollowed ? 'fol' : 'seed'}-${art.id}`}
                   type="button"
                   onClick={() => {
-                    onOpenArtist(art);
+                    onOpenArtist({
+                      id: art.id,
+                      name: art.name,
+                      image: art.image,
+                      genre: art.genre,
+                      language: art.language,
+                      monthlyListeners: art.monthlyListeners,
+                      bio: art.bio,
+                    });
                     onCloseMobile();
                   }}
                   className={`flex w-full items-center gap-3 rounded-md p-2 text-left transition-colors ${
@@ -210,7 +260,8 @@ export function Sidebar({
                       {art.name}
                     </div>
                     <div className="truncate text-xs text-zinc-400">
-                      Artist · {art.language}
+                      {art.isFollowed ? 'Following' : 'Artist'}
+                      {art.language ? ` · ${art.language}` : ''}
                     </div>
                   </div>
                 </button>

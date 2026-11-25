@@ -1,6 +1,7 @@
 import { ArrowDown, Clock, Heart, ListPlus, Loader2, Play, Plus, Search, Shuffle, Video } from 'lucide-react';
 import { useState } from 'react';
 import type { CollectionTarget, Track } from '../types/music';
+import { extractPrimaryArtistName } from '../utils/artistProfile';
 import { isCollectionFullyDownloaded } from '../utils/offlineStore';
 import { formatTime, sortTracks } from '../utils/playerEngine';
 import { CoverImage } from './CoverImage';
@@ -21,6 +22,7 @@ interface CollectionViewProps {
   onEnqueue: (track: Track) => void;
   onAddToPlaylist: (track: Track) => void;
   onOpenVideo: (track: Track) => void;
+  onOpenArtistName?: (artistName: string) => void;
   suggestionCandidates: Track[];
 }
 
@@ -38,6 +40,7 @@ export function CollectionView({
   onEnqueue,
   onAddToPlaylist,
   onOpenVideo,
+  onOpenArtistName,
   suggestionCandidates,
 }: CollectionViewProps) {
   const [filterText, setFilterText] = useState('');
@@ -251,28 +254,44 @@ export function CollectionView({
                     )}
                   </button>
 
-                  <button
-                    type="button"
-                    onClick={() => { if (!collection.spotifyEmbedUrl) onPlayList(sorted, idx); }}
-                    disabled={Boolean(collection.spotifyEmbedUrl)}
-                    className="flex w-full min-w-0 items-center gap-3 text-left"
-                  >
-                    <CoverImage
-                      src={track.image}
-                      alt={track.name}
-                      className="h-10 w-10 shrink-0 rounded object-cover"
-                    />
-                    <div className="min-w-0 flex-1">
-                      <div
-                        className={`truncate text-sm font-semibold ${
+                  <div className="flex w-full min-w-0 items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => { if (!collection.spotifyEmbedUrl) onPlayList(sorted, idx); }}
+                      disabled={Boolean(collection.spotifyEmbedUrl)}
+                      aria-label={`Play ${track.name}`}
+                      className="h-10 w-10 shrink-0 overflow-hidden rounded bg-black"
+                    >
+                      <CoverImage
+                        src={track.image}
+                        alt={track.name}
+                        className="h-full w-full object-cover"
+                      />
+                    </button>
+                    <div className="min-w-0 flex-1 text-left">
+                      <button
+                        type="button"
+                        onClick={() => { if (!collection.spotifyEmbedUrl) onPlayList(sorted, idx); }}
+                        disabled={Boolean(collection.spotifyEmbedUrl)}
+                        className={`block max-w-full truncate text-left text-sm font-semibold ${
                           isCurrent ? 'text-[#1DB954]' : 'text-white'
                         }`}
                       >
                         {track.name}
-                      </div>
-                      <div className="truncate text-xs text-zinc-400">{track.artist}</div>
+                      </button>
+                      {onOpenArtistName ? (
+                        <button
+                          type="button"
+                          onClick={() => onOpenArtistName(extractPrimaryArtistName(track.artist))}
+                          className="block max-w-full truncate text-left text-xs text-zinc-400 hover:text-white hover:underline"
+                        >
+                          {track.artist}
+                        </button>
+                      ) : (
+                        <div className="truncate text-xs text-zinc-400">{track.artist}</div>
+                      )}
                     </div>
-                  </button>
+                  </div>
 
                   <div className="hidden truncate text-xs text-zinc-400 md:block">
                     {track.albumName}

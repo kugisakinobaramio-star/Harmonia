@@ -1,12 +1,13 @@
 import { Play, Sparkles } from 'lucide-react';
-import { memo, useMemo } from 'react';
+import { memo, useMemo, useState } from 'react';
 import { SEED_PLAYLISTS } from '../data/catalog';
 import type {
   MusicLanguage,
   MusicRegion,
   Track,
 } from '../types/music';
-import { getGreetingForHour, REGION_LABELS } from '../utils/playerEngine';
+import { dedupeCanonicalTracks, extractPrimaryArtistName } from '../utils/artistProfile';
+import { getGreetingForHour, normalizeDiscoverLanguage, REGION_LABELS } from '../utils/playerEngine';
 import { CoverImage } from './CoverImage';
 import { DownloadButton } from './DownloadButton';
 
@@ -31,6 +32,7 @@ interface HomeViewProps {
   onOpenLiked: () => void;
   onOpenRecent: () => void;
   onOpenPersonalise: () => void;
+  onOpenArtistName?: (artistName: string) => void;
 }
 
 export const HomeView = memo(function HomeView({
@@ -54,7 +56,9 @@ export const HomeView = memo(function HomeView({
   onOpenLiked,
   onOpenRecent,
   onOpenPersonalise,
+  onOpenArtistName,
 }: HomeViewProps) {
+  const [sessionSeed] = useState(() => Math.floor(Math.random() * 10000) + 1);
   const baseGreeting = getGreetingForHour(new Date().getHours());
   const cleanName = displayName.trim();
   const greeting =
@@ -62,22 +66,36 @@ export const HomeView = memo(function HomeView({
       ? `${baseGreeting}, ${cleanName}`
       : baseGreeting;
 
-  const filterByLang = (tracks: Track[]) =>
-    languageFilter === 'All'
-      ? tracks
-      : tracks.filter((t) => t.language === languageFilter);
+  const filterByLang = (tracks: Track[]) => {
+    if (languageFilter === 'All') return tracks;
+    const targetLang = normalizeDiscoverLanguage(languageFilter) || languageFilter;
+    return tracks.filter(
+      (t) => (normalizeDiscoverLanguage(t.language) || t.language) === targetLang
+    );
+  };
 
   const visibleRecommended = filterByLang(recommendedTracks);
   const visibleRegional = filterByLang(regionalTracks);
   const randomDiscoverTracks = useMemo(() => {
-    const recentIds = new Set([...recommendedTracks, ...recentlyPlayed].map((track) => track.id));
-    const pool = regionalTracks.filter((track) => !recentIds.has(track.id));
-    for (let i = pool.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [pool[i], pool[j]] = [pool[j], pool[i]];
-    }
-    return pool.slice(0, 5);
-  }, [regionalTracks, recommendedTracks, recentlyPlayed]);
+    const excludeIds = new Set([
+      ...visibleRecommended.slice(0, 5).map((t) => t.id),
+      ...recentlyPlayed.slice(0, 5).map((t) => t.id),
+    ]);
+    const pool = dedupeCanonicalTracks(visibleRegional).filter(
+      (track) => !excludeIds.has(track.id)
+    );
+    const hashScore = (id: string) => {
+      let h = 2166136261 ^ sessionSeed;
+      for (let i = 0; i < id.length; i += 1) {
+        h ^= id.charCodeAt(i);
+        h = Math.imul(h, 16777619);
+      }
+      return h >>> 0;
+    };
+    return [...pool]
+      .sort((a, b) => hashScore(a.id) - hashScore(b.id))
+      .slice(0, 5);
+  }, [visibleRegional, visibleRecommended, recentlyPlayed, sessionSeed]);
 
   const smartTrackPool = useMemo(() => {
     const seen = new Set<string>();
@@ -112,13 +130,21 @@ export const HomeView = memo(function HomeView({
 
 
 
+  const usedQuickPickImages = new Set<string>([
+    SEED_PLAYLISTS[4].image,
+    ...(recentlyPlayed[0]?.image ? [recentlyPlayed[0].image] : []),
+    ...(recommendedTracks[0]?.image ? [recommendedTracks[0].image] : []),
+  ]);
+  const distinctDiscoverQuickPick =
+    regionalTracks.find((t) => t.image && !usedQuickPickImages.has(t.image)) || regionalTracks[0];
+
   const quickPicks = [
     {
       id: 'qp-liked',
       title: `Liked Songs (${likedCount})`,
-      image: SEED_PLAYLISTS[4].image,
+      image: likedTracks[0]?.image || SEED_PLAYLISTS[4].image,
       onOpen: onOpenLiked,
-      onPlay: onOpenLiked,
+      onPlay: likedTracks.length ? () => onPlayTrackList(likedTracks, 0) : null,
     },
     ...(recentlyPlayed.length
       ? [{
@@ -138,11 +164,11 @@ export const HomeView = memo(function HomeView({
           onPlay: () => onPlayTrackList(recommendedTracks, 0),
         }]
       : []),
-    ...(regionalTracks.length
+    ...(distinctDiscoverQuickPick
       ? [{
           id: 'qp-discover',
           title: 'Discover Something New',
-          image: regionalTracks[0].image,
+          image: distinctDiscoverQuickPick.image,
           onOpen: () => onPlayTrackList(regionalTracks, 0),
           onPlay: () => onPlayTrackList(regionalTracks, 0),
         }]
@@ -150,24 +176,19 @@ export const HomeView = memo(function HomeView({
   ].slice(0, 6);
 
   const renderTrackShelf = (title: string, subtitle: string, tracks: Track[]) => {
-    const seenShelfIds = new Set<string>();
-    const uniqueTracks = tracks.filter((track) => {
-      if (!track?.id || seenShelfIds.has(track.id)) return false;
-      seenShelfIds.add(track.id);
-      return true;
-    });
+    const uniqueTracks = dedupeCanonicalTracks(tracks);
     if (!uniqueTracks.length) return null;
     return (
       <section className="space-y-3">
         <div className="flex items-baseline justify-between gap-2">
-          <div>
+          <div className="min-w-0">
             <h2 className="text-xl font-bold tracking-tight text-white">{title}</h2>
             {subtitle && <p className="text-xs text-zinc-400">{subtitle}</p>}
           </div>
           <button
             type="button"
             onClick={() => onPlayTrackList(uniqueTracks, 0)}
-            className="text-xs font-bold text-zinc-400 hover:text-white"
+            className="shrink-0 whitespace-nowrap text-xs font-bold text-zinc-400 hover:text-white"
           >
             Play all
           </button>
@@ -178,6 +199,7 @@ export const HomeView = memo(function HomeView({
             const isDownloaded = downloadedIds.has(track.id);
             const isDownloading = downloadingIds.has(track.id);
             const isOnlineOnly = track.offlineAvailable === false || track.sourceProvider === 'Jamendo';
+            const primaryArtist = extractPrimaryArtistName(track.artist);
             return (
               <div
                 key={`${title}-${track.id}`}
@@ -196,17 +218,28 @@ export const HomeView = memo(function HomeView({
                     />
                     <span
                       aria-hidden="true"
-                      className="absolute bottom-2 right-2 grid h-10 w-10 translate-y-2 place-items-center rounded-full bg-[#1DB954] text-black opacity-0 shadow-xl transition-all duration-150 group-hover:translate-y-0 group-hover:opacity-100"
+                      className="absolute bottom-2 right-2 grid h-9 w-9 place-items-center rounded-full bg-[#1DB954] text-black opacity-90 shadow-xl transition-all duration-150 sm:h-10 sm:w-10 sm:translate-y-2 sm:opacity-0 sm:group-hover:translate-y-0 sm:group-hover:opacity-100"
                     >
                       <Play className="h-4 w-4 fill-current pl-0.5" />
                     </span>
                   </div>
                   <div className="mt-3 truncate text-sm font-bold text-white">{track.name}</div>
+                </button>
+                {onOpenArtistName ? (
+                  <button
+                    type="button"
+                    onClick={() => onOpenArtistName(primaryArtist)}
+                    className="mt-0.5 block max-w-full truncate text-left text-xs text-zinc-400 hover:text-white hover:underline"
+                  >
+                    {track.artist}
+                    {track.language ? ` · ${track.language}` : ''}
+                  </button>
+                ) : (
                   <div className="mt-0.5 truncate text-xs text-zinc-400">
                     {track.artist}
                     {track.language ? ` · ${track.language}` : ''}
                   </div>
-                </button>
+                )}
                 <DownloadButton
                   trackName={track.name}
                   downloaded={isDownloaded}
@@ -290,14 +323,16 @@ export const HomeView = memo(function HomeView({
                 </span>
               </button>
 
-              <button
-                type="button"
-                onClick={item.onPlay}
-                aria-label={`Play ${item.title}`}
-                className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[#1DB954] text-black opacity-0 shadow-lg transition-all hover:scale-105 group-hover:opacity-100 focus:opacity-100"
-              >
-                <Play className="h-4 w-4 fill-current pl-0.5" />
-              </button>
+              {item.onPlay && (
+                <button
+                  type="button"
+                  onClick={item.onPlay}
+                  aria-label={`Play ${item.title}`}
+                  className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[#1DB954] text-black opacity-0 shadow-lg transition-all hover:scale-105 group-hover:opacity-100 focus:opacity-100"
+                >
+                  <Play className="h-4 w-4 fill-current pl-0.5" />
+                </button>
+              )}
             </div>
           ))}
         </div>
