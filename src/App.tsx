@@ -2339,6 +2339,7 @@ export default function App() {
                 }}
                 likedTracks={Object.values(recommendationLikedMap)}
                 playCounts={playCounts}
+                listeningFeedback={listeningFeedback}
                 artistAffinity={artistAffinity}
                 genreAffinity={genreAffinity}
                 preferredLanguages={preferredLanguages}
