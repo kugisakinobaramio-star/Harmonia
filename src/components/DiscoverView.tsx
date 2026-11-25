@@ -46,6 +46,7 @@ export function DiscoverView({
   onRefresh,
   likedTracks,
   playCounts,
+  listeningFeedback,
   artistAffinity,
   genreAffinity,
   preferredLanguages,
