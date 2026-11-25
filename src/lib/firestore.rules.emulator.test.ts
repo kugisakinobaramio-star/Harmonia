@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import test, { after, before } from 'node:test';
+import test, { after, before, beforeEach } from 'node:test';
 import {
   assertFails,
   assertSucceeds,
@@ -81,6 +81,10 @@ before(async () => {
       rules: fs.readFileSync('firestore.rules', 'utf8'),
     },
   });
+});
+
+beforeEach(async () => {
+  await env.clearFirestore();
 });
 
 after(async () => {
