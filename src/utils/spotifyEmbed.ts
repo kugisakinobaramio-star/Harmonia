@@ -42,7 +42,11 @@ export function mapSpotifyEmbedTrackList(
         : 195,
       image: cover,
       language: inferLanguage(`${name} ${artist} ${albumTitle}`),
-      region: 'GLOBAL',
+      region: albumTitle.toLowerCase().includes('india') || albumTitle.toLowerCase().includes('hindi')
+        ? 'IN'
+        : albumTitle.toLowerCase().includes('japan')
+          ? 'JP'
+          : 'GLOBAL',
       genre: 'Spotify Streaming',
       sourceProvider: 'Spotify',
       sourceAvailability: entry.audioPreview?.url ? 'preview' : 'lookup',
