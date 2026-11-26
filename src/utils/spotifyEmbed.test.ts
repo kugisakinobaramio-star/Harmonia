@@ -41,10 +41,12 @@ test('Spotify import retains unavailable and unplayable entries as metadata', ()
   const entries: SpotifyEmbedTrackEntry[] = [
     { uri: 'spotify:track:unavailable', title: 'Unavailable', subtitle: 'Artist', isPlayable: false },
     { title: 'No URI entry', subtitle: 'Artist' },
+    { uri: 'spotify:local:artist:album:title:180000', title: 'Local File', subtitle: 'Artist' },
   ];
 
   const tracks = mapSpotifyEmbedTrackList(entries, 'playlist-partial', 'Mix', '', inferLanguage);
   assert.equal(tracks.length, 2);
   assert.equal(tracks[0].sourceAvailability, 'lookup');
   assert.equal(tracks[1].id, 'sp-playlist-partial-entry-1');
+  assert.equal(tracks[2].id, 'sp-playlist-partial-entry-2');
 });
