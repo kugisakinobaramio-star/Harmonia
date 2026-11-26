@@ -875,57 +875,6 @@ export function scoreTrackForUser(track: Track, profile: UserTasteProfile): numb
   return score;
 }
 
-export function deriveDynamicTasteHighlights(profile: UserTasteProfile): {
-  topArtists: string[];
-  topLanguage: MusicLanguage | null;
-  topGenre: string | null;
-  repeatFocusedArtist: string | null;
-  reason: string;
-} {
-  const artistEntries = Object.entries(profile.artistAffinity)
-    .filter(([, weight]) => weight > 0)
-    .sort((a, b) => b[1] - a[1]);
-
-  const topArtists = Array.from(
-    new Set([
-      ...artistEntries.map(([name]) => name),
-      ...(profile.favoriteArtists || []),
-    ])
-  ).slice(0, 5);
-
-  const topArtistEntry = artistEntries[0];
-  const repeatFocusedArtist =
-    topArtistEntry && topArtistEntry[1] >= 2 ? topArtistEntry[0] : null;
-
-  const langEntries = Object.entries(profile.languageAffinity)
-    .filter(([k, w]) => w > 0 && k !== 'Other')
-    .sort((a, b) => b[1] - a[1]);
-  const topLanguage =
-    (langEntries[0]?.[0] as MusicLanguage | undefined) ||
-    profile.preferredLanguages[0] ||
-    null;
-
-  const genreEntries = Object.entries(profile.genreAffinity)
-    .filter(([, w]) => w > 0)
-    .sort((a, b) => b[1] - a[1]);
-  const topGenre = genreEntries[0]?.[0] || null;
-
-  let reason = `Tailored for ${REGION_LABELS[profile.region]}`;
-  if (repeatFocusedArtist && topLanguage) {
-    reason = `Because you keep listening to ${repeatFocusedArtist} · ${topLanguage} · ${REGION_LABELS[profile.region]}`;
-  } else if (topArtists.length && topLanguage) {
-    reason = `Based on ${topArtists[0]} · ${topLanguage} · ${REGION_LABELS[profile.region]}`;
-  }
-
-  return {
-    topArtists,
-    topLanguage,
-    topGenre,
-    repeatFocusedArtist,
-    reason,
-  };
-}
-
 export function isSpotifyLinkOrUri(input: string): boolean {
   const trimmed = String(input || '').trim();
   return (
