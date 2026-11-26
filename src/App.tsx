@@ -72,7 +72,6 @@ import {
   addTrackToPlaylist,
   cycleQuality,
   createShuffleBag,
-  deriveDynamicTasteHighlights,
   hasFullAudioStream,
   hasFullPlaybackSource,
   isSpotifyLinkOrUri,
