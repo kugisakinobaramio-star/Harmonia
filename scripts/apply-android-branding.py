@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Apply MusicKK launcher and native Android splash branding to generated Capacitor resources."""
 from pathlib import Path
+import json
 import sys
 import xml.etree.ElementTree as ET
 
@@ -109,46 +110,72 @@ set_style_item(launch_theme, "windowSplashScreenAnimatedIcon", "@drawable/musick
 set_style_item(launch_theme, "postSplashScreenTheme", "@style/AppTheme.NoActionBar")
 styles_tree.write(styles, encoding="utf-8", xml_declaration=True)
 
-manifest = Path("android/app/src/main/AndroidManifest.xml")
-if manifest.is_file():
-    ANDROID_NS = "http://schemas.android.com/apk/res/android"
-    ET.register_namespace("android", ANDROID_NS)
-    manifest_tree = ET.parse(manifest)
-    manifest_root = manifest_tree.getroot()
-    app_node = manifest_root.find("./application")
-    if app_node is not None:
-        main_activity = None
-        for act in app_node.findall("./activity"):
-            name_attr = act.get(f"{{{ANDROID_NS}}}name", "")
-            if "MainActivity" in name_attr:
-                main_activity = act
-                break
-        if main_activity is None:
-            main_activity = app_node.find("./activity")
-        if main_activity is not None:
-            has_oauth_filter = False
-            for filt in main_activity.findall("./intent-filter"):
-                for data_node in filt.findall("./data"):
-                    if (
-                        data_node.get(f"{{{ANDROID_NS}}}scheme") == "com.harmonia.music"
-                        and data_node.get(f"{{{ANDROID_NS}}}host") == "auth"
-                    ):
-                        has_oauth_filter = True
-                        break
-            if not has_oauth_filter:
-                filt = ET.SubElement(main_activity, "intent-filter")
-                ET.SubElement(filt, "action", {f"{{{ANDROID_NS}}}name": "android.intent.action.VIEW"})
-                ET.SubElement(filt, "category", {f"{{{ANDROID_NS}}}name": "android.intent.category.DEFAULT"})
-                ET.SubElement(filt, "category", {f"{{{ANDROID_NS}}}name": "android.intent.category.BROWSABLE"})
-                ET.SubElement(
-                    filt,
-                    "data",
-                    {
-                        f"{{{ANDROID_NS}}}scheme": "com.harmonia.music",
-                        f"{{{ANDROID_NS}}}host": "auth",
-                    },
-                )
-                manifest_tree.write(manifest, encoding="utf-8", xml_declaration=True)
+# Enable the Google Credential Manager implementation in the native plugin.
+# The Firebase Android app's google-services.json is supplied from CI configuration
+# or added locally after registering package com.harmonia.music in Firebase Console.
+variables = Path("android/variables.gradle")
+if not variables.is_file():
+    sys.exit("Generated Android variables.gradle is missing")
+gradle_vars = variables.read_text(encoding="utf-8")
+required_vars = {
+    "rgcfaIncludeGoogle": "true",
+    "androidxCredentialsVersion": "'1.3.0'",
+    "androidxCredentialsPlayServicesAuthVersion": "'1.3.0'",
+}
+for key, value in required_vars.items():
+    if key not in gradle_vars:
+        gradle_vars = gradle_vars.replace("ext {", f"ext {{\n    {key} = {value}", 1)
+variables.write_text(gradle_vars, encoding="utf-8")
 
-print("Applied MusicKK launcher icons, native splash branding, and OAuth callback intent-filter.")
+google_services = Path("android/app/google-services.json")
+if google_services.is_file():
+    try:
+        google_data = json.loads(google_services.read_text(encoding="utf-8"))
+        expected_project = json.loads(Path("firebase-applet-config.json").read_text(encoding="utf-8")).get("projectId")
+    except (OSError, json.JSONDecodeError) as exc:
+        sys.exit(f"Firebase Android configuration is not valid JSON: {exc}")
 
+    if google_data.get("project_info", {}).get("project_id") != expected_project:
+        sys.exit("google-services.json belongs to a different Firebase project than firebase-applet-config.json")
+
+    android_clients = [
+        client for client in google_data.get("client", [])
+        if client.get("client_info", {}).get("android_client_info", {}).get("package_name") == "com.harmonia.music"
+    ]
+    if not android_clients:
+        sys.exit("google-services.json does not contain the Android package com.harmonia.music")
+    web_client_ids = [
+        oauth.get("client_id")
+        for client in android_clients
+        for oauth in client.get("oauth_client", [])
+        if oauth.get("client_type") == 3 and oauth.get("client_id")
+    ]
+    if not web_client_ids:
+        sys.exit("google-services.json is missing the Web OAuth client ID required by Credential Manager")
+
+    root_gradle = Path("android/build.gradle")
+    if not root_gradle.is_file():
+        sys.exit("Generated Android root build.gradle is missing")
+    root_text = root_gradle.read_text(encoding="utf-8")
+    plugin_classpath = "classpath 'com.google.gms:google-services:4.4.4'"
+    if plugin_classpath not in root_text:
+        if "dependencies {" not in root_text:
+            sys.exit("Could not find dependencies block in Android root build.gradle")
+        root_text = root_text.replace(
+            "dependencies {",
+            "dependencies {\n        " + plugin_classpath,
+            1,
+        )
+        root_gradle.write_text(root_text, encoding="utf-8")
+
+    app_gradle = Path("android/app/build.gradle")
+    if not app_gradle.is_file():
+        sys.exit("Generated Android app/build.gradle is missing")
+    app_text = app_gradle.read_text(encoding="utf-8")
+    google_plugin = "apply plugin: 'com.google.gms.google-services'"
+    if google_plugin not in app_text:
+        app_gradle.write_text(app_text.rstrip() + "\n\n" + google_plugin + "\n", encoding="utf-8")
+else:
+    print("WARNING: google-services.json not supplied; Android Google sign-in requires Firebase Android app registration before runtime use.")
+
+print("Applied MusicKK launcher branding and native Firebase Google authentication build settings.")
