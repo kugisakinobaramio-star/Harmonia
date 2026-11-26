@@ -1526,6 +1526,7 @@ export async function resolveSpotifyUrl(urlOrUri: string): Promise<{
   title?: string;
   subtitle?: string;
   image?: string;
+  sourceEntriesReceived?: number;
   tracks?: Track[];
   error?: string;
 }> {
@@ -1538,6 +1539,7 @@ export async function resolveSpotifyUrl(urlOrUri: string): Promise<{
       title?: string;
       subtitle?: string;
       image?: string;
+      sourceEntriesReceived?: number;
       tracks?: Track[];
       error?: string;
     };

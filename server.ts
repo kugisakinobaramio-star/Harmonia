@@ -28,6 +28,7 @@ import {
   buildCanonicalEditionPlan,
   type CanonicalEditionPlan,
 } from './src/utils/editionSearch.ts';
+import { mapSpotifyEmbedTrackList, type SpotifyEmbedTrackEntry } from './src/utils/spotifyEmbed.ts';
 
 const SAAVN_BASE = 'https://saavn.sumit.co';
 const JIOSAAVN_API_BASE = 'https://www.jiosaavn.com/api.php';
@@ -733,21 +734,13 @@ function parseSpotifyTarget(
   return null;
 }
 
-interface SpotifyEmbedTrackRaw {
-  uri?: string;
-  title?: string;
-  subtitle?: string;
-  duration?: number;
-  isPlayable?: boolean;
-  audioPreview?: { url?: string };
-}
-
 interface SpotifyResolvedPayload {
   kind: 'track' | 'album' | 'playlist' | 'artist';
   id: string;
   title: string;
   subtitle: string;
   image: string;
+  sourceEntriesReceived: number;
   tracks: StoredTrack[];
 }
 
@@ -784,7 +777,7 @@ async function fetchSpotifyEmbedEntity(
                 artists?: Array<{ name?: string }>;
                 duration?: number;
                 audioPreview?: { url?: string };
-                trackList?: SpotifyEmbedTrackRaw[];
+                trackList?: SpotifyEmbedTrackEntry[];
               };
             };
           };
@@ -805,32 +798,13 @@ async function fetchSpotifyEmbedEntity(
       (entity.artists?.map((a) => a.name).filter(Boolean).join(', ') || 'Spotify Ad-Free');
 
     let tracks: StoredTrack[] = [];
-    if (Array.isArray(entity.trackList) && entity.trackList.length > 0) {
-      tracks = entity.trackList
-        .map((t, idx) => {
-          const trackId = (t.uri || '').split(':').pop() || `${id}-${idx}`;
-          const name = t.title || 'Untitled Track';
-          const artist = t.subtitle || 'Artist';
-          return {
-            id: `sp-${trackId}`,
-            name,
-            artist,
-            albumName: title,
-            duration: t.duration ? Math.max(30, Math.round(t.duration / 1000)) : 195,
-            image: cover,
-            language: inferLanguage(`${name} ${artist} ${title}`),
-            region: title.toLowerCase().includes('india') || title.toLowerCase().includes('hindi')
-              ? 'IN'
-              : title.toLowerCase().includes('japan')
-                ? 'JP'
-                : 'GLOBAL',
-            genre: 'Spotify Streaming',
-            hasLyrics: !isInstrumentalOrSpam(name, title),
-            previewUrl: t.audioPreview?.url || undefined,
-          };
-        })
-        .filter((t) => !isInstrumentalOrSpam(t.name, t.albumName) && !isRemixOrKnockoff(t.name, '', t.artist, ''));
+    let sourceEntriesReceived = Array.isArray(entity.trackList) ? entity.trackList.length : 0;
+    if (Array.isArray(entity.trackList)) {
+      // Import is a user-selected action, not discovery ranking. Preserve every
+      // entry exposed by Spotify, including duplicates, remixes and instrumentals.
+      tracks = mapSpotifyEmbedTrackList(entity.trackList, id, title, cover, inferLanguage);
     } else if (kind === 'track' && entity.title) {
+      sourceEntriesReceived = 1;
       const artist = entity.artists?.map((a) => a.name).filter(Boolean).join(', ') || 'Artist';
       tracks = [
         {
@@ -853,8 +827,9 @@ async function fetchSpotifyEmbedEntity(
       kind,
       id,
       title,
-      subtitle: `${subtitle} · ${enrichedTracks.length} tracks`,
+      subtitle: `${subtitle} · ${sourceEntriesReceived} source entries received`,
       image: cover || enrichedTracks[0]?.image || '',
+      sourceEntriesReceived,
       tracks: enrichedTracks,
     };
 
