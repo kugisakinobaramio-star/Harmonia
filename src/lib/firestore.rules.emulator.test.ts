@@ -5,11 +5,14 @@ import {
   assertFails,
   assertSucceeds,
   initializeTestEnvironment,
+  type RulesTestContext,
   type RulesTestEnvironment,
 } from '@firebase/rules-unit-testing';
 import {
   collection,
+  connectFirestoreEmulator,
   doc,
+  getFirestore,
   getDoc,
   getDocs,
   query,
@@ -19,6 +22,27 @@ import {
 } from 'firebase/firestore';
 
 let env: RulesTestEnvironment;
+
+function firestoreFor(context: RulesTestContext) {
+  const emulator = env.emulators.firestore;
+  if (!emulator) throw new Error('Firestore emulator is not configured');
+  const contextFirestore = context.firestore();
+  const db = getFirestore(contextFirestore.app, TEST_DATABASE_ID);
+  connectFirestoreEmulator(db, emulator.host, emulator.port);
+  return db;
+}
+
+async function clearNamedFirestore() {
+  const emulator = env.emulators.firestore;
+  if (!emulator) throw new Error('Firestore emulator is not configured');
+  const response = await fetch(
+    `http://${emulator.host}:${emulator.port}/emulator/v1/projects/${env.projectId}/databases/${TEST_DATABASE_ID}/documents`,
+    { method: 'DELETE' }
+  );
+  if (!response.ok) {
+    throw new Error(`Failed to clear named Firestore database: ${response.status} ${await response.text()}`);
+  }
+}
 
 // Match the named Firestore database used by firebase-applet-config.json.
 const TEST_DATABASE_ID = 'ai-studio-harmonia-3a784f23-51f6-4abd-a2b2-b3a4b19fc834';
@@ -87,7 +111,7 @@ before(async () => {
 });
 
 beforeEach(async () => {
-  await env.clearFirestore(TEST_DATABASE_ID);
+  await clearNamedFirestore();
 });
 
 after(async () => {
@@ -95,7 +119,7 @@ after(async () => {
 });
 
 test('a signed-in listener can create and read only their own profile', async () => {
-  const alice = env.authenticatedContext('alice').firestore(TEST_DATABASE_ID);
+  const alice = firestoreFor(env.authenticatedContext('alice'));
   await assertSucceeds(setDoc(doc(alice, 'users/alice'), profile('alice')));
   await assertSucceeds(getDoc(doc(alice, 'users/alice')));
 
