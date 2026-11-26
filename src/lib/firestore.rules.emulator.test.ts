@@ -149,10 +149,21 @@ test('track documents containing transient stream URLs are rejected', async () =
   await assertSucceeds(setDoc(doc(alice, 'users/alice_sanitized'), profile('alice_sanitized')));
   const invalidTrack = { ...track, previewUrl: 'https://example.com/temporary.mp3' };
   await assertFails(setDoc(doc(alice, 'users/alice_sanitized/likedSongs/track_1'), {
-    uid: 'alice',
+    uid: 'alice_sanitized',
     id: 'track_1',
     schemaVersion: 2,
     track: invalidTrack,
+    likedAtMs: Date.now(),
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  }));
+
+  const invalidStreamMapTrack = { ...track, streamUrls: { '320kbps': 'https://example.com/full.mp3' } };
+  await assertFails(setDoc(doc(alice, 'users/alice_sanitized/likedSongs/track_2'), {
+    uid: 'alice_sanitized',
+    id: 'track_2',
+    schemaVersion: 2,
+    track: invalidStreamMapTrack,
     likedAtMs: Date.now(),
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
