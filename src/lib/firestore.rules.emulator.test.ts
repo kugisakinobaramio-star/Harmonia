@@ -113,8 +113,8 @@ test('playlist parents and ordered duplicate track entries can be written by the
   await assertSucceeds(setDoc(doc(alice, 'users/alice_playlist/playlists/playlist_1'), playlist('alice_playlist')));
 
   // Same track ID is allowed at distinct entry IDs/positions; order and duplicates are preserved.
-  await assertSucceeds(setDoc(doc(alice, 'users/alice_playlist/playlists/playlist_1/entries/e_0_track_1'), entry('alice', 'e_0_track_1', 0)));
-  await assertSucceeds(setDoc(doc(alice, 'users/alice_playlist/playlists/playlist_1/entries/e_1_track_1'), entry('alice', 'e_1_track_1', 1)));
+  await assertSucceeds(setDoc(doc(alice, 'users/alice_playlist/playlists/playlist_1/entries/e_0_track_1'), entry('alice_playlist', 'e_0_track_1', 0)));
+  await assertSucceeds(setDoc(doc(alice, 'users/alice_playlist/playlists/playlist_1/entries/e_1_track_1'), entry('alice_playlist', 'e_1_track_1', 1)));
 
   const entries = await assertSucceeds(
     getDocs(query(
