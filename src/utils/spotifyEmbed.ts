@@ -22,7 +22,10 @@ export function mapSpotifyEmbedTrackList(
   inferLanguage: (text: string) => Track['language']
 ): Track[] {
   return entries.map((entry, index) => {
-    const sourceTrackId = (entry.uri || '').split(':').pop() || '';
+    const uriParts = (entry.uri || '').split(':');
+    const sourceTrackId = uriParts.length === 3 && uriParts[0] === 'spotify' && uriParts[1] === 'track'
+      ? uriParts[2]
+      : '';
     const name = entry.title?.trim() || 'Untitled Track';
     const artist = entry.subtitle?.trim() || 'Artist';
     const durationMs = Number(entry.duration || 0);
