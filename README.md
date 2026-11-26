@@ -112,6 +112,8 @@ Provider documentation:
 - [MusicBrainz API](https://musicbrainz.org/doc/MusicBrainz_API)
 - [ListenBrainz API](https://listenbrainz.readthedocs.io/en/latest/users/api/)
 
+A machine-readable inventory of every provider (and what it contributes) lives in `src/server/providers/types.ts`.
+
 ## Accounts, privacy and sync
 
 MusicKK is intended to remain usable without requiring an account.
@@ -122,9 +124,11 @@ MusicKK is intended to remain usable without requiring an account.
 - **Offline use:** Local data remains important when the network is unavailable; queued sync work can retry later.
 - **Migration safety:** Account migration should preview differences and create a local backup before applying a merge.
 
+**Full setup and troubleshooting:** see **[docs/firebase.md](docs/firebase.md)** (web + Android + security rules + sync behaviour) and the short Android checklist in **[docs/firebase-android-setup.md](docs/firebase-android-setup.md)**.
+
 Cloud sync depends on correct Firebase project configuration, enabled sign-in providers, Android OAuth setup and reviewed Firestore security rules. A successful application build does not prove that production authentication, cloud sync or deployed security rules are working.
 
-Private provider credentials, service-account keys and temporary playback URLs must not be placed in client code or synchronized as ordinary library metadata. Never commit secrets to the repository.
+Private provider credentials, service-account keys and temporary playback URLs must not be placed in client code or synchronized as ordinary library metadata. Never commit secrets to the repository. Security invariants and the required denials are documented in `security_spec.md`.
 
 ## Technology
 
@@ -248,6 +252,8 @@ Use `.env.example` as a starting reference for local configuration. Hosting envi
 - Never commit Firebase service-account files, OAuth client secrets, Android signing keys or passwords.
 - Public Firebase web configuration is not a replacement for restrictive Firestore security rules.
 
+See also [docs/firebase.md](docs/firebase.md) for Firebase-specific configuration and the Android `google-services.json` requirements.
+
 ## Troubleshooting
 
 <details>
@@ -272,6 +278,8 @@ Confirm that the Worker deployment completed and is receiving traffic. Check Clo
 <summary><strong>Cloud sync is unavailable</strong></summary>
 
 Check network connectivity and Firebase Authentication state. Confirm the intended Firebase project and Firestore database, enabled sign-in providers, authorized domains and Android OAuth configuration. Verify that the Firestore rules were reviewed and intentionally deployed. Do not disable security rules to work around a permission error.
+
+Full guide: [docs/firebase.md](docs/firebase.md).
 </details>
 
 <details>
