@@ -139,12 +139,26 @@ export function useCloudSync({
 
     try {
       const currentSnap = getCurrentSnapshotRef.current();
-      saveAccountCache(uid, currentSnap);
+      const latestCloud = await fetchCloudSnapshot(uid);
+
+      // Stop if the listener changed accounts while the cloud read was in flight.
+      if (auth.currentUser?.uid !== uid) return;
+
+      // Reconcile against the latest remote state before writing. This prevents
+      // a stale device snapshot from deleting another device's newly added data.
+      const reconciledSnap = latestCloud.exists
+        ? mergeMusicSnapshots(currentSnap, latestCloud.snapshot, { mode: 'merge' })
+        : currentSnap;
+      saveAccountCache(uid, reconciledSnap);
+      if (auth.currentUser?.uid === uid && latestCloud.exists) {
+        applyWithHydrationGuard(reconciledSnap);
+      }
+
       const currentUser = auth.currentUser;
       const updatedMeta = await pushCloudSnapshot(
         uid,
-        currentSnap,
-        cloudMetaRef.current,
+        reconciledSnap,
+        latestCloud.meta,
         currentUser
           ? {
               email: currentUser.email,
