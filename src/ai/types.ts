@@ -18,9 +18,3 @@ export interface AIRecommendation {
   signals: string[];
 }
 
-export interface AIProviderStatus {
-  id: string;
-  available: boolean;
-  requiresCredential: boolean;
-  note: string;
-}

@@ -194,13 +194,21 @@ export function LibraryView({
               {visiblePlaylists.map((playlist) => (
                 <article key={playlist.id} className="group relative flex min-w-0 items-center gap-4 overflow-hidden rounded-2xl border border-white/[0.07] bg-[#151a17] p-3 transition duration-200 hover:border-[#62f58a]/25 hover:bg-[#19221c]">
                   <button type="button" onClick={() => onOpenPlaylist(playlist)} aria-label={`Open playlist ${playlist.name}`} className="relative h-[76px] w-[76px] shrink-0 overflow-hidden rounded-xl bg-black">
-                    <CoverImage src={playlist.tracks[0]?.image || playlist.image} alt={playlist.name} className="h-full w-full object-cover transition duration-300 group-hover:scale-105" />
+                    <CoverImage src={playlist.image || playlist.tracks[0]?.image} alt={playlist.name} className="h-full w-full object-cover transition duration-300 group-hover:scale-105" />
                     <span className="absolute inset-0 grid place-items-center bg-black/35 opacity-0 transition group-hover:opacity-100"><Play className="h-6 w-6 fill-white text-white" /></span>
                   </button>
                   <div className="min-w-0 flex-1">
                     <button type="button" onClick={() => onOpenPlaylist(playlist)} className="block max-w-full truncate text-left text-sm font-extrabold text-white hover:text-[#9fffb7]">{playlist.name}</button>
                     <p className="mt-1 line-clamp-2 text-xs leading-5 text-zinc-400">{playlist.description || 'Your personal collection'}</p>
-                    <p className="mt-1.5 text-[11px] font-semibold text-zinc-500">{playlist.tracks.length} {playlist.tracks.length === 1 ? 'track' : 'tracks'}</p>
+                    <p className="mt-1.5 text-[11px] font-semibold text-zinc-500">{playlist.tracks.length} {playlist.tracks.length === 1 ? 'track' : 'tracks'}{playlist.importedAt ? ` · Imported ${new Date(playlist.importedAt).toLocaleDateString()}` : ''}</p>
+                    {typeof playlist.matchedTrackCount === 'number' && (
+                      <p className="mt-1 text-[10px] text-zinc-500">
+                        <span className="text-[#8df8a7]">{playlist.matchedTrackCount} matched</span>
+                        {typeof playlist.unmatchedTrackCount === 'number' && playlist.unmatchedTrackCount > 0
+                          ? ` · ${playlist.unmatchedTrackCount} metadata only`
+                          : ' · All matched'}
+                      </p>
+                    )}
                   </div>
                   <div className="flex shrink-0 flex-col gap-1">
                     {playlist.tracks.length > 0 && (

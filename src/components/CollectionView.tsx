@@ -98,6 +98,21 @@ export function CollectionView({
             MusicKK · {sorted.length} {sorted.length === 1 ? 'song' : 'songs'}
             {totalMins > 0 ? ` · about ${totalMins} min` : ''}
           </p>
+          {typeof collection.sourceEntriesReceived === 'number' && (
+            <div className="mt-3 flex flex-wrap gap-2 text-[11px] font-semibold">
+              <span className="rounded-full border border-white/10 bg-black/20 px-2.5 py-1 text-zinc-300">
+                {collection.sourceEntriesReceived} entries received from source
+              </span>
+              <span className="rounded-full border border-[#62f58a]/20 bg-[#62f58a]/[0.07] px-2.5 py-1 text-[#9fffb7]">
+                {collection.matchedTrackCount ?? 0} matched
+              </span>
+              {(collection.unmatchedTrackCount ?? 0) > 0 && (
+                <span className="rounded-full border border-amber-400/20 bg-amber-400/[0.06] px-2.5 py-1 text-amber-200">
+                  {collection.unmatchedTrackCount} metadata only
+                </span>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
