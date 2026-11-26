@@ -820,7 +820,6 @@ async function fetchSpotifyEmbedEntity(
           previewUrl: entity.audioPreview?.url || undefined,
         },
       ];
-      sourceEntriesReceived = 1;
     }
 
     const enrichedTracks = await enrichSpotifyTracksArtwork(tracks);
