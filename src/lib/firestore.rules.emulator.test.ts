@@ -5,11 +5,14 @@ import {
   assertFails,
   assertSucceeds,
   initializeTestEnvironment,
+  type RulesTestContext,
   type RulesTestEnvironment,
 } from '@firebase/rules-unit-testing';
 import {
   collection,
+  connectFirestoreEmulator,
   doc,
+  getFirestore,
   getDoc,
   getDocs,
   query,
@@ -19,6 +22,31 @@ import {
 } from 'firebase/firestore';
 
 let env: RulesTestEnvironment;
+
+// Exercise the same named database configured for MusicKK, not the emulator's
+// default database. The test context supplies the mocked Auth token provider.
+const TEST_DATABASE_ID = 'ai-studio-harmonia-3a784f23-51f6-4abd-a2b2-b3a4b19fc834';
+
+function namedFirestore(context: RulesTestContext) {
+  const emulator = env.emulators.firestore;
+  if (!emulator) throw new Error('Firestore emulator is not configured');
+  const contextDb = context.firestore();
+  const db = getFirestore(contextDb.app, TEST_DATABASE_ID);
+  connectFirestoreEmulator(db, emulator.host, emulator.port);
+  return db;
+}
+
+async function clearNamedFirestore() {
+  const emulator = env.emulators.firestore;
+  if (!emulator) throw new Error('Firestore emulator is not configured');
+  const response = await fetch(
+    `http://${emulator.host}:${emulator.port}/emulator/v1/projects/demo-musick/databases/${TEST_DATABASE_ID}/documents`,
+    { method: 'DELETE' }
+  );
+  if (!response.ok) {
+    throw new Error(`Unable to clear named Firestore test database: ${response.status} ${await response.text()}`);
+  }
+}
 
 const track = {
   id: 'track_1',
@@ -84,7 +112,7 @@ before(async () => {
 });
 
 beforeEach(async () => {
-  await env.clearFirestore();
+  await clearNamedFirestore();
 });
 
 after(async () => {
@@ -92,23 +120,23 @@ after(async () => {
 });
 
 test('a signed-in listener can create and read only their own profile', async () => {
-  const alice = env.authenticatedContext('alice').firestore();
+  const alice = namedFirestore(env.authenticatedContext('alice'));
   await assertSucceeds(setDoc(doc(alice, 'users/alice'), profile('alice')));
   await assertSucceeds(getDoc(doc(alice, 'users/alice')));
 
-  const bob = env.authenticatedContext('bob').firestore();
+  const bob = namedFirestore(env.authenticatedContext('bob'));
   await assertFails(getDoc(doc(bob, 'users/alice')));
   await assertFails(setDoc(doc(bob, 'users/alice'), profile('alice')));
 });
 
 test('unauthenticated access to user data is denied', async () => {
-  const guest = env.unauthenticatedContext().firestore();
+  const guest = namedFirestore(env.unauthenticatedContext());
   await assertFails(getDoc(doc(guest, 'users/alice')));
   await assertFails(setDoc(doc(guest, 'users/alice'), profile('alice')));
 });
 
 test('playlist parents and ordered duplicate track entries can be written by their owner', async () => {
-  const alice = env.authenticatedContext('alice_playlist').firestore();
+  const alice = namedFirestore(env.authenticatedContext('alice_playlist'));
   await assertSucceeds(setDoc(doc(alice, 'users/alice_playlist'), profile('alice_playlist')));
   await assertSucceeds(setDoc(doc(alice, 'users/alice_playlist/playlists/playlist_1'), playlist('alice_playlist')));
 
@@ -127,17 +155,17 @@ test('playlist parents and ordered duplicate track entries can be written by the
 });
 
 test('another account cannot read or write a listener playlist or its entries', async () => {
-  const alice = env.authenticatedContext('alice_owner').firestore();
+  const alice = namedFirestore(env.authenticatedContext('alice_owner'));
   await assertSucceeds(setDoc(doc(alice, 'users/alice_owner'), profile('alice_owner')));
   await assertSucceeds(setDoc(doc(alice, 'users/alice_owner/playlists/playlist_1'), playlist('alice_owner')));
 
-  const bob = env.authenticatedContext('bob_owner').firestore();
+  const bob = namedFirestore(env.authenticatedContext('bob_owner'));
   await assertFails(getDoc(doc(bob, 'users/alice_owner/playlists/playlist_1')));
   await assertFails(setDoc(doc(bob, 'users/alice_owner/playlists/playlist_1/entries/e_0_track_1'), entry('bob_owner', 'e_0_track_1', 0)));
 });
 
 test('track documents containing transient stream URLs are rejected', async () => {
-  const alice = env.authenticatedContext('alice_sanitized').firestore();
+  const alice = namedFirestore(env.authenticatedContext('alice_sanitized'));
   await assertSucceeds(setDoc(doc(alice, 'users/alice_sanitized'), profile('alice_sanitized')));
   const invalidTrack = { ...track, previewUrl: 'https://example.com/temporary.mp3' };
   await assertFails(setDoc(doc(alice, 'users/alice_sanitized/likedSongs/track_1'), {
@@ -152,7 +180,7 @@ test('track documents containing transient stream URLs are rejected', async () =
 });
 
 test('playlist collection queries must constrain results to the signed-in owner', async () => {
-  const alice = env.authenticatedContext('alice_query').firestore();
+  const alice = namedFirestore(env.authenticatedContext('alice_query'));
   await assertSucceeds(setDoc(doc(alice, 'users/alice_query'), profile('alice_query')));
   await assertSucceeds(setDoc(doc(alice, 'users/alice_query/playlists/playlist_1'), playlist('alice_query')));
 
