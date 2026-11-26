@@ -45,7 +45,7 @@ test('Spotify import retains unavailable and unplayable entries as metadata', ()
   ];
 
   const tracks = mapSpotifyEmbedTrackList(entries, 'playlist-partial', 'Mix', '', inferLanguage);
-  assert.equal(tracks.length, 2);
+  assert.equal(tracks.length, 3);
   assert.equal(tracks[0].sourceAvailability, 'lookup');
   assert.equal(tracks[1].id, 'sp-playlist-partial-entry-1');
   assert.equal(tracks[2].id, 'sp-playlist-partial-entry-2');
