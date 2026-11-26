@@ -18,6 +18,12 @@ test('Spotify import preserves all 223 source entries in order', () => {
   assert.equal(tracks[222].name, 'Song 222');
 });
 
+test('Spotify import retains source-region inference', () => {
+  const entries: SpotifyEmbedTrackEntry[] = [{ uri: 'spotify:track:india', title: 'Song', subtitle: 'Artist' }];
+  const tracks = mapSpotifyEmbedTrackList(entries, 'playlist-india', 'Hindi Hits India', '', inferLanguage);
+  assert.equal(tracks[0].region, 'IN');
+});
+
 test('Spotify import preserves duplicate track entries at distinct positions', () => {
   const entries: SpotifyEmbedTrackEntry[] = [
     { uri: 'spotify:track:same-id', title: 'Repeat', subtitle: 'Artist' },
