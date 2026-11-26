@@ -20,10 +20,6 @@ import {
 
 let env: RulesTestEnvironment;
 
-// Exercise the same named database configured for MusicKK, not the emulator's
-// default database. The test context supplies the mocked Auth token provider.
-const TEST_DATABASE_ID = 'ai-studio-harmonia-3a784f23-51f6-4abd-a2b2-b3a4b19fc834';
-
 // The Firestore emulator currently supports only one database per project.
 // These tests validate the deployed rules file against the emulator's default DB;
 // production named-database enforcement still requires Firebase-side verification.
@@ -82,6 +78,8 @@ function entry(uid: string, entryId: string, position: number) {
   };
 }
 
+// The Firebase Emulator test harness uses its default database. The production
+// firebase.json separately assigns this same rules file to MusicKK's named DB.
 before(async () => {
   env = await initializeTestEnvironment({
     projectId: 'demo-musick',
