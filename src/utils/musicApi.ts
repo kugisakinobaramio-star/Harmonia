@@ -1534,7 +1534,7 @@ export async function resolvePlaylistUrl(urlOrUri: string): Promise<{
   error?: string;
 }> {
   const input = urlOrUri.trim();
-  const isYouTube = /(?:youtube\.com\/playlist\?|youtu\.be\/)/i.test(input);
+  const isYouTube = /(?:(?:www\.|m\.|music\.)?youtube\.com\/playlist\?)/i.test(input);
   const endpoint = isYouTube
     ? `/api/music/youtube/playlist?url=${encodeURIComponent(input)}`
     : `/api/music/spotify/resolve?url=${encodeURIComponent(input)}`;
