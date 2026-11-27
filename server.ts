@@ -878,8 +878,26 @@ async function fetchYouTubePlaylist(id: string): Promise<YouTubePlaylistPayload 
 
   const tracks: StoredTrack[] = [];
   let pageToken = '';
-  let title = 'YouTube Playlist';
-  let image = '';
+  let playlistTitle = 'YouTube Playlist';
+  let playlistImage = '';
+  try {
+    const metaParams = new URLSearchParams({ part: 'snippet', id, key: apiKey });
+    const metaResponse = await fetchWithTimeout(
+      `https://www.googleapis.com/youtube/v3/playlists?${metaParams.toString()}`,
+      8000
+    );
+    if (metaResponse.ok) {
+      const meta = await metaResponse.json() as {
+        items?: Array<{ snippet?: { title?: string; thumbnails?: { high?: { url?: string }; medium?: { url?: string } } } }>;
+      };
+      playlistTitle = String(meta.items?.[0]?.snippet?.title || playlistTitle);
+      playlistImage = meta.items?.[0]?.snippet?.thumbnails?.high?.url || meta.items?.[0]?.snippet?.thumbnails?.medium?.url || '';
+    }
+  } catch {
+    // Playlist metadata is optional; item import can still succeed.
+  }
+  let title = playlistTitle;
+  let image = playlistImage;
   let sourceEntriesTotal = 0;
   let pages = 0;
   const maxPages = 10; // bounded to 500 entries per request
@@ -948,7 +966,6 @@ async function fetchYouTubePlaylist(id: string): Promise<YouTubePlaylistPayload 
         });
         if (!image) image = item.snippet?.thumbnails?.high?.url || item.snippet?.thumbnails?.medium?.url || '';
       }
-      if (pages === 0) title = String(payload.items?.[0]?.snippet?.playlistId ? 'YouTube Playlist' : title);
       pageToken = String(payload.nextPageToken || '');
       pages += 1;
     } while (pageToken && pages < maxPages && tracks.length < 500);
