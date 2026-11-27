@@ -899,6 +899,7 @@ async function fetchYouTubePlaylist(id: string): Promise<YouTubePlaylistPayload 
   let title = playlistTitle;
   let image = playlistImage;
   let sourceEntriesTotal = 0;
+  let sourceEntriesReceived = 0;
   let pages = 0;
   const maxPages = 10; // bounded to 500 entries per request
   try {
@@ -931,7 +932,9 @@ async function fetchYouTubePlaylist(id: string): Promise<YouTubePlaylistPayload 
         }>;
       };
       if (pages === 0) sourceEntriesTotal = Number(payload.pageInfo?.totalResults || 0);
-      for (const item of payload.items || []) {
+      const pageItems = payload.items || [];
+      sourceEntriesReceived += pageItems.length;
+      for (const item of pageItems) {
         const videoId = item.contentDetails?.videoId || item.snippet?.resourceId?.videoId;
         const name = String(item.snippet?.title || '').trim();
         if (!videoId || !name) continue;
@@ -955,7 +958,7 @@ async function fetchYouTubePlaylist(id: string): Promise<YouTubePlaylistPayload 
           name,
           artist: item.snippet?.channelTitle || 'YouTube',
           albumName: title,
-          duration: 180,
+          duration: 0,
           image: item.snippet?.thumbnails?.high?.url || item.snippet?.thumbnails?.medium?.url || item.snippet?.thumbnails?.default?.url || '',
           language: inferLanguage(name),
           genre: 'YouTube Playlist',
@@ -976,10 +979,10 @@ async function fetchYouTubePlaylist(id: string): Promise<YouTubePlaylistPayload 
       provider: 'YouTube',
       id,
       title,
-      subtitle: `${tracks.length} entries received of ${sourceEntriesTotal || tracks.length}${complete ? '' : ' · partial import limit reached'}`,
+      subtitle: `${sourceEntriesReceived} source entries received of ${sourceEntriesTotal || sourceEntriesReceived}${complete ? '' : ' · partial import limit reached'}`,
       image: image || tracks[0]?.image || '',
-      sourceEntriesReceived: tracks.length,
-      sourceEntriesTotal: sourceEntriesTotal || tracks.length,
+      sourceEntriesReceived,
+      sourceEntriesTotal: sourceEntriesTotal || sourceEntriesReceived,
       complete,
       tracks,
     };
