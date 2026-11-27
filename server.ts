@@ -928,7 +928,7 @@ async function fetchYouTubePlaylist(id: string): Promise<YouTubePlaylistPayload 
                 Accept: 'application/json',
                 'Content-Type': 'application/json',
                 Origin: 'https://www.youtube.com',
-                Referer: \`https://www.youtube.com/playlist?list=\${encodeURIComponent(id)}\`,
+                Referer: `https://www.youtube.com/playlist?list=${encodeURIComponent(id)}`,
               },
               body: JSON.stringify({
                 context: { client: { clientName: 'WEB', clientVersion } },
