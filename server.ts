@@ -891,7 +891,7 @@ async function fetchYouTubePlaylist(id: string): Promise<YouTubePlaylistPayload 
   if (cached && cached.expiresAt > Date.now()) return cached.data;
   try {
     const response = await fetchWithTimeout(
-      \`https://www.youtube.com/playlist?list=\${encodeURIComponent(id)}\`,
+      `https://www.youtube.com/playlist?list=${encodeURIComponent(id)}`,
       9000,
       { Accept: 'text/html,application/xhtml+xml' }
     );
@@ -926,7 +926,7 @@ async function fetchYouTubePlaylist(id: string): Promise<YouTubePlaylistPayload 
               Accept: 'application/json',
               'Content-Type': 'application/json',
               Origin: 'https://www.youtube.com',
-              Referer: \`https://www.youtube.com/playlist?list=\${encodeURIComponent(id)}\`,
+              Referer: `https://www.youtube.com/playlist?list=${encodeURIComponent(id)}`,
             },
             body: JSON.stringify({
               context: { client: { clientName: 'WEB', clientVersion } },
@@ -956,7 +956,7 @@ async function fetchYouTubePlaylist(id: string): Promise<YouTubePlaylistPayload 
     }
 
     const tracks: StoredTrack[] = entries.map((entry) => ({
-      id: \`yt-\${entry.videoId}\`,
+      id: `yt-${entry.videoId}`,
       name: entry.title,
       artist: entry.channel,
       albumName: parsed.title,
@@ -967,7 +967,7 @@ async function fetchYouTubePlaylist(id: string): Promise<YouTubePlaylistPayload 
       metadataOnly: true,
       sourceProvider: 'YouTube',
       sourceAvailability: 'metadata',
-      sourcePageUrl: \`https://www.youtube.com/watch?v=\${entry.videoId}\`,
+      sourcePageUrl: `https://www.youtube.com/watch?v=${entry.videoId}`,
     }));
     const hasMore = Boolean(continuationToken) || continuationPages >= maxContinuationPages || entries.length >= maxPlaylistEntries;
     const data: YouTubePlaylistPayload = {
@@ -975,7 +975,7 @@ async function fetchYouTubePlaylist(id: string): Promise<YouTubePlaylistPayload 
       provider: 'YouTube',
       id,
       title: parsed.title,
-      subtitle: \`\${entries.length} entries received\${hasMore ? ' · playlist may be incomplete' : ''}\`,
+      subtitle: `${entries.length} entries received${hasMore ? ' · playlist may be incomplete' : ''}`,
       image: parsed.image || tracks[0]?.image || '',
       sourceEntriesReceived: entries.length,
       sourceEntriesTotal: entries.length,
