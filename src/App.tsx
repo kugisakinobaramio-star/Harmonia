@@ -2271,6 +2271,7 @@ export default function App() {
       if (!res.ok || res.kind !== 'playlist' || !res.tracks?.length) {
         return { ok: false, error: res.error || 'This link did not return an importable playlist.' };
       }
+      const provider = res.provider || 'Spotify';
       const importedTracks: Track[] = [];
       for (let offset = 0; offset < res.tracks.length; offset += 4) {
         const batch = res.tracks.slice(offset, offset + 4);
@@ -2300,9 +2301,9 @@ export default function App() {
           }
           return {
             ...spotifyTrack,
-            id: `spotify-meta-${res.id || 'playlist'}-${offset + batchIndex}-${spotifyTrack.id}`,
+            id: `${provider.toLowerCase()}-meta-${res.id || 'playlist'}-${offset + batchIndex}-${spotifyTrack.id}`,
             metadataOnly: true,
-            sourceProvider: 'Spotify',
+            sourceProvider: provider,
             sourceAvailability: 'metadata' as const,
             streamUrls: undefined,
             previewUrl: undefined,
@@ -2310,7 +2311,6 @@ export default function App() {
         }));
         importedTracks.push(...matchedBatch);
       }
-      const provider = res.provider || 'Spotify';
       const playlistId = `${provider.toLowerCase()}-import-${res.id || Date.now()}`;
       const importedPlaylist: CuratedPlaylist = {
         id: playlistId,
