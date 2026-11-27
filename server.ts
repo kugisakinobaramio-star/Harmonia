@@ -891,7 +891,7 @@ async function fetchYouTubePlaylist(id: string): Promise<YouTubePlaylistPayload 
   if (cached && cached.expiresAt > Date.now()) return cached.data;
   try {
     const response = await fetchWithTimeout(
-      `https://www.youtube.com/playlist?list=${encodeURIComponent(id)}`,
+      \`https://www.youtube.com/playlist?list=\${encodeURIComponent(id)}\`,
       9000,
       { Accept: 'text/html,application/xhtml+xml' }
     );
@@ -900,8 +900,49 @@ async function fetchYouTubePlaylist(id: string): Promise<YouTubePlaylistPayload 
     if (html.length > 12 * 1024 * 1024) return null;
     const parsed = parseYouTubePlaylistPage(html);
     if (!parsed) return null;
-    const tracks: StoredTrack[] = parsed.entries.map((entry) => ({
-      id: `yt-${entry.videoId}`,
+
+    const entries = [...parsed.entries];
+    const seen = new Set(entries.map((entry) => entry.videoId));
+    let continuationToken = parsed.continuationToken;
+    let continuationPages = 0;
+    const maxContinuationPages = 9;
+    const maxPlaylistEntries = 500;
+    const clientVersion = parsed.clientVersion || '2.20250101.00.00';
+
+    // YouTube's public continuation interface is undocumented. Bound the number
+    // of requests and total entries; if the format changes, keep the valid first page.
+    while (continuationToken && continuationPages < maxContinuationPages && entries.length < maxPlaylistEntries) {
+      continuationPages += 1;
+      const continuationResponse = await fetchWithTimeout(
+        'https://www.youtube.com/youtubei/v1/browse?prettyPrint=false',
+        7000,
+        {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+          Origin: 'https://www.youtube.com',
+          Referer: \`https://www.youtube.com/playlist?list=\${encodeURIComponent(id)}\`,
+        }
+      );
+      if (!continuationResponse.ok) break;
+      const continuationPayload = await continuationResponse.json() as {
+        responseContext?: unknown;
+        continuationContents?: unknown;
+        onResponseReceivedActions?: unknown;
+        onResponseReceivedEndpoints?: unknown;
+      };
+      const parsedContinuation = parseYouTubePlaylistContinuation(continuationPayload);
+      for (const entry of parsedContinuation.entries) {
+        if (seen.has(entry.videoId)) continue;
+        seen.add(entry.videoId);
+        entries.push(entry);
+        if (entries.length >= maxPlaylistEntries) break;
+      }
+      if (!parsedContinuation.entries.length || parsedContinuation.continuationToken === continuationToken) break;
+      continuationToken = parsedContinuation.continuationToken;
+    }
+
+    const tracks: StoredTrack[] = entries.map((entry) => ({
+      id: \`yt-\${entry.videoId}\`,
       name: entry.title,
       artist: entry.channel,
       albumName: parsed.title,
@@ -912,18 +953,19 @@ async function fetchYouTubePlaylist(id: string): Promise<YouTubePlaylistPayload 
       metadataOnly: true,
       sourceProvider: 'YouTube',
       sourceAvailability: 'metadata',
-      sourcePageUrl: `https://www.youtube.com/watch?v=${entry.videoId}`,
+      sourcePageUrl: \`https://www.youtube.com/watch?v=\${entry.videoId}\`,
     }));
+    const hasMore = Boolean(continuationToken) || continuationPages >= maxContinuationPages || entries.length >= maxPlaylistEntries;
     const data: YouTubePlaylistPayload = {
       kind: 'playlist',
       provider: 'YouTube',
       id,
       title: parsed.title,
-      subtitle: `${parsed.sourceEntriesReceived} entries received${parsed.hasContinuation ? ' · more entries may be available' : ''}`,
+      subtitle: \`\${entries.length} entries received\${hasMore ? ' · playlist may be incomplete' : ''}\`,
       image: parsed.image || tracks[0]?.image || '',
-      sourceEntriesReceived: parsed.sourceEntriesReceived,
-      sourceEntriesTotal: parsed.sourceEntriesReceived,
-      complete: !parsed.hasContinuation,
+      sourceEntriesReceived: entries.length,
+      sourceEntriesTotal: entries.length,
+      complete: !hasMore,
       tracks,
     };
     cacheYouTubePlaylist(id, data);
