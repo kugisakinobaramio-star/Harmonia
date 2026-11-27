@@ -869,6 +869,21 @@ interface YouTubePlaylistPayload {
 }
 
 const youtubePlaylistCache = new Map<string, { expiresAt: number; data: YouTubePlaylistPayload }>();
+const youtubePlaylistRateLimits = new Map<string, { count: number; resetAt: number }>();
+
+function cacheYouTubePlaylist(id: string, data: YouTubePlaylistPayload): void {
+  const now = Date.now();
+  for (const [key, entry] of youtubePlaylistCache) {
+    if (entry.expiresAt <= now) youtubePlaylistCache.delete(key);
+  }
+  // Keep memory bounded even if clients request many distinct public playlist IDs.
+  while (youtubePlaylistCache.size >= 200) {
+    const oldestKey = youtubePlaylistCache.keys().next().value;
+    if (!oldestKey) break;
+    youtubePlaylistCache.delete(oldestKey);
+  }
+  youtubePlaylistCache.set(id, { expiresAt: now + 10 * 60_000, data });
+}
 
 async function fetchYouTubePlaylist(id: string): Promise<YouTubePlaylistPayload | null> {
   const cached = youtubePlaylistCache.get(id);
@@ -986,7 +1001,7 @@ async function fetchYouTubePlaylist(id: string): Promise<YouTubePlaylistPayload 
       complete,
       tracks,
     };
-    youtubePlaylistCache.set(id, { expiresAt: Date.now() + 10 * 60_000, data });
+    cacheYouTubePlaylist(id, data);
     return data;
   } catch {
     return null;
@@ -2133,6 +2148,26 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
 
   // Public YouTube playlist import via the official Data API. No user login is required.
   app.get('/api/music/youtube/playlist', async (req, res) => {
+    // Public playlist imports consume third-party API quota; limit each client independently.
+    const now = Date.now();
+    const clientKey = req.get('cf-connecting-ip') || req.ip || req.socket.remoteAddress || 'unknown';
+    let bucket = youtubePlaylistRateLimits.get(clientKey);
+    if (!bucket || bucket.resetAt <= now) {
+      bucket = { count: 0, resetAt: now + 60_000 };
+      youtubePlaylistRateLimits.set(clientKey, bucket);
+    }
+    bucket.count += 1;
+    if (bucket.count > 20) {
+      res.setHeader('Retry-After', String(Math.max(1, Math.ceil((bucket.resetAt - now) / 1000))));
+      res.status(429).json({ ok: false, error: 'Too many playlist import requests. Please retry shortly.' });
+      return;
+    }
+    if (youtubePlaylistRateLimits.size > 10_000) {
+      for (const [client, limit] of youtubePlaylistRateLimits) {
+        if (limit.resetAt <= now) youtubePlaylistRateLimits.delete(client);
+        if (youtubePlaylistRateLimits.size <= 8_000) break;
+      }
+    }
     const id = parseYouTubePlaylistId(String(req.query.url || req.query.id || ''));
     if (!id) {
       res.status(400).json({ ok: false, error: 'Invalid YouTube playlist link' });
