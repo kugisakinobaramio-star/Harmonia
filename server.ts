@@ -29,7 +29,7 @@ import {
   type CanonicalEditionPlan,
 } from './src/utils/editionSearch.ts';
 import { mapSpotifyEmbedTrackList, type SpotifyEmbedTrackEntry } from './src/utils/spotifyEmbed.ts';
-import { parseYouTubePlaylistPage } from './src/utils/youtubePlaylist.ts';
+import { parseYouTubePlaylistContinuation, parseYouTubePlaylistPage } from './src/utils/youtubePlaylist.ts';
 
 const SAAVN_BASE = 'https://saavn.sumit.co';
 const JIOSAAVN_API_BASE = 'https://www.jiosaavn.com/api.php';
