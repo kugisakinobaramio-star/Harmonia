@@ -303,7 +303,7 @@ export function SpotifyImportModal({ open, onClose, onImportSpotifyUrl }: Spotif
           </button>
         </div>
         <p className="mt-2 text-xs leading-relaxed text-zinc-400">
-          Paste a public Spotify or YouTube playlist link. No account login is required for public playlists. Spotify may return only part of some playlists; YouTube public imports require the server's official Data API configuration. Audio is not copied.
+          Paste a public Spotify or YouTube playlist link. No account login or YouTube Data API key is required. Spotify's public embed may expose only part of a playlist; YouTube imports read public playlist metadata and may be marked incomplete if YouTube blocks additional pages. Audio is not copied.
         </p>
         <label htmlFor="spotify-import-input" className="sr-only">Spotify or YouTube playlist link</label>
         <input
