@@ -1519,27 +1519,38 @@ export async function fetchSpotifyPlaylists(): Promise<CuratedPlaylist[]> {
   return [];
 }
 
-export async function resolveSpotifyUrl(urlOrUri: string): Promise<{
+export async function resolvePlaylistUrl(urlOrUri: string): Promise<{
   ok: boolean;
   kind?: 'track' | 'album' | 'playlist' | 'artist';
+  provider?: 'Spotify' | 'YouTube';
   id?: string;
   title?: string;
   subtitle?: string;
   image?: string;
   sourceEntriesReceived?: number;
+  sourceEntriesTotal?: number;
+  complete?: boolean;
   tracks?: Track[];
   error?: string;
 }> {
+  const input = urlOrUri.trim();
+  const isYouTube = /(?:youtube\.com\/playlist\?|youtu\.be\/)/i.test(input);
+  const endpoint = isYouTube
+    ? `/api/music/youtube/playlist?url=${encodeURIComponent(input)}`
+    : `/api/music/spotify/resolve?url=${encodeURIComponent(input)}`;
   try {
-    const res = await fetch(apiUrl(`/api/music/spotify/resolve?url=${encodeURIComponent(urlOrUri.trim())}`));
-    const json = (await res.json()) as {
+    const res = await fetch(apiUrl(endpoint));
+    const json = await res.json() as {
       ok?: boolean;
       kind?: 'track' | 'album' | 'playlist' | 'artist';
+      provider?: 'Spotify' | 'YouTube';
       id?: string;
       title?: string;
       subtitle?: string;
       image?: string;
       sourceEntriesReceived?: number;
+      sourceEntriesTotal?: number;
+      complete?: boolean;
       tracks?: Track[];
       error?: string;
     };
@@ -1547,12 +1558,13 @@ export async function resolveSpotifyUrl(urlOrUri: string): Promise<{
       return {
         ...json,
         ok: true,
+        provider: json.provider || (isYouTube ? 'YouTube' : 'Spotify'),
         image: toProxiedImageUrl(json.image) || ARTWORK.englishVinyl,
         tracks: json.tracks.map(normalizeRemoteTrack),
       };
     }
-    return { ok: false, error: json.error || 'Could not load Spotify link' };
+    return { ok: false, error: json.error || 'Could not load this playlist' };
   } catch {
-    return { ok: false, error: 'Network error resolving Spotify link' };
+    return { ok: false, error: 'Network error resolving playlist' };
   }
 }
