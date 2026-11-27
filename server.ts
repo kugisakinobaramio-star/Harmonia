@@ -913,16 +913,30 @@ async function fetchYouTubePlaylist(id: string): Promise<YouTubePlaylistPayload 
     // of requests and total entries; if the format changes, keep the valid first page.
     while (continuationToken && continuationPages < maxContinuationPages && entries.length < maxPlaylistEntries) {
       continuationPages += 1;
-      const continuationResponse = await fetchWithTimeout(
-        'https://www.youtube.com/youtubei/v1/browse?prettyPrint=false',
-        7000,
-        {
-          Accept: 'application/json',
-          'Content-Type': 'application/json',
-          Origin: 'https://www.youtube.com',
-          Referer: \`https://www.youtube.com/playlist?list=\${encodeURIComponent(id)}\`,
-        }
-      );
+      const continuationController = new AbortController();
+      const continuationTimeout = setTimeout(() => continuationController.abort(), 7000);
+      let continuationResponse: Response;
+      try {
+        continuationResponse = await fetch(
+          'https://www.youtube.com/youtubei/v1/browse?prettyPrint=false',
+          {
+            method: 'POST',
+            signal: continuationController.signal,
+            headers: {
+              Accept: 'application/json',
+              'Content-Type': 'application/json',
+              Origin: 'https://www.youtube.com',
+              Referer: \`https://www.youtube.com/playlist?list=\${encodeURIComponent(id)}\`,
+            },
+            body: JSON.stringify({
+              context: { client: { clientName: 'WEB', clientVersion } },
+              continuation: continuationToken,
+            }),
+          }
+        );
+      } finally {
+        clearTimeout(continuationTimeout);
+      }
       if (!continuationResponse.ok) break;
       const continuationPayload = await continuationResponse.json() as {
         responseContext?: unknown;
