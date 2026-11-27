@@ -27,7 +27,7 @@ function extractJsonAfterMarker(html: string, marker: string): unknown | null {
     const char = html[index];
     if (inString) {
       if (escaped) escaped = false;
-      else if (char === '\\\\') escaped = true;
+      else if (char === '\\') escaped = true;
       else if (char === '"') inString = false;
       continue;
     }
@@ -43,69 +43,86 @@ function extractJsonAfterMarker(html: string, marker: string): unknown | null {
   return null;
 }
 
-function findObject(root: unknown, key: string): Record<string, any> | null {
-  if (!root || typeof root !== 'object') return null;
+function collectObjects(root: unknown, key: string, out: Record<string, any>[] = []): Record<string, any>[] {
+  if (!root || typeof root !== 'object') return out;
   if (Array.isArray(root)) {
-    for (const item of root) {
-      const found = findObject(item, key);
-      if (found) return found;
-    }
-    return null;
+    for (const item of root) collectObjects(item, key, out);
+    return out;
   }
   const record = root as Record<string, unknown>;
   const candidate = record[key];
-  if (candidate && typeof candidate === 'object' && !Array.isArray(candidate)) {
-    return candidate as Record<string, any>;
-  }
-  for (const value of Object.values(record)) {
-    const found = findObject(value, key);
-    if (found) return found;
-  }
-  return null;
+  if (candidate && typeof candidate === 'object' && !Array.isArray(candidate)) out.push(candidate as Record<string, any>);
+  for (const value of Object.values(record)) collectObjects(value, key, out);
+  return out;
 }
 
 function textValue(value: any): string {
   if (typeof value?.simpleText === 'string') return value.simpleText;
   if (Array.isArray(value?.runs)) return value.runs.map((run: any) => String(run?.text || '')).join('');
+  if (typeof value?.content === 'string') return value.content;
   return '';
 }
 
-function parseDuration(value: unknown): number {
-  const seconds = Number(value);
-  if (Number.isFinite(seconds) && seconds > 0) return Math.floor(seconds);
-  return 0;
+function lastThumbnail(value: any): string {
+  const thumbnails = value?.thumbnails;
+  return Array.isArray(thumbnails) ? String(thumbnails.at(-1)?.url || '') : '';
 }
 
+/** Parses the public playlist page's best-effort, undocumented initial data. */
 export function parseYouTubePlaylistPage(html: string): ParsedYouTubePlaylistPage | null {
   const data = extractJsonAfterMarker(html, 'ytInitialData');
   if (!data) return null;
-  const list = findObject(data, 'playlistVideoListRenderer');
-  if (!list || !Array.isArray(list.contents)) return null;
+  const lists = collectObjects(data, 'playlistVideoListRenderer');
+  if (lists.length === 0) return null;
 
   const entries: YouTubePlaylistEntry[] = [];
+  const seen = new Set<string>();
   let hasContinuation = false;
-  for (const content of list.contents) {
-    const renderer = content?.playlistVideoRenderer;
-    if (renderer) {
-      const videoId = String(renderer.videoId || '');
-      const title = textValue(renderer.title).trim();
-      const channel = textValue(renderer.shortBylineText || renderer.ownerText).trim() || 'YouTube';
-      const duration = parseDuration(renderer.lengthSeconds);
-      const image = Array.isArray(renderer.thumbnail?.thumbnails)
-        ? String(renderer.thumbnail.thumbnails.at(-1)?.url || '')
-        : '';
-      if (videoId || title) {
-        entries.push({ videoId, title: title || (videoId ? 'Unavailable video' : 'Untitled video'), channel, duration, image, playable: renderer.isPlayable !== false });
+  for (const list of lists) {
+    for (const content of Array.isArray(list.contents) ? list.contents : []) {
+      const old = content?.playlistVideoRenderer;
+      if (old) {
+        const videoId = String(old.videoId || '');
+        if (videoId && !seen.has(videoId)) {
+          seen.add(videoId);
+          entries.push({
+            videoId,
+            title: textValue(old.title).trim() || 'Unavailable video',
+            channel: textValue(old.shortBylineText || old.ownerText).trim() || 'YouTube',
+            duration: Number(old.lengthSeconds) > 0 ? Math.floor(Number(old.lengthSeconds)) : 0,
+            image: lastThumbnail(old.thumbnail),
+            playable: old.isPlayable !== false,
+          });
+        }
       }
+      if (content?.continuationItemRenderer) hasContinuation = true;
     }
-    if (content?.continuationItemRenderer) hasContinuation = true;
   }
 
-  const metadata = findObject(data, 'playlistMetadataRenderer');
-  const primary = findObject(data, 'playlistSidebarPrimaryInfoRenderer');
-  const thumbnail = primary?.thumbnailRenderer?.playlistVideoThumbnailRenderer?.thumbnail?.thumbnails;
-  const image = Array.isArray(thumbnail) ? String(thumbnail.at(-1)?.url || '') : '';
-  const title = String(metadata?.title || textValue(primary?.title) || 'YouTube Playlist');
+  // Newer YouTube playlist pages use lockupViewModel instead of playlistVideoRenderer.
+  const lockups = collectObjects(lists, 'lockupViewModel');
+  for (const lockup of lockups) {
+    if (!String(lockup.contentType || '').includes('VIDEO')) continue;
+    const videoId = String(lockup.contentId || '');
+    if (!/^[A-Za-z0-9_-]{11}$/.test(videoId) || seen.has(videoId)) continue;
+    seen.add(videoId);
+    const metadata = lockup.metadata?.lockupMetadataViewModel;
+    const image = lastThumbnail(lockup.contentImage?.thumbnailViewModel?.image);
+    entries.push({
+      videoId,
+      title: textValue(metadata?.title).trim() || 'Unavailable video',
+      channel: textValue(metadata?.metadata?.contentMetadataViewModel?.metadataRows?.[0]?.metadataParts?.[0]?.text).trim() || 'YouTube',
+      duration: 0,
+      image,
+      playable: true,
+    });
+  }
   if (entries.length === 0) return null;
+
+  const metadata = collectObjects(data, 'playlistMetadataRenderer')[0];
+  const primary = collectObjects(data, 'playlistSidebarPrimaryInfoRenderer')[0];
+  const title = String(metadata?.title || textValue(primary?.title) || 'YouTube Playlist');
+  const image = lastThumbnail(primary?.thumbnailRenderer?.playlistVideoThumbnailRenderer?.thumbnail);
+  hasContinuation ||= collectObjects(data, 'continuationItemRenderer').length > 0;
   return { title, image, entries, sourceEntriesReceived: entries.length, hasContinuation };
 }
