@@ -902,6 +902,7 @@ async function fetchYouTubePlaylist(id: string): Promise<YouTubePlaylistPayload 
     if (!parsed) return null;
 
     const entries = [...parsed.entries];
+    let sourceEntriesReceived = parsed.sourceEntriesReceived;
     const seen = new Set(entries.map((entry) => entry.videoId));
     let continuationToken = parsed.continuationToken;
     let continuationPages = 0;
@@ -946,6 +947,7 @@ async function fetchYouTubePlaylist(id: string): Promise<YouTubePlaylistPayload 
         // A blocked or timed-out continuation should not discard the readable first page.
         break;
       }
+      sourceEntriesReceived += parsedContinuation.sourceEntriesReceived;
       for (const entry of parsedContinuation.entries) {
         if (seen.has(entry.videoId)) continue;
         seen.add(entry.videoId);
@@ -970,16 +972,16 @@ async function fetchYouTubePlaylist(id: string): Promise<YouTubePlaylistPayload 
       sourceAvailability: 'metadata',
       sourcePageUrl: `https://www.youtube.com/watch?v=${entry.videoId}`,
     }));
-    const hasMore = Boolean(continuationToken) || continuationPages >= maxContinuationPages || entries.length >= maxPlaylistEntries;
+    const hasMore = Boolean(continuationToken) || entries.length >= maxPlaylistEntries;
     const data: YouTubePlaylistPayload = {
       kind: 'playlist',
       provider: 'YouTube',
       id,
       title: parsed.title,
-      subtitle: `${entries.length} entries received${hasMore ? ' · playlist may be incomplete' : ''}`,
+      subtitle: `${sourceEntriesReceived} source entries received · ${entries.length} importable entries${hasMore ? ' · playlist may be incomplete' : ''}`,
       image: parsed.image || tracks[0]?.image || '',
-      sourceEntriesReceived: entries.length,
-      sourceEntriesTotal: entries.length,
+      sourceEntriesReceived,
+      sourceEntriesTotal: sourceEntriesReceived,
       complete: !hasMore,
       tracks,
     };
