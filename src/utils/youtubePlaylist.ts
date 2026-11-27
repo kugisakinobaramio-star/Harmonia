@@ -110,6 +110,14 @@ function parseEntries(data: unknown): YouTubePlaylistEntry[] {
   return entries;
 }
 
+function countSourceEntries(data: unknown): number {
+  const legacyRows = collectObjects(data, 'playlistVideoRenderer').length;
+  const modernRows = collectObjects(data, 'lockupViewModel').filter((item) =>
+    String(item.contentType || '').includes('VIDEO')
+  ).length;
+  return legacyRows + modernRows;
+}
+
 function getContinuationToken(data: unknown): string | null {
   const commands = collectObjects(data, 'continuationCommand');
   for (const command of commands) {
@@ -135,7 +143,7 @@ export function parseYouTubePlaylistPage(html: string): ParsedYouTubePlaylistPag
     title: String(metadata?.title || textValue(primary?.title) || 'YouTube Playlist'),
     image: lastThumbnail(primary?.thumbnailRenderer?.playlistVideoThumbnailRenderer?.thumbnail),
     entries,
-    sourceEntriesReceived: entries.length,
+    sourceEntriesReceived: countSourceEntries(data),
     continuationToken: getContinuationToken(data),
     clientVersion,
   };
@@ -144,10 +152,12 @@ export function parseYouTubePlaylistPage(html: string): ParsedYouTubePlaylistPag
 /** Parses one public continuation response. No credentials or API key are used. */
 export function parseYouTubePlaylistContinuation(payload: unknown): {
   entries: YouTubePlaylistEntry[];
+  sourceEntriesReceived: number;
   continuationToken: string | null;
 } {
   return {
     entries: parseEntries(payload),
+    sourceEntriesReceived: countSourceEntries(payload),
     continuationToken: getContinuationToken(payload),
   };
 }
