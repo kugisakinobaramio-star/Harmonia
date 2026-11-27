@@ -41,6 +41,7 @@ test('parses continuation response rows and the next token', () => {
     }],
   });
   assert.equal(result.entries.length, 1);
+  assert.equal(result.sourceEntriesReceived, 1);
   assert.equal(result.entries[0].title, 'Next Song');
   assert.equal(result.continuationToken, 'third-page');
 });
@@ -53,6 +54,18 @@ test('parses current lockup playlist rows', () => {
   assert.ok(result);
   assert.equal(result.entries.length, 1);
   assert.equal(result.entries[0].title, 'Modern Song');
+});
+
+
+test('counts raw source rows even when a row has no importable video ID', () => {
+  const html = `<script>ytInitialData = {"contents":{"playlistVideoListRenderer":{"contents":[
+    {"playlistVideoRenderer":{"videoId":"abcdefghijk","title":{"simpleText":"Song"}}},
+    {"playlistVideoRenderer":{"title":{"simpleText":"Unavailable row"}}}
+  ]}}};</script>`;
+  const result = parseYouTubePlaylistPage(html);
+  assert.ok(result);
+  assert.equal(result.sourceEntriesReceived, 2);
+  assert.equal(result.entries.length, 1);
 });
 
 test('rejects pages without playlist renderer data', () => {
