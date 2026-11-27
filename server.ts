@@ -913,38 +913,39 @@ async function fetchYouTubePlaylist(id: string): Promise<YouTubePlaylistPayload 
     // of requests and total entries; if the format changes, keep the valid first page.
     while (continuationToken && continuationPages < maxContinuationPages && entries.length < maxPlaylistEntries) {
       continuationPages += 1;
-      const continuationController = new AbortController();
-      const continuationTimeout = setTimeout(() => continuationController.abort(), 7000);
-      let continuationResponse: Response;
+      let parsedContinuation: ReturnType<typeof parseYouTubePlaylistContinuation>;
       try {
-        continuationResponse = await fetch(
-          'https://www.youtube.com/youtubei/v1/browse?prettyPrint=false',
-          {
-            method: 'POST',
-            signal: continuationController.signal,
-            headers: {
-              Accept: 'application/json',
-              'Content-Type': 'application/json',
-              Origin: 'https://www.youtube.com',
-              Referer: `https://www.youtube.com/playlist?list=${encodeURIComponent(id)}`,
-            },
-            body: JSON.stringify({
-              context: { client: { clientName: 'WEB', clientVersion } },
-              continuation: continuationToken,
-            }),
-          }
-        );
-      } finally {
-        clearTimeout(continuationTimeout);
+        const continuationController = new AbortController();
+        const continuationTimeout = setTimeout(() => continuationController.abort(), 7000);
+        let continuationResponse: Response;
+        try {
+          continuationResponse = await fetch(
+            'https://www.youtube.com/youtubei/v1/browse?prettyPrint=false',
+            {
+              method: 'POST',
+              signal: continuationController.signal,
+              headers: {
+                Accept: 'application/json',
+                'Content-Type': 'application/json',
+                Origin: 'https://www.youtube.com',
+                Referer: \`https://www.youtube.com/playlist?list=\${encodeURIComponent(id)}\`,
+              },
+              body: JSON.stringify({
+                context: { client: { clientName: 'WEB', clientVersion } },
+                continuation: continuationToken,
+              }),
+            }
+          );
+        } finally {
+          clearTimeout(continuationTimeout);
+        }
+        if (!continuationResponse.ok) break;
+        const continuationPayload: unknown = await continuationResponse.json();
+        parsedContinuation = parseYouTubePlaylistContinuation(continuationPayload);
+      } catch {
+        // A blocked or timed-out continuation should not discard the readable first page.
+        break;
       }
-      if (!continuationResponse.ok) break;
-      const continuationPayload = await continuationResponse.json() as {
-        responseContext?: unknown;
-        continuationContents?: unknown;
-        onResponseReceivedActions?: unknown;
-        onResponseReceivedEndpoints?: unknown;
-      };
-      const parsedContinuation = parseYouTubePlaylistContinuation(continuationPayload);
       for (const entry of parsedContinuation.entries) {
         if (seen.has(entry.videoId)) continue;
         seen.add(entry.videoId);
