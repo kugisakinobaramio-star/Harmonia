@@ -29,7 +29,7 @@ import {
   type CanonicalEditionPlan,
 } from './src/utils/editionSearch.ts';
 import { mapSpotifyEmbedTrackList, type SpotifyEmbedTrackEntry } from './src/utils/spotifyEmbed.ts';
-import { parseYouTubePlaylistContinuation, parseYouTubePlaylistPage } from './src/utils/youtubePlaylist.ts';
+import { parseYouTubePlaylistContinuation, parseYouTubePlaylistPage, parseYouTubePlaylistRss } from './src/utils/youtubePlaylist.ts';
 
 const SAAVN_BASE = 'https://saavn.sumit.co';
 const JIOSAAVN_API_BASE = 'https://www.jiosaavn.com/api.php';
@@ -898,7 +898,38 @@ async function fetchYouTubePlaylist(id: string): Promise<YouTubePlaylistPayload 
     if (!response.ok) return null;
     const html = await response.text();
     if (html.length > 12 * 1024 * 1024) return null;
-    const parsed = parseYouTubePlaylistPage(html);
+    let parsed = parseYouTubePlaylistPage(html);
+    let rssFallback = false;
+    if (!parsed) {
+      // YouTube's public RSS endpoint can expose a small playlist sample even
+      // when the full HTML page is consent-gated or its embedded schema changes.
+      try {
+        const rssResponse = await fetchWithTimeout(
+          `https://www.youtube.com/feeds/videos.xml?playlist_id=${encodeURIComponent(id)}`,
+          7000,
+          { Accept: 'application/atom+xml,application/xml,text/xml' }
+        );
+        if (rssResponse.ok) {
+          const rss = await rssResponse.text();
+          if (rss.length <= 2 * 1024 * 1024) {
+            const rssParsed = parseYouTubePlaylistRss(rss);
+            if (rssParsed) {
+              parsed = {
+                title: rssParsed.title,
+                image: rssParsed.entries[0]?.image || '',
+                entries: rssParsed.entries,
+                sourceEntriesReceived: rssParsed.entries.length,
+                continuationToken: null,
+                clientVersion: '',
+              };
+              rssFallback = true;
+            }
+          }
+        }
+      } catch {
+        // Keep the same clear failure response if both public endpoints fail.
+      }
+    }
     if (!parsed) return null;
 
     const entries = [...parsed.entries];
@@ -972,13 +1003,13 @@ async function fetchYouTubePlaylist(id: string): Promise<YouTubePlaylistPayload 
       sourceAvailability: 'metadata',
       sourcePageUrl: `https://www.youtube.com/watch?v=${entry.videoId}`,
     }));
-    const hasMore = Boolean(continuationToken) || entries.length >= maxPlaylistEntries;
+    const hasMore = rssFallback || Boolean(continuationToken) || entries.length >= maxPlaylistEntries;
     const data: YouTubePlaylistPayload = {
       kind: 'playlist',
       provider: 'YouTube',
       id,
       title: parsed.title,
-      subtitle: `${sourceEntriesReceived} source entries received · ${entries.length} importable entries${hasMore ? ' · playlist may be incomplete' : ''}`,
+      subtitle: `${sourceEntriesReceived} source entries received · ${entries.length} importable entries${rssFallback ? ' · limited public RSS sample' : hasMore ? ' · playlist may be incomplete' : ''}`,
       image: parsed.image || tracks[0]?.image || '',
       sourceEntriesReceived,
       sourceEntriesTotal: sourceEntriesReceived,
