@@ -71,3 +71,20 @@ test('counts raw source rows even when a row has no importable video ID', () => 
 test('rejects pages without playlist renderer data', () => {
   assert.equal(parseYouTubePlaylistPage('<html><body>Unavailable</body></html>'), null);
 });
+
+
+test('parses public playlist RSS fallback entries', async () => {
+  const { parseYouTubePlaylistRss } = await import('./youtubePlaylist.ts');
+  const xml = `<?xml version="1.0"?><feed><title>Road &amp; Night</title>
+    <entry><yt:videoId>abcdefghijk</yt:videoId><title>First &amp; Best</title><author><name>Artist One</name></author><media:thumbnail url="https://i.ytimg.com/one.jpg"/></entry>
+    <entry><yt:videoId>lmnopqrstuv</yt:videoId><title>Second Song</title><author><name>Artist Two</name></author></entry>
+    <entry><yt:videoId>abcdefghijk</yt:videoId><title>Duplicate</title></entry>
+  </feed>`;
+  const result = parseYouTubePlaylistRss(xml);
+  assert.ok(result);
+  assert.equal(result.title, 'Road & Night');
+  assert.equal(result.entries.length, 2);
+  assert.equal(result.entries[0].title, 'First & Best');
+  assert.equal(result.entries[0].channel, 'Artist One');
+  assert.equal(result.entries[0].image, 'https://i.ytimg.com/one.jpg');
+});
