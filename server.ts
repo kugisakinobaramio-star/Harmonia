@@ -29,7 +29,7 @@ import {
   type CanonicalEditionPlan,
 } from './src/utils/editionSearch.ts';
 import { mapSpotifyEmbedTrackList, type SpotifyEmbedTrackEntry } from './src/utils/spotifyEmbed.ts';
-import { parseYouTubePlaylistContinuation, parseYouTubePlaylistPage, parseYouTubePlaylistRss } from './src/utils/youtubePlaylist.ts';
+import { parseYouTubeDataApiPlaylistPage, parseYouTubePlaylistContinuation, parseYouTubePlaylistPage, parseYouTubePlaylistRss } from './src/utils/youtubePlaylist.ts';
 
 const SAAVN_BASE = 'https://saavn.sumit.co';
 const JIOSAAVN_API_BASE = 'https://www.jiosaavn.com/api.php';
@@ -886,9 +886,146 @@ function cacheYouTubePlaylist(id: string, data: YouTubePlaylistPayload): void {
   youtubePlaylistCache.set(id, { expiresAt: now + 10 * 60_000, data });
 }
 
-async function fetchYouTubePlaylist(id: string): Promise<YouTubePlaylistPayload | null> {
+async function fetchYouTubePlaylistFromDataApi(
+  id: string,
+  apiKey: string
+): Promise<YouTubePlaylistPayload | null> {
+  const maxPages = 10;
+  const maxEntries = 500;
+  let title = 'YouTube Playlist';
+  let playlistImage = '';
+  try {
+    const metadataUrl = new URL('https://youtube.googleapis.com/youtube/v3/playlists');
+    metadataUrl.search = new URLSearchParams({
+      part: 'snippet',
+      id,
+      key: apiKey,
+    }).toString();
+    const metadataResponse = await fetchWithTimeout(metadataUrl.toString(), 6000, {
+      Accept: 'application/json',
+    });
+    if (metadataResponse.ok) {
+      const metadata = await metadataResponse.json() as any;
+      const snippet = metadata?.items?.[0]?.snippet;
+      if (typeof snippet?.title === 'string' && snippet.title) title = snippet.title;
+      const thumbs = snippet?.thumbnails || {};
+      playlistImage = String(
+        thumbs.maxres?.url || thumbs.standard?.url || thumbs.high?.url ||
+        thumbs.medium?.url || thumbs.default?.url || ''
+      );
+    }
+  } catch {
+    // Playlist metadata is optional; playlist items may still be readable.
+  }
+
+  const entries: ReturnType<typeof parseYouTubeDataApiPlaylistPage>['entries'] = [];
+  const seen = new Set<string>();
+  let sourceEntriesReceived = 0;
+  let sourceEntriesTotal = 0;
+  let pageToken = '';
+  let pages = 0;
+  let hasMore = false;
+
+  while (pages < maxPages && entries.length < maxEntries) {
+    const url = new URL('https://youtube.googleapis.com/youtube/v3/playlistItems');
+    const params: Record<string, string> = {
+      part: 'snippet,contentDetails',
+      maxResults: '50',
+      playlistId: id,
+      key: apiKey,
+    };
+    if (pageToken) params.pageToken = pageToken;
+    url.search = new URLSearchParams(params).toString();
+
+    let response: Response;
+    try {
+      response = await fetchWithTimeout(url.toString(), 9000, { Accept: 'application/json' });
+    } catch {
+      hasMore = true;
+      break;
+    }
+    if (!response.ok) {
+      hasMore = true;
+      break;
+    }
+
+    let parsed: ReturnType<typeof parseYouTubeDataApiPlaylistPage>;
+    try {
+      parsed = parseYouTubeDataApiPlaylistPage(await response.json());
+    } catch {
+      hasMore = true;
+      break;
+    }
+    pages += 1;
+    sourceEntriesReceived += parsed.sourceEntriesReceived;
+    sourceEntriesTotal = Math.max(sourceEntriesTotal, parsed.sourceEntriesTotal);
+    for (const entry of parsed.entries) {
+      if (seen.has(entry.videoId)) continue;
+      seen.add(entry.videoId);
+      entries.push(entry);
+      if (entries.length >= maxEntries) break;
+    }
+    if (!parsed.nextPageToken) {
+      pageToken = '';
+      hasMore = false;
+      break;
+    }
+    if (parsed.nextPageToken === pageToken) {
+      hasMore = true;
+      break;
+    }
+    pageToken = parsed.nextPageToken;
+    hasMore = true;
+  }
+  if (pageToken || pages >= maxPages || entries.length >= maxEntries && sourceEntriesReceived < sourceEntriesTotal) {
+    hasMore = true;
+  }
+  if (!pages || !sourceEntriesReceived) return null;
+
+  const tracks: StoredTrack[] = entries.map((entry) => ({
+    id: `yt-${entry.videoId}`,
+    name: entry.title,
+    artist: entry.channel,
+    albumName: title,
+    duration: entry.duration,
+    image: entry.image,
+    language: inferLanguage(entry.title),
+    genre: 'YouTube Playlist',
+    metadataOnly: true,
+    sourceProvider: 'YouTube',
+    sourceAvailability: 'metadata',
+    sourcePageUrl: `https://www.youtube.com/watch?v=${entry.videoId}`,
+  }));
+  const complete = !hasMore && (!sourceEntriesTotal || sourceEntriesReceived >= sourceEntriesTotal);
+  const data: YouTubePlaylistPayload = {
+    kind: 'playlist',
+    provider: 'YouTube',
+    id,
+    title,
+    subtitle: `${sourceEntriesReceived} source entries received · ${entries.length} importable entries${complete ? '' : ' · playlist may be incomplete'}`,
+    image: playlistImage || tracks[0]?.image || '',
+    sourceEntriesReceived,
+    sourceEntriesTotal: sourceEntriesTotal || sourceEntriesReceived,
+    complete,
+    tracks,
+  };
+  return data;
+}
+
+async function fetchYouTubePlaylist(id: string, apiKey = ''): Promise<YouTubePlaylistPayload | null> {
   const cached = youtubePlaylistCache.get(id);
   if (cached && cached.expiresAt > Date.now()) return cached.data;
+  if (apiKey) {
+    try {
+      const apiResult = await fetchYouTubePlaylistFromDataApi(id, apiKey);
+      if (apiResult) {
+        cacheYouTubePlaylist(id, apiResult);
+        return apiResult;
+      }
+    } catch {
+      // Preserve the public no-key fallback if the configured API request fails.
+    }
+  }
   try {
     // The HTML request itself can be blocked or time out, so keep it separate
     // from the RSS fallback rather than returning before the fallback is tried.
@@ -1032,9 +1169,10 @@ async function fetchYouTubePlaylist(id: string): Promise<YouTubePlaylistPayload 
   }
 }
 
-export async function createApp(options: { mode?: 'node-development' | 'node-production' | 'worker' } = {}) {
+export async function createApp(options: { mode?: 'node-development' | 'node-production' | 'worker'; youtubeDataApiKey?: string } = {}) {
   const mode = options.mode ?? (process.env.NODE_ENV === 'production' ? 'node-production' : 'node-development');
   cloudflareWorkerRuntime = mode === 'worker';
+  const youtubeDataApiKey = options.youtubeDataApiKey || (mode !== 'worker' ? process.env.YOUTUBE_DATA_API_KEY || '' : '');
   const app = express();
   app.disable('x-powered-by');
 
@@ -2196,7 +2334,7 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
       res.status(400).json({ ok: false, error: 'Invalid YouTube playlist link' });
       return;
     }
-    const playlist = await fetchYouTubePlaylist(id);
+    const playlist = await fetchYouTubePlaylist(id, youtubeDataApiKey);
     if (!playlist) {
       res.status(502).json({
         ok: false,
