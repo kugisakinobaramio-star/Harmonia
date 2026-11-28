@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { parseYouTubePlaylistContinuation, parseYouTubePlaylistPage } from './youtubePlaylist.ts';
+import { parseYouTubeDataApiPlaylistPage, parseYouTubePlaylistContinuation, parseYouTubePlaylistPage } from './youtubePlaylist.ts';
 
 test('parses legacy playlist rows and preserves order and durations', () => {
   const html = `<script>var ytInitialData = {
@@ -87,4 +87,36 @@ test('parses public playlist RSS fallback entries', async () => {
   assert.equal(result.entries[0].title, 'First & Best');
   assert.equal(result.entries[0].channel, 'Artist One');
   assert.equal(result.entries[0].image, 'https://i.ytimg.com/one.jpg');
+});
+
+
+test('parses official YouTube Data API playlist item pages and pagination metadata', () => {
+  const result = parseYouTubeDataApiPlaylistPage({
+    pageInfo: { totalResults: 78, resultsPerPage: 50 },
+    nextPageToken: 'page-two',
+    items: [
+      {
+        contentDetails: { videoId: 'abcdefghijk' },
+        snippet: {
+          title: 'First Song',
+          videoOwnerChannelTitle: 'Artist One',
+          thumbnails: { high: { url: 'https://i.ytimg.com/first.jpg' } },
+        },
+      },
+      {
+        snippet: { title: 'Private or deleted entry' },
+      },
+      {
+        contentDetails: { videoId: 'lmnopqrstuv' },
+        snippet: { title: 'Second Song', channelTitle: 'Artist Two' },
+      },
+    ],
+  });
+  assert.equal(result.sourceEntriesReceived, 3);
+  assert.equal(result.sourceEntriesTotal, 78);
+  assert.equal(result.nextPageToken, 'page-two');
+  assert.equal(result.entries.length, 2);
+  assert.equal(result.entries[0].title, 'First Song');
+  assert.equal(result.entries[0].channel, 'Artist One');
+  assert.equal(result.entries[0].image, 'https://i.ytimg.com/first.jpg');
 });
