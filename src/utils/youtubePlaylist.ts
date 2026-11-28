@@ -147,26 +147,44 @@ function decodeXmlText(value: string): string {
  * playlist HTML/ytInitialData is unavailable. RSS is capped by YouTube, so
  * callers must always mark results as potentially incomplete.
  */
+function extractXmlTag(block: string, tag: string): string {
+  const opening = `<${tag}>`;
+  const closing = `</${tag}>`;
+  const start = block.indexOf(opening);
+  if (start < 0) return '';
+  const contentStart = start + opening.length;
+  const end = block.indexOf(closing, contentStart);
+  return end < 0 ? '' : block.slice(contentStart, end);
+}
+
+/**
+ * Parses YouTube's public playlist RSS feed as a limited fallback when the
+ * playlist HTML/ytInitialData is unavailable. RSS is capped by YouTube, so
+ * callers must always mark results as potentially incomplete.
+ */
 export function parseYouTubePlaylistRss(xml: string): {
   title: string;
   entries: YouTubePlaylistEntry[];
 } | null {
   if (!xml.includes('<feed') || !xml.includes('</feed>')) return null;
-  const title = decodeXmlText(xml.match(/<feed\b[^>]*>[\s\S]*?<title>([\s\S]*?)<\/title>/i)?.[1] || 'YouTube Playlist').trim();
+  const title = decodeXmlText(extractXmlTag(xml, 'title')).trim() || 'YouTube Playlist';
   const entries: YouTubePlaylistEntry[] = [];
   const seen = new Set<string>();
-  for (const match of xml.matchAll(/<entry\b[^>]*>([\s\S]*?)<\/entry>/gi)) {
-    const block = match[1];
-    const videoId = block.match(/<yt:videoId>([A-Za-z0-9_-]{11})<\/yt:videoId>/i)?.[1] || '';
-    if (!videoId || seen.has(videoId)) continue;
+  const blocks = xml.split(/<entry\\b[^>]*>/i).slice(1);
+  for (const rawBlock of blocks) {
+    const end = rawBlock.indexOf('</entry>');
+    if (end < 0) continue;
+    const block = rawBlock.slice(0, end);
+    const videoId = extractXmlTag(block, 'yt:videoId').trim();
+    if (!/^[A-Za-z0-9_-]{11}$/.test(videoId) || seen.has(videoId)) continue;
     seen.add(videoId);
-    const rawTitle = block.match(/<title>([\s\S]*?)<\/title>/i)?.[1] || '';
-    const rawChannel = block.match(/<author>\s*<name>([\s\S]*?)<\/name>/i)?.[1] || '';
-    const thumbnail = block.match(/<media:thumbnail\b[^>]*\burl=["']([^"']+)["']/i)?.[1] || '';
+    const rawTitle = extractXmlTag(block, 'title');
+    const author = block.match(/<author>\\s*<name>([\\s\\S]*?)<\\/name>\\s*<\\/author>/i)?.[1] || '';
+    const thumbnail = block.match(/<media:thumbnail\\b[^>]*\\burl=["']([^"']+)["']/i)?.[1] || '';
     entries.push({
       videoId,
       title: decodeXmlText(rawTitle).trim() || 'Unavailable video',
-      channel: decodeXmlText(rawChannel).trim() || 'YouTube',
+      channel: decodeXmlText(author).trim() || 'YouTube',
       duration: 0,
       image: decodeXmlText(thumbnail),
       playable: true,
