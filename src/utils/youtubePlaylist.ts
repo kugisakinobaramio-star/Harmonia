@@ -170,7 +170,7 @@ export function parseYouTubePlaylistRss(xml: string): {
   const title = decodeXmlText(extractXmlTag(xml, 'title')).trim() || 'YouTube Playlist';
   const entries: YouTubePlaylistEntry[] = [];
   const seen = new Set<string>();
-  const blocks = xml.split(/<entry\\b[^>]*>/i).slice(1);
+  const blocks = xml.split(/<entry\b[^>]*>/i).slice(1);
   for (const rawBlock of blocks) {
     const end = rawBlock.indexOf('</entry>');
     if (end < 0) continue;
@@ -179,8 +179,8 @@ export function parseYouTubePlaylistRss(xml: string): {
     if (!/^[A-Za-z0-9_-]{11}$/.test(videoId) || seen.has(videoId)) continue;
     seen.add(videoId);
     const rawTitle = extractXmlTag(block, 'title');
-    const author = block.match(/<author>\\s*<name>([\\s\\S]*?)<\\/name>\\s*<\\/author>/i)?.[1] || '';
-    const thumbnail = block.match(/<media:thumbnail\\b[^>]*\\burl=["']([^"']+)["']/i)?.[1] || '';
+    const author = block.match(/<author>\s*<name>([\s\S]*?)<\/name>\s*<\/author>/i)?.[1] || '';
+    const thumbnail = block.match(/<media:thumbnail\b[^>]*\burl=["']([^"']+)["']/i)?.[1] || '';
     entries.push({
       videoId,
       title: decodeXmlText(rawTitle).trim() || 'Unavailable video',
