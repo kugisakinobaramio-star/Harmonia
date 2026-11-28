@@ -890,19 +890,28 @@ async function fetchYouTubePlaylist(id: string): Promise<YouTubePlaylistPayload 
   const cached = youtubePlaylistCache.get(id);
   if (cached && cached.expiresAt > Date.now()) return cached.data;
   try {
-    const response = await fetchWithTimeout(
-      `https://www.youtube.com/playlist?list=${encodeURIComponent(id)}`,
-      9000,
-      { Accept: 'text/html,application/xhtml+xml' }
-    );
-    if (!response.ok) return null;
-    const html = await response.text();
-    if (html.length > 12 * 1024 * 1024) return null;
-    let parsed = parseYouTubePlaylistPage(html);
+    // The HTML request itself can be blocked or time out, so keep it separate
+    // from the RSS fallback rather than returning before the fallback is tried.
+    let parsed: ReturnType<typeof parseYouTubePlaylistPage> = null;
     let rssFallback = false;
+    try {
+      const response = await fetchWithTimeout(
+        `https://www.youtube.com/playlist?list=${encodeURIComponent(id)}`,
+        9000,
+        { Accept: 'text/html,application/xhtml+xml' }
+      );
+      if (response.ok) {
+        const html = await response.text();
+        if (html.length <= 12 * 1024 * 1024) {
+          parsed = parseYouTubePlaylistPage(html);
+        }
+      }
+    } catch {
+      // Try the public RSS feed below when HTML is blocked or unavailable.
+    }
     if (!parsed) {
       // YouTube's public RSS endpoint can expose a small playlist sample even
-      // when the full HTML page is consent-gated or its embedded schema changes.
+      // when the full HTML page is blocked, consent-gated, or its schema changes.
       try {
         const rssResponse = await fetchWithTimeout(
           `https://www.youtube.com/feeds/videos.xml?playlist_id=${encodeURIComponent(id)}`,
@@ -2161,7 +2170,7 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
     res.json({ ok: true, ...entity });
   });
 
-  // Public YouTube playlist import via the official Data API. No user login is required.
+  // Best-effort public YouTube playlist import without requiring user login or an API key.
   app.get('/api/music/youtube/playlist', async (req, res) => {
     const now = Date.now();
     const clientKey = req.get('cf-connecting-ip') || req.ip || req.socket.remoteAddress || 'unknown';
