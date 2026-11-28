@@ -28,7 +28,7 @@ function extractJsonAfterMarker(html: string, marker: string): unknown | null {
     const char = html[index];
     if (inString) {
       if (escaped) escaped = false;
-      else if (char === '\') escaped = true;
+      else if (char === '\\') escaped = true;
       else if (char === '"') inString = false;
       continue;
     }
