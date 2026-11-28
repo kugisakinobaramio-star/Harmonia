@@ -224,3 +224,49 @@ export function parseYouTubePlaylistContinuation(payload: unknown): {
     continuationToken: getContinuationToken(payload),
   };
 }
+
+
+/** Parses one official YouTube Data API v3 playlistItems.list response. */
+export function parseYouTubeDataApiPlaylistPage(payload: unknown): {
+  entries: YouTubePlaylistEntry[];
+  sourceEntriesReceived: number;
+  sourceEntriesTotal: number;
+  nextPageToken: string | null;
+} {
+  const data = payload && typeof payload === 'object' ? payload as Record<string, any> : {};
+  const items = Array.isArray(data.items) ? data.items : [];
+  const entries: YouTubePlaylistEntry[] = [];
+  const seen = new Set<string>();
+  for (const item of items) {
+    const snippet = item?.snippet || {};
+    const videoId = String(item?.contentDetails?.videoId || snippet?.resourceId?.videoId || '');
+    if (!/^[A-Za-z0-9_-]{11}$/.test(videoId) || seen.has(videoId)) continue;
+    seen.add(videoId);
+    const thumbnails = snippet?.thumbnails || {};
+    const image = String(
+      thumbnails.maxres?.url ||
+      thumbnails.standard?.url ||
+      thumbnails.high?.url ||
+      thumbnails.medium?.url ||
+      thumbnails.default?.url ||
+      ''
+    );
+    entries.push({
+      videoId,
+      title: String(snippet.title || 'Unavailable video'),
+      channel: String(snippet.videoOwnerChannelTitle || snippet.channelTitle || 'YouTube'),
+      duration: 0,
+      image,
+      playable: true,
+    });
+  }
+  const total = Number(data.pageInfo?.totalResults);
+  return {
+    entries,
+    sourceEntriesReceived: items.length,
+    sourceEntriesTotal: Number.isFinite(total) && total >= 0 ? total : 0,
+    nextPageToken: typeof data.nextPageToken === 'string' && data.nextPageToken
+      ? data.nextPageToken
+      : null,
+  };
+}
