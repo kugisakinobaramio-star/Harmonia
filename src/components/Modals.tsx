@@ -267,11 +267,13 @@ export function SpotifyImportModal({ open, onClose, onImportSpotifyUrl }: Spotif
   const handleSubmit = async () => {
     const trimmed = input.trim();
     if (!trimmed) {
-      setError('Paste a Spotify playlist link first.');
+      setError('Paste a Spotify or YouTube playlist link first.');
       return;
     }
-    if (!isSpotifyLinkOrUri(trimmed) || !/(?:open\.spotify\.com\/playlist\/|spotify:playlist:)/i.test(trimmed)) {
-      setError('Please enter a Spotify playlist link, not a track, album or search term.');
+    const isSpotifyPlaylist = /(?:open\.spotify\.com\/(?:intl-[a-z-]+\/)?playlist\/|spotify:playlist:)/i.test(trimmed);
+    const isYouTubePlaylist = /(?:youtube\.com\/playlist\?(?:.*&)?list=|music\.youtube\.com\/playlist\?(?:.*&)?list=)/i.test(trimmed);
+    if (!isSpotifyPlaylist && !isYouTubePlaylist) {
+      setError('Enter a Spotify or YouTube playlist link.');
       return;
     }
     setResolving(true);
@@ -292,18 +294,18 @@ export function SpotifyImportModal({ open, onClose, onImportSpotifyUrl }: Spotif
   };
 
   return (
-    <div role="dialog" aria-modal="true" aria-label="Import Spotify playlist" className="fixed inset-0 z-50 grid place-items-center bg-black/80 p-4 backdrop-blur-xs">
+    <div role="dialog" aria-modal="true" aria-label="Import music playlist" className="fixed inset-0 z-50 grid place-items-center bg-black/80 p-4 backdrop-blur-xs">
       <div className="w-full max-w-lg rounded-xl border border-white/10 bg-[#18181b] p-5 shadow-2xl">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-extrabold text-white">Import Spotify Playlist</h2>
+          <h2 className="text-lg font-extrabold text-white">Import Playlist</h2>
           <button type="button" onClick={onClose} aria-label="Close modal" disabled={resolving} className="rounded-full p-1.5 text-zinc-400 hover:bg-white/10 hover:text-white disabled:opacity-50">
             <X className="h-4 w-4" />
           </button>
         </div>
         <p className="mt-2 text-xs leading-relaxed text-zinc-400">
-          Paste your playlist link to bring its track list into your MusicKK Library. Spotify audio is not copied; MusicKK uses its existing music sources for playback.
+          Paste a public Spotify or YouTube playlist link. No account login or YouTube Data API key is required. Spotify's public embed may expose only part of a playlist; YouTube imports read public playlist metadata and may be marked incomplete if YouTube blocks additional pages. Audio is not copied.
         </p>
-        <label htmlFor="spotify-import-input" className="sr-only">Spotify playlist link</label>
+        <label htmlFor="spotify-import-input" className="sr-only">Spotify or YouTube playlist link</label>
         <input
           id="spotify-import-input"
           type="url"
@@ -311,7 +313,7 @@ export function SpotifyImportModal({ open, onClose, onImportSpotifyUrl }: Spotif
           value={input}
           onChange={(event) => { setInput(event.target.value); setError(''); }}
           onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); void handleSubmit(); } }}
-          placeholder="https://open.spotify.com/playlist/..."
+          placeholder="Spotify or YouTube playlist URL"
           className="mt-3 w-full rounded-lg border border-white/10 bg-[#242429] px-3.5 py-2.5 text-sm text-white placeholder-zinc-500 focus:border-[#1DB954] focus:outline-none"
           disabled={resolving}
         />

@@ -29,6 +29,7 @@ import {
   type CanonicalEditionPlan,
 } from './src/utils/editionSearch.ts';
 import { mapSpotifyEmbedTrackList, type SpotifyEmbedTrackEntry } from './src/utils/spotifyEmbed.ts';
+import { parseYouTubeDataApiPlaylistPage, parseYouTubePlaylistContinuation, parseYouTubePlaylistPage, parseYouTubePlaylistRss } from './src/utils/youtubePlaylist.ts';
 
 const SAAVN_BASE = 'https://saavn.sumit.co';
 const JIOSAAVN_API_BASE = 'https://www.jiosaavn.com/api.php';
@@ -840,9 +841,338 @@ async function fetchSpotifyEmbedEntity(
   }
 }
 
-export async function createApp(options: { mode?: 'node-development' | 'node-production' | 'worker' } = {}) {
+function parseYouTubePlaylistId(input: string): string | null {
+  const value = String(input || '').trim();
+  if (/^[A-Za-z0-9_-]{10,80}$/.test(value)) return value;
+  try {
+    const url = new URL(value);
+    const host = url.hostname.toLowerCase().replace(/^www\./, '');
+    if (host !== 'youtube.com' && host !== 'm.youtube.com' && host !== 'music.youtube.com') return null;
+    if (url.pathname !== '/playlist') return null;
+    const id = url.searchParams.get('list') || '';
+    return /^[A-Za-z0-9_-]{10,80}$/.test(id) ? id : null;
+  } catch {
+    return null;
+  }
+}
+
+interface YouTubePlaylistPayload {
+  kind: 'playlist';
+  provider: 'YouTube';
+  id: string;
+  title: string;
+  subtitle: string;
+  image: string;
+  sourceEntriesReceived: number;
+  sourceEntriesTotal: number;
+  complete: boolean;
+  tracks: StoredTrack[];
+}
+
+const youtubePlaylistCache = new Map<string, { expiresAt: number; data: YouTubePlaylistPayload }>();
+const youtubePlaylistRateLimits = new Map<string, { count: number; resetAt: number }>();
+
+function cacheYouTubePlaylist(id: string, data: YouTubePlaylistPayload): void {
+  const now = Date.now();
+  for (const [key, entry] of youtubePlaylistCache) {
+    if (entry.expiresAt <= now) youtubePlaylistCache.delete(key);
+  }
+  // Keep memory bounded even if clients request many distinct public playlist IDs.
+  while (youtubePlaylistCache.size >= 200) {
+    const oldestKey = youtubePlaylistCache.keys().next().value;
+    if (!oldestKey) break;
+    youtubePlaylistCache.delete(oldestKey);
+  }
+  youtubePlaylistCache.set(id, { expiresAt: now + 10 * 60_000, data });
+}
+
+async function fetchYouTubePlaylistFromDataApi(
+  id: string,
+  apiKey: string
+): Promise<YouTubePlaylistPayload | null> {
+  const maxPages = 10;
+  const maxEntries = 500;
+  let title = 'YouTube Playlist';
+  let playlistImage = '';
+  try {
+    const metadataUrl = new URL('https://youtube.googleapis.com/youtube/v3/playlists');
+    metadataUrl.search = new URLSearchParams({
+      part: 'snippet',
+      id,
+      key: apiKey,
+    }).toString();
+    const metadataResponse = await fetchWithTimeout(metadataUrl.toString(), 6000, {
+      Accept: 'application/json',
+    });
+    if (metadataResponse.ok) {
+      const metadata = await metadataResponse.json() as any;
+      const snippet = metadata?.items?.[0]?.snippet;
+      if (typeof snippet?.title === 'string' && snippet.title) title = snippet.title;
+      const thumbs = snippet?.thumbnails || {};
+      playlistImage = String(
+        thumbs.maxres?.url || thumbs.standard?.url || thumbs.high?.url ||
+        thumbs.medium?.url || thumbs.default?.url || ''
+      );
+    }
+  } catch {
+    // Playlist metadata is optional; playlist items may still be readable.
+  }
+
+  const entries: ReturnType<typeof parseYouTubeDataApiPlaylistPage>['entries'] = [];
+  const seen = new Set<string>();
+  let sourceEntriesReceived = 0;
+  let sourceEntriesTotal = 0;
+  let pageToken = '';
+  let pages = 0;
+  let hasMore = false;
+
+  while (pages < maxPages && entries.length < maxEntries) {
+    const url = new URL('https://youtube.googleapis.com/youtube/v3/playlistItems');
+    const params: Record<string, string> = {
+      part: 'snippet,contentDetails',
+      maxResults: '50',
+      playlistId: id,
+      key: apiKey,
+    };
+    if (pageToken) params.pageToken = pageToken;
+    url.search = new URLSearchParams(params).toString();
+
+    let response: Response;
+    try {
+      response = await fetchWithTimeout(url.toString(), 9000, { Accept: 'application/json' });
+    } catch {
+      hasMore = true;
+      break;
+    }
+    if (!response.ok) {
+      hasMore = true;
+      break;
+    }
+
+    let parsed: ReturnType<typeof parseYouTubeDataApiPlaylistPage>;
+    try {
+      parsed = parseYouTubeDataApiPlaylistPage(await response.json());
+    } catch {
+      hasMore = true;
+      break;
+    }
+    pages += 1;
+    sourceEntriesReceived += parsed.sourceEntriesReceived;
+    sourceEntriesTotal = Math.max(sourceEntriesTotal, parsed.sourceEntriesTotal);
+    for (const entry of parsed.entries) {
+      if (seen.has(entry.videoId)) continue;
+      seen.add(entry.videoId);
+      entries.push(entry);
+      if (entries.length >= maxEntries) break;
+    }
+    if (!parsed.nextPageToken) {
+      pageToken = '';
+      hasMore = false;
+      break;
+    }
+    if (parsed.nextPageToken === pageToken) {
+      hasMore = true;
+      break;
+    }
+    pageToken = parsed.nextPageToken;
+    hasMore = true;
+  }
+  if (pageToken || pages >= maxPages || entries.length >= maxEntries && sourceEntriesReceived < sourceEntriesTotal) {
+    hasMore = true;
+  }
+  if (!pages || !sourceEntriesReceived) return null;
+
+  const tracks: StoredTrack[] = entries.map((entry) => ({
+    id: `yt-${entry.videoId}`,
+    name: entry.title,
+    artist: entry.channel,
+    albumName: title,
+    duration: entry.duration,
+    image: entry.image,
+    language: inferLanguage(entry.title),
+    genre: 'YouTube Playlist',
+    metadataOnly: true,
+    sourceProvider: 'YouTube',
+    sourceAvailability: 'metadata',
+    sourcePageUrl: `https://www.youtube.com/watch?v=${entry.videoId}`,
+  }));
+  const complete = !hasMore && (!sourceEntriesTotal || sourceEntriesReceived >= sourceEntriesTotal);
+  const data: YouTubePlaylistPayload = {
+    kind: 'playlist',
+    provider: 'YouTube',
+    id,
+    title,
+    subtitle: `${sourceEntriesReceived} source entries received · ${entries.length} importable entries${complete ? '' : ' · playlist may be incomplete'}`,
+    image: playlistImage || tracks[0]?.image || '',
+    sourceEntriesReceived,
+    sourceEntriesTotal: sourceEntriesTotal || sourceEntriesReceived,
+    complete,
+    tracks,
+  };
+  return data;
+}
+
+async function fetchYouTubePlaylist(id: string, apiKey = ''): Promise<YouTubePlaylistPayload | null> {
+  const cached = youtubePlaylistCache.get(id);
+  if (cached && cached.expiresAt > Date.now()) return cached.data;
+  if (apiKey) {
+    try {
+      const apiResult = await fetchYouTubePlaylistFromDataApi(id, apiKey);
+      if (apiResult) {
+        cacheYouTubePlaylist(id, apiResult);
+        return apiResult;
+      }
+    } catch {
+      // Preserve the public no-key fallback if the configured API request fails.
+    }
+  }
+  try {
+    // The HTML request itself can be blocked or time out, so keep it separate
+    // from the RSS fallback rather than returning before the fallback is tried.
+    let parsed: ReturnType<typeof parseYouTubePlaylistPage> = null;
+    let rssFallback = false;
+    try {
+      const response = await fetchWithTimeout(
+        `https://www.youtube.com/playlist?list=${encodeURIComponent(id)}`,
+        9000,
+        { Accept: 'text/html,application/xhtml+xml' }
+      );
+      if (response.ok) {
+        const html = await response.text();
+        if (html.length <= 12 * 1024 * 1024) {
+          parsed = parseYouTubePlaylistPage(html);
+        }
+      }
+    } catch {
+      // Try the public RSS feed below when HTML is blocked or unavailable.
+    }
+    if (!parsed) {
+      // YouTube's public RSS endpoint can expose a small playlist sample even
+      // when the full HTML page is blocked, consent-gated, or its schema changes.
+      try {
+        const rssResponse = await fetchWithTimeout(
+          `https://www.youtube.com/feeds/videos.xml?playlist_id=${encodeURIComponent(id)}`,
+          7000,
+          { Accept: 'application/atom+xml,application/xml,text/xml' }
+        );
+        if (rssResponse.ok) {
+          const rss = await rssResponse.text();
+          if (rss.length <= 2 * 1024 * 1024) {
+            const rssParsed = parseYouTubePlaylistRss(rss);
+            if (rssParsed) {
+              parsed = {
+                title: rssParsed.title,
+                image: rssParsed.entries[0]?.image || '',
+                entries: rssParsed.entries,
+                sourceEntriesReceived: rssParsed.entries.length,
+                continuationToken: null,
+                clientVersion: '',
+              };
+              rssFallback = true;
+            }
+          }
+        }
+      } catch {
+        // Keep the same clear failure response if both public endpoints fail.
+      }
+    }
+    if (!parsed) return null;
+
+    const entries = [...parsed.entries];
+    let sourceEntriesReceived = parsed.sourceEntriesReceived;
+    const seen = new Set(entries.map((entry) => entry.videoId));
+    let continuationToken = parsed.continuationToken;
+    let continuationPages = 0;
+    const maxContinuationPages = 9;
+    const maxPlaylistEntries = 500;
+    const clientVersion = parsed.clientVersion || '2.20250101.00.00';
+
+    // YouTube's public continuation interface is undocumented. Bound the number
+    // of requests and total entries; if the format changes, keep the valid first page.
+    while (continuationToken && continuationPages < maxContinuationPages && entries.length < maxPlaylistEntries) {
+      continuationPages += 1;
+      let parsedContinuation: ReturnType<typeof parseYouTubePlaylistContinuation>;
+      try {
+        const continuationController = new AbortController();
+        const continuationTimeout = setTimeout(() => continuationController.abort(), 7000);
+        let continuationResponse: Response;
+        try {
+          continuationResponse = await fetch(
+            'https://www.youtube.com/youtubei/v1/browse?prettyPrint=false',
+            {
+              method: 'POST',
+              signal: continuationController.signal,
+              headers: {
+                Accept: 'application/json',
+                'Content-Type': 'application/json',
+                Origin: 'https://www.youtube.com',
+                Referer: `https://www.youtube.com/playlist?list=${encodeURIComponent(id)}`,
+              },
+              body: JSON.stringify({
+                context: { client: { clientName: 'WEB', clientVersion } },
+                continuation: continuationToken,
+              }),
+            }
+          );
+        } finally {
+          clearTimeout(continuationTimeout);
+        }
+        if (!continuationResponse.ok) break;
+        const continuationPayload: unknown = await continuationResponse.json();
+        parsedContinuation = parseYouTubePlaylistContinuation(continuationPayload);
+      } catch {
+        // A blocked or timed-out continuation should not discard the readable first page.
+        break;
+      }
+      sourceEntriesReceived += parsedContinuation.sourceEntriesReceived;
+      for (const entry of parsedContinuation.entries) {
+        if (seen.has(entry.videoId)) continue;
+        seen.add(entry.videoId);
+        entries.push(entry);
+        if (entries.length >= maxPlaylistEntries) break;
+      }
+      if (!parsedContinuation.entries.length || parsedContinuation.continuationToken === continuationToken) break;
+      continuationToken = parsedContinuation.continuationToken;
+    }
+
+    const tracks: StoredTrack[] = entries.map((entry) => ({
+      id: `yt-${entry.videoId}`,
+      name: entry.title,
+      artist: entry.channel,
+      albumName: parsed.title,
+      duration: entry.duration,
+      image: entry.image,
+      language: inferLanguage(entry.title),
+      genre: 'YouTube Playlist',
+      metadataOnly: true,
+      sourceProvider: 'YouTube',
+      sourceAvailability: 'metadata',
+      sourcePageUrl: `https://www.youtube.com/watch?v=${entry.videoId}`,
+    }));
+    const hasMore = rssFallback || Boolean(continuationToken) || entries.length >= maxPlaylistEntries;
+    const data: YouTubePlaylistPayload = {
+      kind: 'playlist',
+      provider: 'YouTube',
+      id,
+      title: parsed.title,
+      subtitle: `${sourceEntriesReceived} source entries received · ${entries.length} importable entries${rssFallback ? ' · limited public RSS sample' : hasMore ? ' · playlist may be incomplete' : ''}`,
+      image: parsed.image || tracks[0]?.image || '',
+      sourceEntriesReceived,
+      sourceEntriesTotal: sourceEntriesReceived,
+      complete: !hasMore,
+      tracks,
+    };
+    cacheYouTubePlaylist(id, data);
+    return data;
+  } catch {
+    return null;
+  }
+}
+
+export async function createApp(options: { mode?: 'node-development' | 'node-production' | 'worker'; youtubeDataApiKey?: string } = {}) {
   const mode = options.mode ?? (process.env.NODE_ENV === 'production' ? 'node-production' : 'node-development');
   cloudflareWorkerRuntime = mode === 'worker';
+  const youtubeDataApiKey = options.youtubeDataApiKey || (mode !== 'worker' ? process.env.YOUTUBE_DATA_API_KEY || '' : '');
   const app = express();
   app.disable('x-powered-by');
 
@@ -1976,6 +2306,44 @@ export async function createApp(options: { mode?: 'node-development' | 'node-pro
       return;
     }
     res.json({ ok: true, ...entity });
+  });
+
+  // Best-effort public YouTube playlist import without requiring user login or an API key.
+  app.get('/api/music/youtube/playlist', async (req, res) => {
+    const now = Date.now();
+    const clientKey = req.get('cf-connecting-ip') || req.ip || req.socket.remoteAddress || 'unknown';
+    let bucket = youtubePlaylistRateLimits.get(clientKey);
+    if (!bucket || bucket.resetAt <= now) {
+      bucket = { count: 0, resetAt: now + 60_000 };
+      youtubePlaylistRateLimits.set(clientKey, bucket);
+    }
+    bucket.count += 1;
+    if (bucket.count > 20) {
+      res.setHeader('Retry-After', String(Math.max(1, Math.ceil((bucket.resetAt - now) / 1000))));
+      res.status(429).json({ ok: false, error: 'Too many playlist import requests. Please retry shortly.' });
+      return;
+    }
+    if (youtubePlaylistRateLimits.size > 10_000) {
+      for (const [client, limit] of youtubePlaylistRateLimits) {
+        if (limit.resetAt <= now) youtubePlaylistRateLimits.delete(client);
+        if (youtubePlaylistRateLimits.size <= 8_000) break;
+      }
+    }
+    const id = parseYouTubePlaylistId(String(req.query.url || req.query.id || ''));
+    if (!id) {
+      res.status(400).json({ ok: false, error: 'Invalid YouTube playlist link' });
+      return;
+    }
+    const playlist = await fetchYouTubePlaylist(id, youtubeDataApiKey);
+    if (!playlist) {
+      res.status(502).json({
+        ok: false,
+        error: 'YouTube did not provide readable public playlist data. The playlist may be private, unavailable, or temporarily blocked.',
+      });
+      return;
+    }
+    res.setHeader('Cache-Control', 'public, max-age=300');
+    res.json({ ok: true, ...playlist });
   });
 
   app.get('/api/music/spotify/playlists', async (_req, res) => {

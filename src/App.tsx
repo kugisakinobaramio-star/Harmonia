@@ -61,7 +61,7 @@ import {
   fetchPlayableDiscoveries,
   fetchTrackLyrics,
   loadCollectionTracks,
-  resolveSpotifyUrl,
+  resolvePlaylistUrl,
   resolveTrackStreams,
   searchSongs,
   searchVideos,
@@ -2264,13 +2264,14 @@ export default function App() {
     [navigateTo, showToast]
   );
 
-  // Zero-API Spotify link streaming handler
+  // Public Spotify and YouTube playlist import; no account login is required.
   const handleImportSpotifyUrl = useCallback(
     async (rawUrl: string): Promise<{ ok: boolean; error?: string }> => {
-      const res = await resolveSpotifyUrl(rawUrl);
+      const res = await resolvePlaylistUrl(rawUrl);
       if (!res.ok || res.kind !== 'playlist' || !res.tracks?.length) {
-        return { ok: false, error: res.error || 'This link did not return an importable Spotify playlist.' };
+        return { ok: false, error: res.error || 'This link did not return an importable playlist.' };
       }
+      const provider = res.provider || 'Spotify';
       const importedTracks: Track[] = [];
       for (let offset = 0; offset < res.tracks.length; offset += 4) {
         const batch = res.tracks.slice(offset, offset + 4);
@@ -2300,9 +2301,9 @@ export default function App() {
           }
           return {
             ...spotifyTrack,
-            id: `spotify-meta-${res.id || 'playlist'}-${offset + batchIndex}-${spotifyTrack.id}`,
+            id: `${provider.toLowerCase()}-meta-${res.id || 'playlist'}-${offset + batchIndex}-${spotifyTrack.id}`,
             metadataOnly: true,
-            sourceProvider: 'Spotify',
+            sourceProvider: provider,
             sourceAvailability: 'metadata' as const,
             streamUrls: undefined,
             previewUrl: undefined,
@@ -2310,11 +2311,11 @@ export default function App() {
         }));
         importedTracks.push(...matchedBatch);
       }
-      const playlistId = `spotify-import-${res.id || Date.now()}`;
+      const playlistId = `${provider.toLowerCase()}-import-${res.id || Date.now()}`;
       const importedPlaylist: CuratedPlaylist = {
         id: playlistId,
-        name: res.title || 'Imported Spotify Playlist',
-        description: `Imported from Spotify · ${res.sourceEntriesReceived ?? res.tracks.length} source entries received · ${importedTracks.filter((track) => !track.metadataOnly).length} matched · ${importedTracks.filter((track) => track.metadataOnly).length} unmatched`,
+        name: res.title || `Imported ${provider} Playlist`,
+        description: `Imported from ${provider} · ${res.sourceEntriesReceived ?? res.tracks.length} source entries received${res.sourceEntriesTotal && res.sourceEntriesTotal !== res.sourceEntriesReceived ? ` of ${res.sourceEntriesTotal}` : ''} · ${importedTracks.filter((track) => !track.metadataOnly).length} matched · ${importedTracks.filter((track) => track.metadataOnly).length} unmatched${res.complete === false ? ' · partial import' : ''}`,
         image: res.image || res.tracks[0]?.image || ARTWORK.englishVinyl,
         language: 'Mixed',
         tracks: importedTracks,
@@ -2323,7 +2324,7 @@ export default function App() {
         matchedTrackCount: importedTracks.filter((track) => !track.metadataOnly).length,
         unmatchedTrackCount: importedTracks.filter((track) => track.metadataOnly).length,
         importedAt: new Date().toISOString(),
-        sourcePageUrl: res.id ? `https://open.spotify.com/playlist/${res.id}` : undefined,
+        sourcePageUrl: res.id ? (provider === 'YouTube' ? `https://www.youtube.com/playlist?list=${res.id}` : `https://open.spotify.com/playlist/${res.id}`) : undefined,
       };
       setUserPlaylists((previous) => {
         const alreadyImported = previous.some((playlist) => playlist.id === playlistId);
