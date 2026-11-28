@@ -28,7 +28,7 @@ function extractJsonAfterMarker(html: string, marker: string): unknown | null {
     const char = html[index];
     if (inString) {
       if (escaped) escaped = false;
-      else if (char === '\\') escaped = true;
+      else if (char === '\') escaped = true;
       else if (char === '"') inString = false;
       continue;
     }
@@ -138,8 +138,8 @@ function decodeXmlText(value: string): string {
     .replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"')
     .replace(/&apos;/g, "'")
-    .replace(/&#(\\d+);/g, (_match, code) => String.fromCodePoint(Number(code)))
-    .replace(/&#x([\\da-f]+);/gi, (_match, code) => String.fromCodePoint(parseInt(code, 16)));
+    .replace(/&#(\d+);/g, (_match, code) => String.fromCodePoint(Number(code)))
+    .replace(/&#x([\da-f]+);/gi, (_match, code) => String.fromCodePoint(parseInt(code, 16)));
 }
 
 /**
@@ -152,17 +152,17 @@ export function parseYouTubePlaylistRss(xml: string): {
   entries: YouTubePlaylistEntry[];
 } | null {
   if (!xml.includes('<feed') || !xml.includes('</feed>')) return null;
-  const title = decodeXmlText(xml.match(/<feed\\b[^>]*>[\\s\\S]*?<title>([\\s\\S]*?)<\\/title>/i)?.[1] || 'YouTube Playlist').trim();
+  const title = decodeXmlText(xml.match(/<feed\b[^>]*>[\s\S]*?<title>([\s\S]*?)<\/title>/i)?.[1] || 'YouTube Playlist').trim();
   const entries: YouTubePlaylistEntry[] = [];
   const seen = new Set<string>();
-  for (const match of xml.matchAll(/<entry\\b[^>]*>([\\s\\S]*?)<\\/entry>/gi)) {
+  for (const match of xml.matchAll(/<entry\b[^>]*>([\s\S]*?)<\/entry>/gi)) {
     const block = match[1];
-    const videoId = block.match(/<yt:videoId>([A-Za-z0-9_-]{11})<\\/yt:videoId>/i)?.[1] || '';
+    const videoId = block.match(/<yt:videoId>([A-Za-z0-9_-]{11})<\/yt:videoId>/i)?.[1] || '';
     if (!videoId || seen.has(videoId)) continue;
     seen.add(videoId);
-    const rawTitle = block.match(/<title>([\\s\\S]*?)<\\/title>/i)?.[1] || '';
-    const rawChannel = block.match(/<author>\\s*<name>([\\s\\S]*?)<\\/name>/i)?.[1] || '';
-    const thumbnail = block.match(/<media:thumbnail\\b[^>]*\\burl=["']([^"']+)["']/i)?.[1] || '';
+    const rawTitle = block.match(/<title>([\s\S]*?)<\/title>/i)?.[1] || '';
+    const rawChannel = block.match(/<author>\s*<name>([\s\S]*?)<\/name>/i)?.[1] || '';
+    const thumbnail = block.match(/<media:thumbnail\b[^>]*\burl=["']([^"']+)["']/i)?.[1] || '';
     entries.push({
       videoId,
       title: decodeXmlText(rawTitle).trim() || 'Unavailable video',
